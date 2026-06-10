@@ -20,25 +20,30 @@ window.openPdfEditor = async function (path, name) {
   }
   const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
   state = { bytes, name, path, pages: [], tool: "select", color: "#ff3b30" };
+  const myState = state; // 渲染期间用于检测 state 是否被关闭/切换
   editorEl.style.display = "flex";
   pagesEl.innerHTML = "";
   setStatus(tr("渲染中…"));
 
   // pdf.js 需要独立副本（它会 transfer/detach buffer）
   const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
+  if (state !== myState) return; // 已关闭或切换到别的 PDF
   const containerW = pagesEl.clientWidth - 40;
   for (let i = 1; i <= doc.numPages; i++) {
+    if (state !== myState) return; // 大 PDF 渲染中途被关闭/切换，立即中止循环
     const page = await doc.getPage(i);
+    if (state !== myState) return;
     const unscaled = page.getViewport({ scale: 1 });
     const scale = Math.min(containerW / unscaled.width, 1.6);
     const viewport = page.getViewport({ scale });
-    await renderPage(page, viewport, scale, i);
+    await renderPage(page, viewport, scale, i, myState);
   }
+  if (state !== myState) return;
   setStatus(trf("{0} 页", doc.numPages));
   setTool("select");
 };
 
-async function renderPage(page, viewport, scale, pageNum) {
+async function renderPage(page, viewport, scale, pageNum, owner) {
   const wrap = document.createElement("div");
   wrap.className = "pe-page";
   wrap.style.width = viewport.width + "px";
@@ -54,6 +59,7 @@ async function renderPage(page, viewport, scale, pageNum) {
   canvas.height = viewport.height;
   wrap.appendChild(canvas);
   await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
+  if (!state || state !== owner) return; // 渲染期间被关闭/切换，勿再访问 state.pages
 
   const layer = document.createElement("div");
   layer.className = "pe-layer";
@@ -219,6 +225,7 @@ function addTextBox(p, x, y, whiteout, w, h) {
 function enableDrag(box, p) {
   let move = null;
   box.addEventListener("pointerdown", (e) => {
+    if (!state) return;
     if (state.tool !== "select" || e.target.classList.contains("del")) return;
     if (e.altKey === false && document.activeElement === box) return; // 编辑中不拖
     const { x, y } = local(p.layer, e);
@@ -246,6 +253,7 @@ function enableDrag(box, p) {
 
 // ── 页面操作 ───────────────────────────────────────────────
 function visiblePageAtCenter() {
+  if (!state) return null;
   // 取当前滚动视口中心所在的页
   const mid = pagesEl.scrollTop + pagesEl.clientHeight / 2;
   let best = null,
