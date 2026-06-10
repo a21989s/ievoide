@@ -366,6 +366,11 @@
       #input { resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: inherit; }
       #attachList { display: flex; flex-wrap: wrap; gap: 6px; }
       #attachList:empty { display: none; }
+      /* 计划模式开关：开启后本对话发送的查询会先要求模型给出分步方案待确认 */
+      .input-foot { display: flex; gap: 6px; }
+      #planToggle { background: #333; color: var(--muted); border: 1px solid var(--border); border-radius: 14px; padding: 3px 10px; font-size: 11px; line-height: 1.4; cursor: pointer; white-space: nowrap; }
+      #planToggle:hover { border-color: var(--accent); color: var(--fg); }
+      #planToggle.on { background: var(--accent); color: #fff; border-color: var(--accent); }
       /* 常用 skill 快捷按钮：点一下即把对应指令发给模型 */
       #quickbar { display: flex; flex-wrap: wrap; gap: 6px; }
       #quickbar:empty { display: none; }
@@ -675,6 +680,9 @@
             <div id="quickbar"></div>
             <div id="attachList"></div>
             <textarea id="input" rows="2" data-i18n-ph="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）" placeholder="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）"></textarea>
+            <div class="input-foot">
+              <button id="planToggle" type="button" data-i18n-title="计划模式：先给出分步方案待确认，不直接改动" title="计划模式：先给出分步方案待确认，不直接改动">📋 <span data-i18n="计划模式">计划模式</span></button>
+            </div>
           </div>
           <button id="send" data-i18n-title="发送（Ctrl/⌘+Enter）" title="发送（Ctrl/⌘+Enter）">↑</button>
         </div>

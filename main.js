@@ -606,7 +606,13 @@ async function scratchDir() {
   return d;
 }
 
-ipcMain.on("chat", async (e, { prompt, resume, convId }) => {
+// 计划模式前缀：要求模型先只读分析、给出分步方案待用户确认，不直接改动文件或执行有副作用的命令
+const PLAN_PREAMBLE =
+  "【计划模式】在本次回复中，请先不要修改任何文件、也不要执行有副作用的命令（仅允许只读地阅读/检索代码）。" +
+  "请先分析下面的需求，然后给出一个清晰的分步实施方案（涉及哪些文件、关键改动点、潜在风险），等我确认后再执行。\n\n--- 用户需求 ---\n";
+
+ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
+  if (plan) prompt = PLAN_PREAMBLE + prompt;
   const abort = new AbortController();
   let stopped = false; // 用户是否已主动停止（避免重复发 chat:stopped）
   // 所有发给渲染层的事件都带上 convId，渲染层据此路由到对应对话。

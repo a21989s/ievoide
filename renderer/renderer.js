@@ -1198,7 +1198,7 @@ function startTurn(conv, text) {
   if (conv === activeConv) refreshSendBtn();
   renderConvList();
   scrollIfActive(conv);
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null });
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan: planMode });
   persistConvs();
 }
 
@@ -1416,6 +1416,17 @@ $("send").onclick = () => {
   if ($("input").value.trim()) send();
   else if (activeConv?.busy) window.api.stop(activeConv.id);
 };
+
+// 计划模式：开启后发送的查询会先要求模型给出分步方案待确认，不直接改动（状态跨会话保留）
+let planMode = false;
+try { planMode = localStorage.getItem("claudeTools.planMode") === "1"; } catch {}
+function refreshPlanToggle() { $("planToggle").classList.toggle("on", planMode); }
+$("planToggle").onclick = () => {
+  planMode = !planMode;
+  try { localStorage.setItem("claudeTools.planMode", planMode ? "1" : "0"); } catch {}
+  refreshPlanToggle();
+};
+refreshPlanToggle();
 $("input").addEventListener("keydown", (e) => {
   // @ 文件引用补全打开时，方向键/回车/Tab/Esc 优先操作候选
   const fpop = $("filePopup");
