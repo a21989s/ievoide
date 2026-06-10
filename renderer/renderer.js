@@ -1643,7 +1643,7 @@ document.addEventListener("keydown", (e) => {
     // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
     const ev = $("evolveModal");
     if (ev.classList.contains("open") && !ev.classList.contains("docked")) { ev.classList.remove("open"); return; }
-    for (const id of ["kbdModal", "historyModal", "mobileModal"]) {
+    for (const id of ["kbdModal", "historyModal", "mobileModal", "mcpModal"]) {
       if ($(id).classList.contains("open")) { $(id).classList.remove("open"); return; }
     }
     const ctx = $("ctxMenu"), acct = $("acctMenu");
@@ -1720,6 +1720,7 @@ function cmdkBaseCommands() {
     { ic: "🧬", label: tr("自进化"), run: () => $("evolveBtn").click() },
     { ic: "📦", label: tr("全量打包"), run: () => $("packBtn").click() },
     { ic: "📱", label: tr("手机连接"), run: () => $("mobileBtn").click() },
+    { ic: "🔌", label: tr("MCP 工具"), run: () => $("mcpBtn").click() },
     { ic: "👤", label: tr("切换账号"), run: () => $("acctBtn").click() },
     { ic: "🌐", label: tr("切换语言"), run: () => $("langBtn").onclick() },
     { ic: "⌨️", label: tr("快捷键速查"), run: () => toggleKbdHelp() },
@@ -1996,6 +1997,46 @@ $("mobToggle").onclick = async () => {
 };
 $("mobCopy").onclick = () => navigator.clipboard?.writeText($("mobUrl").textContent || "");
 $("mobOpen").onclick = () => { const u = $("mobUrl").textContent; if (u) window.api.openExternal(u); };
+
+// ── MCP 面板 ──────────────────────────────────────────────
+async function renderMcp() {
+  const { servers, raw, error } = await window.api.mcpList();
+  const box = $("mcpList");
+  box.innerHTML = "";
+  if (!servers.length) {
+    box.innerHTML = `<div class="mcp-empty">${tr("还没有配置 MCP，下方编辑 mcp.json 即可添加")}</div>`;
+  }
+  for (const s of servers) {
+    const cls = !s.enabled ? "" : s.status === "connected" ? "ok" : s.status ? "fail" : "";
+    const stat = !s.enabled ? tr("已停用") : s.status === "connected" ? tr("可用") : s.status ? tr("失败：") + esc(s.status) : tr("未加载");
+    const row = document.createElement("div");
+    row.className = "mcp-row";
+    row.innerHTML =
+      `<span class="mcp-dot ${cls}"></span>` +
+      `<div class="mcp-main"><div class="mcp-name">${esc(s.name)} <span style="opacity:.5;font-size:11px">${stat}</span></div>` +
+      `<div class="mcp-cmd">${esc(s.command)}</div></div>` +
+      `<button class="mcp-toggle ${s.enabled ? "on" : ""}">${s.enabled ? tr("启用中") : tr("已停用")}</button>`;
+    row.querySelector(".mcp-toggle").onclick = async () => {
+      await window.api.mcpToggle(s.name, !s.enabled);
+      renderMcp();
+    };
+    box.appendChild(row);
+  }
+  $("mcpRaw").value = error ? raw : (raw || '{\n  "mcpServers": {}\n}');
+  $("mcpMsg").textContent = error ? tr("JSON 解析失败：") + error : "";
+  $("mcpMsg").style.color = error ? "#d85a5a" : "var(--muted)";
+}
+$("mcpBtn").onclick = async () => { $("mcpModal").classList.add("open"); renderMcp(); };
+$("mcpClose").onclick = () => $("mcpModal").classList.remove("open");
+$("mcpModal").onclick = (e) => { if (e.target.id === "mcpModal") $("mcpModal").classList.remove("open"); };
+$("mcpSave").onclick = async () => {
+  const r = await window.api.mcpSave($("mcpRaw").value);
+  $("mcpMsg").textContent = r.ok ? tr("已保存 · 新对话生效") : tr("保存失败：") + r.error;
+  $("mcpMsg").style.color = r.ok ? "#3ad07a" : "#d85a5a";
+  if (r.ok) renderMcp();
+};
+// 连接状态随对话初始化更新：面板开着就刷新一下圆点
+window.api.on("mcp:status", () => { if ($("mcpModal").classList.contains("open")) renderMcp(); });
 
 // ── 自进化面板 ─────────────────────────────────────────────
 let evolveBusy = false;

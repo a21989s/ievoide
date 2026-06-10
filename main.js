@@ -14,25 +14,41 @@ const execFileAsync = promisify(execFile);
  * 读取 App 目录下可选的 mcp.json（App 级 MCP 配置，不影响全局 ~/.claude）。
  * 格式同 Claude Code 的 .mcp.json：{ "mcpServers": { name: {command,args,env} } }
  */
-async function readMcpConfig() {
-  const file = path.join(__dirname, "mcp.json");
-  let raw;
+function mcpFilePath() {
+  return path.join(__dirname, "mcp.json");
+}
+// 解析 mcp.json：返回 { servers, raw, error }（servers 含所有项，含被停用的）。供面板列出/编辑。
+async function loadMcpFile() {
+  let raw = "";
   try {
-    raw = await fs.readFile(file, "utf8");
+    raw = await fs.readFile(mcpFilePath(), "utf8");
   } catch {
-    return null; // 文件不存在 => 不加 MCP（正常情况，静默）
+    return { servers: {}, raw: "", error: null }; // 文件不存在 => 空（正常情况，静默）
   }
   try {
     const json = JSON.parse(raw);
-    const servers = json.mcpServers || json;
-    return servers && Object.keys(servers).length ? servers : null;
+    const servers = json.mcpServers || json || {};
+    return { servers: servers && typeof servers === "object" ? servers : {}, raw, error: null };
   } catch (e) {
+    return { servers: {}, raw, error: e.message };
+  }
+}
+// 传给 SDK 的实际配置：过滤掉标记了 disabled:true 的 server（面板里「停用」的）。
+async function readMcpConfig() {
+  const { servers, error } = await loadMcpFile();
+  if (error) {
     // 文件存在但 JSON 解析失败：明确报错，避免用户以为「配了却不生效」
-    const msg = `mcp.json 解析失败，本次未加载任何 MCP：${e.message}`;
+    const msg = `mcp.json 解析失败，本次未加载任何 MCP：${error}`;
     console.error(msg);
     pushIssue("main", msg);
     return null;
   }
+  const enabled = {};
+  for (const [name, cfg] of Object.entries(servers)) {
+    if (cfg && cfg.disabled) continue;
+    enabled[name] = cfg;
+  }
+  return Object.keys(enabled).length ? enabled : null;
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -68,6 +84,8 @@ const appConfig = loadConfig();
 let win;
 /** 当前打开的工作目录（folder），传给 SDK 当 cwd */
 let workdir = null;
+/** 最近一次 chat:init 报告的 MCP 连接状态（[{name,status}]），供 MCP 面板显示可用/失败 */
+let lastMcpStatus = [];
 
 // ── 自进化：运行时问题收集 ────────────────────────────────────
 const issues = []; // {time, source, message}
@@ -683,6 +701,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
     for await (const msg of response) {
       if (stopped) break; // 已停止：不再转发后续事件（含 chat:done），避免界面被重新锁回忙碌
       if (msg.type === "system" && msg.subtype === "init") {
+        lastMcpStatus = msg.mcp_servers || []; // 缓存连接状态供 MCP 面板显示
+        if (win && !win.isDestroyed()) win.webContents.send("mcp:status", lastMcpStatus);
         send("chat:init", {
           model: msg.model,
           tools: msg.tools || [],
@@ -982,6 +1002,48 @@ ipcMain.handle("getIssues", () => issues);
 ipcMain.handle("clearIssues", () => {
   issues.length = 0;
   return { ok: true };
+});
+
+// ── MCP 面板：列出/编辑/启停 App 级 mcp.json ──────────────────
+// 列出已配置 servers（含停用项）+ 原始文本 + 解析错误 + 最近一次连接状态
+ipcMain.handle("mcpList", async () => {
+  const { servers, raw, error } = await loadMcpFile();
+  const statusMap = Object.fromEntries((lastMcpStatus || []).map((m) => [m.name, m.status]));
+  const list = Object.entries(servers).map(([name, cfg]) => ({
+    name,
+    enabled: !(cfg && cfg.disabled),
+    status: statusMap[name] || null, // connected/failed/… 或 null（本次会话未加载）
+    command: (cfg && (cfg.command || cfg.url || cfg.type)) || "",
+  }));
+  return { servers: list, raw, error };
+});
+// 直接保存 mcp.json 原始文本（先校验 JSON，避免写入坏配置）
+ipcMain.handle("mcpSave", async (_e, content) => {
+  try {
+    JSON.parse(content);
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+  try {
+    await fs.writeFile(mcpFilePath(), content, "utf8");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
+});
+// 启用/停用某个 server（写入 disabled 标记，保留配置便于随时恢复）
+ipcMain.handle("mcpToggle", async (_e, { name, enabled }) => {
+  const { servers, error } = await loadMcpFile();
+  if (error) return { ok: false, error };
+  if (!servers[name]) return { ok: false, error: "server 不存在" };
+  if (enabled) delete servers[name].disabled;
+  else servers[name].disabled = true;
+  try {
+    await fs.writeFile(mcpFilePath(), JSON.stringify({ mcpServers: servers }, null, 2), "utf8");
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  }
 });
 ipcMain.handle("getEvolveHistory", () => readEvolveHistory());
 ipcMain.handle("clearEvolveHistory", () => { writeEvolveHistory([]); return { ok: true }; });
