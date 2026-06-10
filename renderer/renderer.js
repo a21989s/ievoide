@@ -704,7 +704,7 @@ function renderHistory(filter) {
   for (const h of items) {
     const row = document.createElement("div");
     row.className = "hist-row";
-    const title = (h.title || tr("新对话")).replace(/</g, "&lt;");
+    const title = esc(h.title || tr("新对话"));
     row.innerHTML =
       `<div class="hist-main"><div class="hist-title">${title}</div>` +
       `<div class="hist-meta">${fmtTime(h.archivedAt)}${h.sessionId ? " · " + tr("可续聊") : ""}</div></div>` +
