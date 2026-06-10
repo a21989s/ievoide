@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("api", {
   getUsage: (opts) => ipcRenderer.invoke("getUsage", opts),
   getModel: () => ipcRenderer.invoke("getModel"),
   setModel: (model) => ipcRenderer.invoke("setModel", model),
+  getConfig: () => ipcRenderer.invoke("getConfig"),
+  setConfig: (patch) => ipcRenderer.invoke("setConfig", patch),
   acctList: () => ipcRenderer.invoke("acctList"),
   acctSaveCurrent: () => ipcRenderer.invoke("acctSaveCurrent"),
   acctSwitch: (email) => ipcRenderer.invoke("acctSwitch", email),

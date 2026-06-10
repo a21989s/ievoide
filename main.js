@@ -888,6 +888,32 @@ ipcMain.handle("setModel", (_e, model) => {
   return { ok: true, model: appConfig.model };
 });
 
+// 读/写行为设置（系统提示词追加 / 权限模式 / 进化后自动重启）。与 setModel 同机制：
+// 写回 tools/config.json 并更新内存中的 appConfig，下一轮 chat 即生效，无需重启。
+ipcMain.handle("getConfig", () => ({
+  systemPromptAppend: appConfig.systemPromptAppend || "",
+  permissionMode: appConfig.permissionMode || "bypassPermissions",
+  evolveAutoRestart: !!appConfig.evolveAutoRestart,
+}));
+ipcMain.handle("setConfig", (_e, patch) => {
+  patch = patch || {};
+  if (typeof patch.systemPromptAppend === "string") appConfig.systemPromptAppend = patch.systemPromptAppend;
+  if (typeof patch.permissionMode === "string") appConfig.permissionMode = patch.permissionMode;
+  if (typeof patch.evolveAutoRestart === "boolean") appConfig.evolveAutoRestart = patch.evolveAutoRestart;
+  try {
+    const file = path.join(TOOLS_DIR, "config.json");
+    let cur = {};
+    try { cur = JSON.parse(fsSync.readFileSync(file, "utf8")); } catch {}
+    fsSync.writeFileSync(file, JSON.stringify({
+      ...cur,
+      systemPromptAppend: appConfig.systemPromptAppend,
+      permissionMode: appConfig.permissionMode,
+      evolveAutoRestart: appConfig.evolveAutoRestart,
+    }, null, 2));
+  } catch (e) { return { ok: false, error: String(e?.message || e) }; }
+  return { ok: true };
+});
+
 // ── Claude 账号快捷切换 ───────────────────────────────────────
 // 一个账号 = 凭证文件(~/.claude/.credentials.json) + 身份(~/.claude.json 的 oauthAccount)。
 // 切换即把存档的凭证写回，并把 oauthAccount 合并进 .claude.json，使 SDK 与用量显示同步生效。

@@ -495,6 +495,19 @@
       #mobBody .mob-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
       #mobBody #mobQr { display: block; width: 200px; height: 200px; margin: 6px auto; background: #fff; border-radius: 6px; }
       #mobBody .mob-url { text-align: center; word-break: break-all; font-size: 12px; margin: 8px 0; }
+      #settingsModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
+      #settingsModal.open { display: flex; }
+      #settingsModal .box { width: 480px; max-width: 92vw; max-height: 84vh; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
+      #setBody { padding: 12px 16px 16px; overflow-y: auto; }
+      #setBody .mob-tip { font-size: 12px; color: var(--muted, #999); line-height: 1.5; margin: 0 0 12px; }
+      .set-label { display: block; font-size: 12px; opacity: .8; margin: 12px 0 5px; }
+      #setPrompt { width: 100%; box-sizing: border-box; resize: vertical; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 13px; outline: none; }
+      #setPerm { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+      .set-row { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; font-size: 13px; cursor: pointer; }
+      .set-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; }
+      #setSave { padding: 5px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
+      #setSave:hover { opacity: .9; }
+      #setMsg { font-size: 11px; }
       #evolveModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 40; }
       #evolveModal.open { display: flex; }
       #evolveModal .box { width: 70%; max-width: 760px; height: 76%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
@@ -655,6 +668,7 @@
         <div class="act-btn" id="mobileBtn" data-i18n-title="用手机浏览器连本机（同一 Wi-Fi 遥控）" title="用手机浏览器连本机（同一 Wi-Fi 遥控）">📱</div>
         <div class="act-btn" id="mcpBtn" data-i18n-title="MCP 工具：查看/启停/编辑外部 MCP 服务，接入更多工作流" title="MCP 工具：查看/启停/编辑外部 MCP 服务，接入更多工作流">🔌</div>
         <div class="act-spacer"></div>
+        <div class="act-btn" id="settingsBtn" data-i18n-title="设置：系统提示词追加 / 权限模式 / 进化后自动重启" title="设置：系统提示词追加 / 权限模式 / 进化后自动重启">⚙</div>
         <div class="act-btn" id="acctBtn" data-i18n-title="切换 Claude 账号" title="切换 Claude 账号">👤</div>
         <div class="act-btn" id="langBtn" data-i18n-title="切换语言 / Switch language" title="切换语言 / Switch language">EN</div>
       </div>
@@ -776,6 +790,25 @@
               <button id="mobOpen" data-i18n-title="本机浏览器打开" title="本机浏览器打开">🌐</button>
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+    <div id="settingsModal">
+      <div class="box">
+        <div class="vhead"><span data-i18n="⚙ 设置">⚙ 设置</span><button id="setClose" data-i18n-title="关闭" title="关闭">✕</button></div>
+        <div id="setBody">
+          <p class="mob-tip" data-i18n="改动写回 config.json 并即时生效（下一轮对话生效），无需手工编辑源码文件。">改动写回 config.json 并即时生效（下一轮对话生效），无需手工编辑源码文件。</p>
+          <label class="set-label" data-i18n="系统提示词追加（每轮对话附加给模型）">系统提示词追加（每轮对话附加给模型）</label>
+          <textarea id="setPrompt" rows="4" spellcheck="false" data-i18n-ph="例如：始终用简体中文回答…" placeholder="例如：始终用简体中文回答…"></textarea>
+          <label class="set-label" data-i18n="权限模式">权限模式</label>
+          <select id="setPerm">
+            <option value="bypassPermissions" data-i18n="全权限（含 Bash，免确认）">全权限（含 Bash，免确认）</option>
+            <option value="acceptEdits" data-i18n="自动接受文件编辑">自动接受文件编辑</option>
+            <option value="default" data-i18n="默认（逐次确认）">默认（逐次确认）</option>
+            <option value="plan" data-i18n="计划模式（只读，不改文件）">计划模式（只读，不改文件）</option>
+          </select>
+          <label class="set-row"><input type="checkbox" id="setAutoRestart" /><span data-i18n="自进化改完后自动重启/重载以生效">自进化改完后自动重启/重载以生效</span></label>
+          <div class="set-actions"><span id="setMsg" class="meta"></span><button id="setSave" data-i18n="保存">保存</button></div>
         </div>
       </div>
     </div>

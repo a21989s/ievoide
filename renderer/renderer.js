@@ -2078,6 +2078,33 @@ $("mobileBtn").onclick = async () => {
   renderMobile(await window.api.mobileStatus());
 };
 $("mobClose").onclick = () => $("mobileModal").classList.remove("open");
+
+// ── 设置面板：把 config.json 的行为项暴露为表单，保存即写回并下一轮生效 ──
+$("settingsBtn").onclick = async () => {
+  try {
+    const c = await window.api.getConfig();
+    $("setPrompt").value = c.systemPromptAppend || "";
+    $("setPerm").value = c.permissionMode || "bypassPermissions";
+    $("setAutoRestart").checked = !!c.evolveAutoRestart;
+  } catch {}
+  $("setMsg").textContent = "";
+  $("settingsModal").classList.add("open");
+};
+$("setClose").onclick = () => $("settingsModal").classList.remove("open");
+$("settingsModal").onclick = (e) => { if (e.target.id === "settingsModal") $("settingsModal").classList.remove("open"); };
+$("setSave").onclick = async () => {
+  const r = await window.api.setConfig({
+    systemPromptAppend: $("setPrompt").value,
+    permissionMode: $("setPerm").value,
+    evolveAutoRestart: $("setAutoRestart").checked,
+  });
+  if (r && r.ok) {
+    $("setMsg").textContent = tr("✅ 已保存（下一轮对话生效）");
+    setTimeout(() => $("settingsModal").classList.remove("open"), 600);
+  } else {
+    toast(tr("保存失败：") + (r?.error || tr("未知")), "error");
+  }
+};
 $("historyBtn").onclick = openHistory;
 $("histClose").onclick = closeHistory;
 $("historyModal").onclick = (e) => { if (e.target.id === "historyModal") closeHistory(); };
