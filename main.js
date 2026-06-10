@@ -287,11 +287,24 @@ ipcMain.handle("openPath", async (_e, p) => {
 let mobileProc = null;
 const MOBILE_PORT = Number(process.env.PORT) || 8787;
 function lanIP() {
-  return (
-    Object.values(os.networkInterfaces())
-      .flat()
-      .find((i) => i && i.family === "IPv4" && !i.internal)?.address || "localhost"
-  );
+  // 只认常见局域网网段（手机同一 Wi-Fi 才连得上），并过滤 VPN/虚拟网卡
+  const isPrivate = (a) =>
+    a.startsWith("192.168.") ||
+    a.startsWith("10.") ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(a);
+  const isVirtual = (name) =>
+    /(vpn|tun|tap|utun|wg|zt|docker|veth|vbox|vmnet|vmware|bridge|llw|awdl)/i.test(name);
+  const cands = [];
+  for (const [name, addrs] of Object.entries(os.networkInterfaces())) {
+    for (const i of addrs || []) {
+      if (i && i.family === "IPv4" && !i.internal && isPrivate(i.address) && !isVirtual(name)) {
+        cands.push(i.address);
+      }
+    }
+  }
+  // 192.168.* 最常见，优先返回；都找不到时返回空，由界面提示手动确认 IP
+  cands.sort((a, b) => (a.startsWith("192.168.") ? 0 : 1) - (b.startsWith("192.168.") ? 0 : 1));
+  return cands[0] || "";
 }
 function mobileToken() {
   // 与 server.mjs 同一令牌来源：data/server-token.txt（缺失则由 server 生成后再读）
@@ -305,7 +318,7 @@ function mobileInfo() {
   const ip = lanIP();
   const token = mobileToken();
   const running = !!mobileProc;
-  const url = running ? `http://${ip}:${MOBILE_PORT}/?token=${token}` : "";
+  const url = running && ip ? `http://${ip}:${MOBILE_PORT}/?token=${token}` : "";
   return { running, ip, port: MOBILE_PORT, token, url };
 }
 ipcMain.handle("mobileStatus", async () => mobileInfo());

@@ -1452,7 +1452,9 @@ function renderMobile(info) {
   const mt = $("mobToggle");
   mt.textContent = running ? "⏹" : "▶";
   mt.title = running ? tr("停止服务") : tr("启动服务");
-  $("mobState").textContent = running ? tr("运行中") : tr("未启动");
+  $("mobState").textContent = running
+    ? (info.url ? tr("运行中") : tr("运行中 · 未找到局域网 IP，请确认电脑已连 Wi-Fi 后手动填手机浏览器地址"))
+    : tr("未启动");
   $("mobConn").style.display = running && info.url ? "block" : "none";
   if (running && info.url) {
     $("mobUrl").textContent = info.url;
