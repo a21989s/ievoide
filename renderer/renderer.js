@@ -1112,6 +1112,54 @@ function renderConvList() {
 
 $("newconv").onclick = newConversation;
 
+// ── 导出对话为 Markdown：把 user/assistant 轮次拼成 .md 落盘，衔接文档/版本库工作流 ──
+// 优先用气泡的 markdown 原文(_raw)，回退纯文本；含工具调用摘要可选（按住 Shift 导出时附带）。
+function convToMarkdown(conv, includeTools) {
+  const pane = conv.pane || (conv._html ? Object.assign(document.createElement("div"), { innerHTML: conv._html }) : null);
+  if (!pane) return "";
+  const out = [];
+  for (const msg of pane.querySelectorAll(":scope > .msg")) {
+    const role = msg.classList.contains("user") ? tr("你") : "Claude";
+    const parts = [];
+    for (const node of msg.children) {
+      if (node.classList.contains("role")) continue;
+      if (node.classList.contains("bubble")) {
+        if (node._raw != null && node._raw !== "") { parts.push(node._raw.trim()); continue; }
+        const c = node.cloneNode(true);
+        c.querySelectorAll(".copy-btn, .msg-attach").forEach((x) => x.remove());
+        const t = c.textContent.trim();
+        if (t) parts.push(t);
+        const atts = [...node.querySelectorAll(".msg-attach img, .msg-attach .file")]
+          .map((a) => "📎 " + (a.title || a.textContent || "").replace(/^📎\s*/, "").trim()).filter(Boolean);
+        if (atts.length) parts.push(atts.join("\n"));
+      } else if (includeTools && node.classList.contains("toolcall")) {
+        parts.push("> " + node.textContent.trim());
+      } else if (node.classList.contains("askq")) {
+        const t = node.textContent.trim();
+        if (t) parts.push("> " + t.replace(/\n/g, "\n> "));
+      }
+    }
+    const body = parts.filter(Boolean).join("\n\n");
+    if (body) out.push(`## ${role}\n\n${body}`);
+  }
+  if (!out.length) return "";
+  const title = (conv.title && conv.title !== "新对话") ? conv.title : tr("对话");
+  return `# ${title}\n\n*${fmtTime(Date.now())}*\n\n${out.join("\n\n---\n\n")}\n`;
+}
+
+async function exportActiveConv(includeTools) {
+  const conv = activeConv;
+  if (!conv) return;
+  const md = convToMarkdown(conv, includeTools);
+  if (!md) { toast(tr("当前对话没有可导出的内容"), "error"); return; }
+  const base = (conv.title && conv.title !== "新对话" ? conv.title : tr("对话")).replace(/[\\/:*?"<>|]/g, "_").slice(0, 40);
+  const r = await window.api.saveTextFile({ defaultName: base + ".md", content: md });
+  if (!r || r.canceled) return;
+  if (r.error) { toast(tr("导出失败：") + r.error, "error"); return; }
+  toast(tr("已导出到 ") + r.path);
+}
+$("exportConv").onclick = (e) => exportActiveConv(e.shiftKey);
+
 // 启动：优先从磁盘恢复对话历史，回退 localStorage（迁移旧数据）
 (async function initConvs() {
   let d = null;

@@ -594,6 +594,23 @@ ipcMain.handle("savePdf", async (_e, { defaultPath, base64 }) => {
   }
 });
 
+// ── 另存文本（导出对话 Markdown 用）：弹保存框后原子写回 ──────────
+ipcMain.handle("saveTextFile", async (_e, { defaultName, content }) => {
+  const r = await dialog.showSaveDialog(win, {
+    defaultPath: defaultName || "export.md",
+    filters: [{ name: "Markdown", extensions: ["md"] }, { name: "All Files", extensions: ["*"] }],
+  });
+  if (r.canceled || !r.filePath) return { canceled: true };
+  try {
+    const tmp = `${r.filePath}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, content, "utf8");
+    await fs.rename(tmp, r.filePath);
+    return { path: r.filePath };
+  } catch (err) {
+    return { error: String(err) };
+  }
+});
+
 // ── 对话：支持多个并发查询，按 convId 隔离；事件都带上 convId ───
 const runs = new Map(); // convId -> AbortController
 

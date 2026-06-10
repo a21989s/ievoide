@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld("api", {
   readFileBuffer: (p) => ipcRenderer.invoke("readFileBuffer", p),
   saveAttachment: (payload) => ipcRenderer.invoke("saveAttachment", payload),
   savePdf: (payload) => ipcRenderer.invoke("savePdf", payload),
+  saveTextFile: (payload) => ipcRenderer.invoke("saveTextFile", payload),
   openExternal: (url) => ipcRenderer.invoke("openExternal", url),
   openPath: (p) => ipcRenderer.invoke("openPath", p),
   mobileStatus: () => ipcRenderer.invoke("mobileStatus"),

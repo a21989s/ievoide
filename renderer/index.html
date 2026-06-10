@@ -310,6 +310,8 @@
       #convTabs::-webkit-scrollbar { height: 0; }
       #newconv { background: transparent; color: var(--muted); border: 0; padding: 0 14px; font-size: 16px; cursor: pointer; flex: none; }
       #newconv:hover { color: var(--fg); }
+      #exportConv { background: transparent; color: var(--muted); border: 0; padding: 0 8px; font-size: 14px; cursor: pointer; flex: none; }
+      #exportConv:hover { color: var(--fg); }
       .conv-tab { display: flex; align-items: center; gap: 6px; padding: 7px 10px; font-size: 12px; cursor: pointer; border-right: 1px solid var(--border); background: #232323; color: var(--muted); max-width: 200px; min-width: 90px; flex: none; }
       .conv-tab:hover { background: #2a2d2e; }
       .conv-tab.active { background: var(--bg); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
@@ -680,6 +682,7 @@
       <div id="chatcol">
         <div id="convbar">
           <div id="convTabs"></div>
+          <button id="exportConv" data-i18n-title="导出当前对话为 Markdown（按住 Shift 含工具调用摘要）" title="导出当前对话为 Markdown（按住 Shift 含工具调用摘要）">📤</button>
           <button id="newconv" data-i18n-title="新对话" title="新对话">＋</button>
         </div>
         <div id="chat"></div>
