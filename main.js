@@ -493,6 +493,9 @@ ipcMain.handle("readFile", async (_e, filePath) => {
 // ── 二进制读取（PDF 编辑器用），返回 base64 ────────────────────
 ipcMain.handle("readFileBuffer", async (_e, filePath) => {
   try {
+    const MAX_BYTES = 100 * 1024 * 1024; // 100MB
+    const st = await fs.stat(filePath);
+    if (st.size > MAX_BYTES) return { error: "文件过大，无法打开" };
     const buf = await fs.readFile(filePath);
     return { base64: buf.toString("base64") };
   } catch (err) {
