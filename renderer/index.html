@@ -81,6 +81,11 @@
       .act-btn:hover { color: var(--fg); }
       .act-btn.active { color: #fff; border-left-color: var(--accent); }
       #langBtn.act-btn { font-size: 13px; font-weight: 600; }
+      /* 自进化实时状态：正在进化时 🧬 按钮脉冲 + 绿点；仅开启自动模式待命时常亮黄点 */
+      .act-btn.evolving { color: var(--accent); animation: evPulse 1.4s ease-in-out infinite; }
+      .act-btn.evolving::after { content: ""; position: absolute; top: 7px; right: 7px; width: 7px; height: 7px; border-radius: 50%; background: #3ad07a; box-shadow: 0 0 6px #3ad07a; }
+      .act-btn.armed::after { content: ""; position: absolute; top: 7px; right: 7px; width: 6px; height: 6px; border-radius: 50%; background: #d8a73a; }
+      @keyframes evPulse { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
       #sidebar {
         width: 280px;
         border-right: 1px solid var(--border);
@@ -394,8 +399,13 @@
       #evolveModal.docked.collapsed .box { display: none; }
       #evRestore { display: none; position: fixed; right: 0; top: 50%; transform: translateY(-50%); z-index: 41; background: var(--accent); color: #fff; border: 0; border-radius: 6px 0 0 6px; padding: 10px 6px; cursor: pointer; writing-mode: vertical-rl; font-size: 12px; letter-spacing: 2px; box-shadow: -3px 0 10px rgba(0,0,0,.4); }
       #evolveModal.docked.collapsed.open ~ #evRestore { display: block; }
+      #evRestore.evolving { animation: evPulse 1.4s ease-in-out infinite; }
       #evDock, #evCollapse { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; cursor: pointer; font-size: 12px; margin-left: 6px; }
       .vhead .ev-head-btns { display: inline-flex; align-items: center; }
+      /* 面板头部当前状态徽标 */
+      #evStatus { font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-left: 8px; color: #999; white-space: nowrap; }
+      #evStatus.busy { background: rgba(58,208,122,.16); color: #3ad07a; }
+      #evStatus.armed { background: rgba(216,167,58,.16); color: #d8a73a; }
       #evBody { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 12px; min-height: 0; }
       #evReq { resize: none; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; font-size: 13px; }
       #evAttach { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -611,7 +621,7 @@
     </div>
     <div id="evolveModal">
       <div class="box">
-        <div class="vhead"><span data-i18n="🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）">🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）</span><span class="ev-head-btns"><button id="evDock" data-i18n-title="停靠到右侧/居中显示" title="停靠到右侧/居中显示">⇥</button><button id="evCollapse" data-i18n-title="隐藏到一侧" title="隐藏到一侧">▸</button><button id="evClose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
+        <div class="vhead"><span data-i18n="🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）">🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）</span><span class="ev-head-btns"><span id="evStatus"></span><button id="evDock" data-i18n-title="停靠到右侧/居中显示" title="停靠到右侧/居中显示">⇥</button><button id="evCollapse" data-i18n-title="隐藏到一侧" title="隐藏到一侧">▸</button><button id="evClose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
         <div id="evBody">
           <textarea id="evReq" rows="2" data-i18n-ph="描述需求或要修复的问题，例如：修复 XX 报错 / 给对话加一个导出按钮…" placeholder="描述需求或要修复的问题，例如：修复 XX 报错 / 给对话加一个导出按钮…"></textarea>
           <div id="evAttach"></div>

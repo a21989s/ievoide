@@ -1421,6 +1421,20 @@ function setEvolveBusy(b) {
   run.textContent = b ? "↳" : "▶";
   run.title = b ? tr("向进行中的进化追加方向调整（Ctrl+Enter）") : tr("开始");
   $("evStop").disabled = !b;
+  updateEvolveIndicator();
+}
+// 全局可见的进化状态指示：工具栏 🧬 按钮、收起态把手、面板头部徽标都随状态联动，
+// 这样即使面板收起/关闭，也能一眼看出系统此刻是否在进化、还是开了自动模式在待命。
+function updateEvolveIndicator() {
+  const btn = $("evolveBtn"), restore = $("evRestore"), st = $("evStatus");
+  const armed = $("evContinuous")?.checked || $("evAuto")?.checked || $("evPeriodic")?.checked;
+  if (btn) { btn.classList.toggle("evolving", evolveBusy); btn.classList.toggle("armed", !evolveBusy && !!armed); }
+  if (restore) restore.classList.toggle("evolving", evolveBusy);
+  if (st) {
+    st.className = evolveBusy ? "busy" : armed ? "armed" : "";
+    st.textContent = evolveBusy ? tr("● 进化中…") : armed ? tr("○ 待命中") : tr("空闲");
+  }
+  if (btn) btn.title = "🧬 " + (evolveBusy ? tr("正在进化（修改源码中）") : armed ? tr("自动模式已开启，空闲时会自动进化") : tr("自进化：让 App 改自己的源码（自动回滚保护）"));
 }
 // 附件（图片/文档），路径数组
 let evolveAttachments = [];
@@ -1632,7 +1646,7 @@ function applyContinuous(initialDelay) {
     _continuousTimer = setTimeout(continuousTick, initialDelay || 3000);
   }
 }
-$("evContinuous").onchange = () => applyContinuous();
+$("evContinuous").onchange = () => { applyContinuous(); updateEvolveIndicator(); };
 
 // 进化记录（最近几次，供参考）
 const EVOLVE_STATUS = {
@@ -1767,8 +1781,8 @@ function applyPeriodic() {
     localStorage.setItem("claudeTools.evInterval", $("evInterval").value);
   } catch {}
 }
-$("evAuto").onchange = applyPeriodic;
-$("evPeriodic").onchange = applyPeriodic;
+$("evAuto").onchange = () => { applyPeriodic(); updateEvolveIndicator(); };
+$("evPeriodic").onchange = () => { applyPeriodic(); updateEvolveIndicator(); };
 $("evInterval").onchange = applyPeriodic;
 // 恢复开关
 try {
@@ -1782,6 +1796,7 @@ try {
   }
 } catch {}
 applyPeriodic();
+updateEvolveIndicator();
 loadIssues();
 loadBacklog();
 loadEvolveHistory();
