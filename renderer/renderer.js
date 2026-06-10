@@ -1319,10 +1319,10 @@ async function openAcctMenu(anchor) {
   } else {
     for (const a of accounts) {
       const cur = a.email === current;
-      html += `<div class="am-acct${cur ? " cur" : ""}" data-email="${a.email}">
+      html += `<div class="am-acct${cur ? " cur" : ""}" data-email="${esc(a.email)}">
         <span class="am-tick">${cur ? "✓" : ""}</span>
-        <span class="am-info"><div class="am-name">${a.name || a.email}</div><div class="am-email">${a.email}</div></span>
-        <span class="am-del" data-del="${a.email}" title="${tr("删除")}">✕</span>
+        <span class="am-info"><div class="am-name">${esc(a.name || a.email)}</div><div class="am-email">${esc(a.email)}</div></span>
+        <span class="am-del" data-del="${esc(a.email)}" title="${tr("删除")}">✕</span>
       </div>`;
     }
   }
