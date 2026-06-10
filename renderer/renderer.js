@@ -2526,29 +2526,67 @@ try {
 
 // ── 常用 skill 快捷按钮 ─────────────────────────────────────
 // 点一下即把对应指令填入输入框并直接发送，省去手敲斜杠命令。
-const QUICK_SKILLS = [
+// 列表存于 localStorage，可通过「＋」新增、右键编辑/删除，按个人工作流自由组装。
+const DEFAULT_QUICK_SKILLS = [
   { icon: "🚀", label: "推送代码", prompt: "/git-sync" },
   { icon: "🔍", label: "Copilot Review", prompt: "/code-review" },
   { icon: "🧪", label: "运行测试", prompt: "运行本项目的测试用例，并把结果汇报给我" },
   { icon: "🔀", label: "建 PR", prompt: "/pr" },
 ];
+let QUICK_SKILLS;
+try {
+  const saved = JSON.parse(localStorage.getItem("claudeTools.quickSkills") || "null");
+  QUICK_SKILLS = Array.isArray(saved) ? saved : DEFAULT_QUICK_SKILLS.slice();
+} catch {
+  QUICK_SKILLS = DEFAULT_QUICK_SKILLS.slice();
+}
+function persistQuickSkills() {
+  try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {}
+}
+// idx>=0 为编辑现有项；idx=-1 为新增。编辑时清空「名称」与「命令」即删除该项。
+function editQuickSkill(idx) {
+  const cur = idx >= 0 ? QUICK_SKILLS[idx] : { icon: "", label: "", prompt: "" };
+  const icon = prompt(tr("图标（emoji，可留空）："), cur.icon);
+  if (icon === null) return;
+  const label = prompt(tr("名称："), cur.label);
+  if (label === null) return;
+  const p = prompt(tr("要发送的 prompt / 斜杠命令："), cur.prompt);
+  if (p === null) return;
+  if (!label.trim() && !p.trim()) {
+    if (idx >= 0) { QUICK_SKILLS.splice(idx, 1); persistQuickSkills(); renderQuickbar(); }
+    return; // 新增时全空则忽略
+  }
+  const item = { icon: icon.trim(), label: label.trim(), prompt: p.trim() };
+  if (idx >= 0) QUICK_SKILLS[idx] = item; else QUICK_SKILLS.push(item);
+  persistQuickSkills();
+  renderQuickbar();
+}
 function renderQuickbar() {
   const bar = $("quickbar");
   if (!bar) return;
   bar.innerHTML = "";
-  QUICK_SKILLS.forEach((q) => {
+  QUICK_SKILLS.forEach((q, i) => {
     const b = document.createElement("button");
     b.className = "qbtn";
     b.type = "button";
-    b.textContent = `${q.icon} ${tr(q.label)}`;
-    b.title = q.prompt;
+    b.textContent = `${q.icon ? q.icon + " " : ""}${tr(q.label)}`;
+    b.title = `${q.prompt}\n${tr("右键编辑 / 删除")}`;
     b.onclick = () => {
       const input = $("input");
       input.value = q.prompt;
       send(); // 复用既有发送逻辑（含排队 / 自动新对话标题等）
     };
+    b.oncontextmenu = (e) => { e.preventDefault(); editQuickSkill(i); };
     bar.appendChild(b);
   });
+  // 末尾「＋」用于新增快捷按钮
+  const add = document.createElement("button");
+  add.className = "qbtn qbtn-add";
+  add.type = "button";
+  add.textContent = "＋";
+  add.title = tr("新增快捷按钮");
+  add.onclick = () => editQuickSkill(-1);
+  bar.appendChild(add);
 }
 renderQuickbar();
 
