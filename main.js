@@ -15,13 +15,23 @@ const execFileAsync = promisify(execFile);
  * 格式同 Claude Code 的 .mcp.json：{ "mcpServers": { name: {command,args,env} } }
  */
 async function readMcpConfig() {
+  const file = path.join(__dirname, "mcp.json");
+  let raw;
   try {
-    const raw = await fs.readFile(path.join(__dirname, "mcp.json"), "utf8");
+    raw = await fs.readFile(file, "utf8");
+  } catch {
+    return null; // 文件不存在 => 不加 MCP（正常情况，静默）
+  }
+  try {
     const json = JSON.parse(raw);
     const servers = json.mcpServers || json;
     return servers && Object.keys(servers).length ? servers : null;
-  } catch {
-    return null; // 文件不存在或解析失败 => 不加 MCP
+  } catch (e) {
+    // 文件存在但 JSON 解析失败：明确报错，避免用户以为「配了却不生效」
+    const msg = `mcp.json 解析失败，本次未加载任何 MCP：${e.message}`;
+    console.error(msg);
+    pushIssue("main", msg);
+    return null;
   }
 }
 
