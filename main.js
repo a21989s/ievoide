@@ -822,10 +822,14 @@ ipcMain.handle("updateEvolveBacklog", (_e, { id, patch }) => { updateBacklog(id,
 
 // 巡检：让 Claude 只读地审视源码，给自己提出一批具体的优化需求，写入优化清单
 let auditing = false;
+let evolveAuditAbort = null;
 ipcMain.handle("evolveAudit", async () => {
   if (auditing) return { error: "巡检进行中" };
   auditing = true;
   const send = (ch, p) => { if (win && !win.isDestroyed()) win.webContents.send(ch, p); };
+  const abort = new AbortController();
+  evolveAuditAbort = abort;
+  const timer = setTimeout(() => abort.abort(), 120000);
   try {
     send("evolve:log", "🔎 巡检源码，寻找优化点…");
     const recent = readEvolveHistory().slice(0, 12).map((h) => "- " + (h.requirement || "").split("\n")[0]).join("\n");
@@ -838,7 +842,7 @@ ipcMain.handle("evolveAudit", async () => {
       '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求","severity":"high|medium|low"}。';
     const response = query({
       prompt,
-      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND } },
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND } },
     });
     let text = "";
     for await (const msg of response) {
@@ -860,13 +864,16 @@ ipcMain.handle("evolveAudit", async () => {
     send("evolve:log", `📋 巡检完成，新增 ${added} 个优化点`);
     return { ok: true, added };
   } catch (err) {
+    if (abort.signal.aborted) { send("evolve:log", "⏹️ 巡检已中止/超时"); return { error: "巡检已中止或超时" }; }
     return { error: String(err?.stack || err) };
   } finally {
+    clearTimeout(timer);
+    evolveAuditAbort = null;
     auditing = false;
   }
 });
 
-ipcMain.on("evolveStop", () => evolveAbort?.abort());
+ipcMain.on("evolveStop", () => { evolveAbort?.abort(); evolveAuditAbort?.abort(); });
 // 进化进行中追加一条“调整方向”消息（流式输入，下一轮会纳入上下文）
 ipcMain.on("evolveSteer", (_e, text) => {
   if (evolveSteer && typeof text === "string" && text.trim()) evolveSteer.push(text.trim());
