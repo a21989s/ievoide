@@ -948,23 +948,25 @@ ipcMain.handle("evolveAudit", async () => {
   const send = (ch, p) => { if (win && !win.isDestroyed()) win.webContents.send(ch, p); };
   const abort = new AbortController();
   evolveAuditAbort = abort;
-  const timer = setTimeout(() => abort.abort(), 120000);
+  const timer = setTimeout(() => abort.abort(), 240000);
   try {
-    send("evolve:log", "🔎 巡检源码，寻找优化点…");
+    send("evolve:log", "🔎 巡检源码 + 联网采集需求，寻找优化点…");
     const recent = readEvolveHistory().slice(0, 12).map((h) => "- " + (h.requirement || "").split("\n")[0]).join("\n");
     const openTitles = readBacklog().filter((x) => x.status !== "done").map((x) => "- " + x.title).join("\n");
     const prompt =
-      "审视当前 Electron 应用「Claude Tools」的源码（main.js / preload.cjs / renderer/*），找出 3-6 个具体、可独立完成的改进点。" +
-      "本产品定位是面向开发与日常文档维护的工具集，自进化的总目标是让它更【易用、易组装搭配、简洁】。" +
-      "因此除了 bug、隐患、体验或性能优化外，请优先考虑能提升以下方面的改进：" +
+      "为这款 Electron 桌面应用「Claude Tools」找出 3-6 个具体、可独立完成的改进点，写成给进化器执行的需求。改进点须来自以下两个渠道，请都覆盖：\n" +
+      "【渠道一·源码巡检】用 Read/Grep 审视源码（main.js / preload.cjs / renderer/*），找 bug、隐患、体验或性能问题。\n" +
+      "【渠道二·联网需求采集】用 WebSearch（必要时用 WebFetch 取正文）调研同类 AI 编码桌面工具（Cursor / Cline / Windsurf / Claude Code / Copilot 等）的新功能、最受欢迎功能、用户痛点与行业趋势（查询带 2026 等年份关键词）。只提炼【本 App 尚未具备或可增强】且契合本产品定位的需求；联网项的 requirement 末尾附上来源 URL。\n" +
+      "本产品定位是面向开发与日常文档维护的工具集，自进化的总目标是让它更【易用、易组装搭配、简洁】。优先考虑能提升以下方面的改进：" +
       "① 易用性（上手简单、交互直观、减少操作步骤、降低认知负担）；" +
       "② 易组装与搭配（功能模块化、可灵活组合、便于与其他工具/工作流衔接）；" +
       "③ 简洁（界面与代码精简、去除冗余、降低复杂度）；" +
       "④ 作为开发工具与文档维护工具的实用性与完整度。" +
-      "用 Read/Grep 查看，**不要修改任何文件**。" +
+      "只用 Read/Grep/WebSearch/WebFetch 调研，**不要修改任何文件**。" +
+      "severity 按【痛点强度 × 与本 App 契合度】判定：high=高频痛点且本 App 明显缺失，low=锦上添花。" +
       (recent ? `\n\n最近已做过的进化（不要重复提）：\n${recent}` : "") +
       (openTitles ? `\n\n优化清单里已有的项（不要重复提）：\n${openTitles}` : "") +
-      '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求","severity":"high|medium|low"}。';
+      '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求（联网项末尾附来源 URL）","severity":"high|medium|low"}。';
     const response = query({
       prompt,
       options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND } },

@@ -1287,6 +1287,11 @@ $("toggleSidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
 // ── 全局快捷键（向 VSCode 看齐）──────────────────────────────
 // Cmd/Ctrl+B 折叠/展开侧栏；Esc 关闭最上层浮层（预览/弹窗/菜单）
 document.addEventListener("keydown", (e) => {
+  // 按 ?（Shift+/）打开快捷键速查；在输入框中输入「?」时不拦截
+  if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
+    const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+    if (!typing) { e.preventDefault(); toggleKbdHelp(); return; }
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
     e.preventDefault();
     $("sidebar").classList.toggle("collapsed");
@@ -1298,7 +1303,7 @@ document.addEventListener("keydown", (e) => {
     // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
     const ev = $("evolveModal");
     if (ev.classList.contains("open") && !ev.classList.contains("docked")) { ev.classList.remove("open"); return; }
-    for (const id of ["historyModal", "mobileModal"]) {
+    for (const id of ["kbdModal", "historyModal", "mobileModal"]) {
       if ($(id).classList.contains("open")) { $(id).classList.remove("open"); return; }
     }
     const ctx = $("ctxMenu"), acct = $("acctMenu");
@@ -1306,6 +1311,51 @@ document.addEventListener("keydown", (e) => {
     if (acct.classList.contains("open")) { acct.classList.remove("open"); return; }
   }
 });
+
+// ── 快捷键速查面板 ─────────────────────────────────────────
+const KBD_MOD = navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl";
+const KBD_SHORTCUTS = [
+  ["全局", [
+    [["?"], "打开本速查面板"],
+    [[KBD_MOD, "B"], "折叠 / 展开左侧栏"],
+    [["Esc"], "关闭当前弹层（查看器 / 历史 / 菜单等）"],
+  ]],
+  ["对话", [
+    [[KBD_MOD, "Enter"], "发送消息"],
+    [["Enter"], "换行"],
+    [["↑", "↓"], "在斜杠 / 文件补全弹窗中选择"],
+    [["Enter", "Tab"], "确认补全项"],
+  ]],
+  ["源代码管理", [
+    [[KBD_MOD, "Enter"], "提交已暂存的更改（提交信息框内）"],
+  ]],
+  ["需求开发", [
+    [["Enter"], "添加一条需求到清单"],
+    [["Shift", "Enter"], "在需求输入框内换行"],
+  ]],
+  ["自进化", [
+    [[KBD_MOD, "Enter"], "开始进化 / 追加方向调整"],
+  ]],
+];
+function renderKbdHelp() {
+  const html = KBD_SHORTCUTS.map(([grp, rows]) =>
+    `<div class="kbd-grp">${tr(grp)}</div>` +
+    rows.map(([keys, desc]) =>
+      `<div class="kbd-row"><span class="kbd-desc">${tr(desc)}</span>` +
+      `<span class="kbd-keys">${keys.map((k) => `<kbd>${k}</kbd>`).join("")}</span></div>`
+    ).join("")
+  ).join("");
+  $("kbdList").innerHTML = html;
+}
+function toggleKbdHelp() {
+  const m = $("kbdModal");
+  if (m.classList.contains("open")) { m.classList.remove("open"); return; }
+  renderKbdHelp();
+  m.classList.add("open");
+}
+$("kbdHelpBtn").addEventListener("click", toggleKbdHelp);
+$("kbdClose").addEventListener("click", () => $("kbdModal").classList.remove("open"));
+$("kbdModal").addEventListener("click", (e) => { if (e.target.id === "kbdModal") $("kbdModal").classList.remove("open"); });
 
 // ── 中英双语切换 ───────────────────────────────────────────
 function refreshLangBtn() {
@@ -1775,6 +1825,13 @@ $("evClearBacklog").onclick = async () => { await window.api.clearEvolveBacklog(
 window.api.on("evolve:backlog", () => loadBacklog());
 
 // 持续进化：空闲时自动取一条优化项解决；清单空了就巡检补充——形成不停的自我改进循环
+// 取下一条时按 severity 优先（high → medium → low），同级按入清单顺序（id 升序），
+// 让巡检/联网采集到的高优先级需求先被实现。
+const _SEV_RANK = { high: 0, medium: 1, low: 2 };
+const pickNextBacklog = (list) =>
+  (list || [])
+    .filter((x) => x.status === "open")
+    .sort((a, b) => (_SEV_RANK[a.severity] ?? 1) - (_SEV_RANK[b.severity] ?? 1) || (a.id || 0) - (b.id || 0))[0];
 let _continuousTimer = null;
 // 代次标记：每次 applyContinuous 自增，await 期间被重启的旧循环代次会失效，确保任意时刻只有一条循环在跑
 let _continuousGen = 0;
@@ -1783,14 +1840,14 @@ async function continuousTick(gen) {
   if (evolveBusy) { _continuousTimer = setTimeout(() => continuousTick(gen), 10000); return; }
   let list = (await window.api.getEvolveBacklog()) || [];
   if (gen !== _continuousGen) return; // await 期间循环被重启，本代退出
-  let next = list.find((x) => x.status === "open");
+  let next = pickNextBacklog(list);
   if (!next) {
-    evLog(tr("🔄 持续进化：清单已空，巡检源码补充优化点…"));
+    evLog(tr("🔄 持续进化：清单已空，巡检源码 + 联网采集需求补充优化点…"));
     await window.api.evolveAudit();
     if (gen !== _continuousGen) return;
     list = (await window.api.getEvolveBacklog()) || [];
     if (gen !== _continuousGen) return;
-    next = list.find((x) => x.status === "open");
+    next = pickNextBacklog(list);
     if (!next) { // 巡检也没产出，过一阵再试，避免空转
       if ($("evContinuous").checked) _continuousTimer = setTimeout(() => continuousTick(gen), 60000);
       return;
