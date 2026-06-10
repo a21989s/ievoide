@@ -64,6 +64,18 @@
       .kbd-row .kbd-desc { flex: 1; font-size: 13px; }
       .kbd-keys { display: flex; gap: 4px; flex: none; }
       .kbd-keys kbd { font-family: inherit; font-size: 11px; color: var(--fg); background: #2a2a2a; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+      /* 命令面板：Ctrl/Cmd+K 唤起的全局模糊搜索浮层 */
+      #cmdkModal { position: fixed; inset: 0; background: rgba(0,0,0,.5); display: none; align-items: flex-start; justify-content: center; z-index: 60; }
+      #cmdkModal.open { display: flex; }
+      #cmdkModal .box { width: 560px; max-width: 92vw; max-height: 64vh; margin-top: 12vh; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 12px 48px rgba(0,0,0,.5); display: flex; flex-direction: column; overflow: hidden; }
+      #cmdkInput { border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--fg); font: inherit; font-size: 15px; padding: 14px 16px; outline: none; }
+      #cmdkList { overflow-y: auto; padding: 6px; }
+      .cmdk-item { display: flex; align-items: center; gap: 10px; padding: 9px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+      .cmdk-item.sel { background: var(--accent); color: #fff; }
+      .cmdk-ic { flex: none; width: 18px; text-align: center; }
+      .cmdk-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cmdk-hint { flex: none; font-size: 11px; opacity: .6; }
+      .cmdk-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
       #main { flex: 1; display: flex; min-height: 0; }
       /* VSCode 式活动栏：最左侧纯图标竖列，承载视图切换与全局操作 */
       #activitybar {
@@ -691,6 +703,12 @@
       <div class="box">
         <div class="vhead"><span data-i18n="⌨️ 快捷键速查">⌨️ 快捷键速查</span><button id="kbdClose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <div id="kbdList"></div>
+      </div>
+    </div>
+    <div id="cmdkModal">
+      <div class="box">
+        <input id="cmdkInput" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="搜索动作、文件、快捷技能…（Esc 关闭）" placeholder="搜索动作、文件、快捷技能…（Esc 关闭）" />
+        <div id="cmdkList"></div>
       </div>
     </div>
     <div id="evolveModal">

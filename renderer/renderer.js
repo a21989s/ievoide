@@ -1433,6 +1433,12 @@ document.addEventListener("keydown", (e) => {
     const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
     if (!typing) { e.preventDefault(); toggleKbdHelp(); return; }
   }
+  // Ctrl/Cmd+K：唤起命令面板（集中入口，全局可用，含输入框内）
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+    e.preventDefault();
+    openCmdk();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
     e.preventDefault();
     $("sidebar").classList.toggle("collapsed");
@@ -1440,6 +1446,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     // 按优先级关闭一个浮层（已被 input/evReq 内联处理的补全弹窗在此之前已消费）
+    if ($("cmdkModal").classList.contains("open")) { closeCmdk(); return; }
     if ($("viewer").style.display === "flex") { $("vclose").click(); return; }
     // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
     const ev = $("evolveModal");
@@ -1458,6 +1465,7 @@ const KBD_MOD = navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl
 const KBD_SHORTCUTS = [
   ["全局", [
     [["?"], "打开本速查面板"],
+    [[KBD_MOD, "K"], "打开命令面板（搜索动作 / 文件 / 快捷技能）"],
     [[KBD_MOD, "B"], "折叠 / 展开左侧栏"],
     [["Esc"], "关闭当前弹层（查看器 / 历史 / 菜单等）"],
   ]],
@@ -1497,6 +1505,111 @@ function toggleKbdHelp() {
 $("kbdHelpBtn").addEventListener("click", toggleKbdHelp);
 $("kbdClose").addEventListener("click", () => $("kbdModal").classList.remove("open"));
 $("kbdModal").addEventListener("click", (e) => { if (e.target.id === "kbdModal") $("kbdModal").classList.remove("open"); });
+
+// ── 命令面板（Ctrl/Cmd+K）─────────────────────────────────
+// 集中入口：模糊搜索并一键触发常用动作（切换面板/新建对话/打开 PDF/
+// 检索文件/运行快捷技能等），减少在各模块间记忆与跳转的成本。
+function cmdkSwitchView(view) {
+  document.querySelectorAll("#activitybar .act-btn[data-view]")
+    .forEach((x) => x.classList.toggle("active", x.dataset.view === view));
+  $("sidebar").classList.remove("collapsed");
+  $("sidebar").classList.toggle("req-mode", view === "req");
+}
+// 静态动作清单：与活动栏 / 顶栏既有按钮一一对应，复用其行为
+function cmdkBaseCommands() {
+  const cmds = [
+    { ic: "＋", label: tr("新建对话"), run: () => newConversation() },
+    { ic: "⎇", label: tr("切换到源代码管理"), run: () => cmdkSwitchView("sc") },
+    { ic: "✓", label: tr("切换到需求开发"), run: () => cmdkSwitchView("req") },
+    { ic: "◧", label: tr("折叠 / 展开侧栏"), run: () => $("sidebar").classList.toggle("collapsed") },
+    { ic: "⎇﹢", label: tr("新建分支"), run: () => $("scNewBranch").onclick() },
+    { ic: "📂", label: tr("选择文件夹"), run: () => $("pick").onclick() },
+    { ic: "🕘", label: tr("对话历史"), run: () => $("historyBtn").click() },
+    { ic: "🧬", label: tr("自进化"), run: () => $("evolveBtn").click() },
+    { ic: "📦", label: tr("全量打包"), run: () => $("packBtn").click() },
+    { ic: "📱", label: tr("手机连接"), run: () => $("mobileBtn").click() },
+    { ic: "👤", label: tr("切换账号"), run: () => $("acctBtn").click() },
+    { ic: "🌐", label: tr("切换语言"), run: () => $("langBtn").onclick() },
+    { ic: "⌨️", label: tr("快捷键速查"), run: () => toggleKbdHelp() },
+  ];
+  // 快捷技能：直接以技能提示词发起一次对话
+  (QUICK_SKILLS || []).forEach((q) => cmds.push({
+    ic: q.icon || "⚡", label: tr(q.label), hint: tr("快捷技能"),
+    run: () => { $("input").value = q.prompt; send(); },
+  }));
+  return cmds;
+}
+let cmdkItems = [];   // 当前渲染的结果（动作 + 文件）
+let cmdkSel = 0;      // 高亮项索引
+let cmdkFileToken = 0; // 文件检索防竞态
+function openCmdk() {
+  const m = $("cmdkModal");
+  if (m.classList.contains("open")) { closeCmdk(); return; }
+  $("cmdkInput").value = "";
+  m.classList.add("open");
+  renderCmdk("");
+  $("cmdkInput").focus();
+}
+function closeCmdk() { $("cmdkModal").classList.remove("open"); }
+function renderCmdk(q) {
+  const ql = q.trim().toLowerCase();
+  // 子序列模糊匹配：依次命中查询字符即算匹配
+  const match = (text) => {
+    const t = text.toLowerCase();
+    if (!ql) return true;
+    let i = 0;
+    for (const ch of t) { if (ch === ql[i]) i++; if (i === ql.length) return true; }
+    return false;
+  };
+  const actions = cmdkBaseCommands().filter((c) => match(c.label)).map((c) => ({ ...c, kind: "action" }));
+  cmdkItems = actions;
+  cmdkSel = 0;
+  drawCmdk();
+  // 有查询时异步并入文件名匹配结果（打开文件 / PDF 编辑器）
+  if (ql) {
+    const token = ++cmdkFileToken;
+    window.api.searchFiles(ql).then((files) => {
+      if (token !== cmdkFileToken || !$("cmdkModal").classList.contains("open")) return;
+      const fileItems = (files || []).slice(0, 8).map((f) => ({
+        kind: "file", ic: "📄", label: f.rel, hint: tr("打开"),
+        run: () => openFile(f.path, f.name),
+      }));
+      cmdkItems = actions.concat(fileItems);
+      drawCmdk();
+    }).catch(() => {});
+  }
+}
+function drawCmdk() {
+  const list = $("cmdkList");
+  if (!cmdkItems.length) { list.innerHTML = `<div class="cmdk-empty">${tr("无匹配")}</div>`; return; }
+  if (cmdkSel >= cmdkItems.length) cmdkSel = cmdkItems.length - 1;
+  list.innerHTML = "";
+  cmdkItems.forEach((it, i) => {
+    const el = document.createElement("div");
+    el.className = "cmdk-item" + (i === cmdkSel ? " sel" : "");
+    el.innerHTML = `<span class="cmdk-ic">${esc(it.ic || "•")}</span>` +
+      `<span class="cmdk-label">${esc(it.label)}</span>` +
+      (it.hint ? `<span class="cmdk-hint">${esc(it.hint)}</span>` : "");
+    el.onclick = () => runCmdk(i);
+    el.onmousemove = () => { if (cmdkSel !== i) { cmdkSel = i; drawCmdk(); } };
+    list.appendChild(el);
+  });
+  list.querySelector(".cmdk-item.sel")?.scrollIntoView({ block: "nearest" });
+}
+function runCmdk(i) {
+  const it = cmdkItems[i];
+  if (!it) return;
+  closeCmdk();
+  try { it.run(); } catch (e) { console.error(e); }
+}
+$("cmdkInput").addEventListener("input", (e) => renderCmdk(e.target.value));
+$("cmdkInput").addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown") { e.preventDefault(); cmdkSel = Math.min(cmdkSel + 1, cmdkItems.length - 1); drawCmdk(); }
+  else if (e.key === "ArrowUp") { e.preventDefault(); cmdkSel = Math.max(cmdkSel - 1, 0); drawCmdk(); }
+  else if (e.key === "Enter") { e.preventDefault(); runCmdk(cmdkSel); }
+  else if (e.key === "Escape") { e.preventDefault(); closeCmdk(); }
+});
+$("cmdkModal").addEventListener("click", (e) => { if (e.target.id === "cmdkModal") closeCmdk(); });
 
 // ── 中英双语切换 ───────────────────────────────────────────
 function refreshLangBtn() {
