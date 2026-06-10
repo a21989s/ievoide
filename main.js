@@ -429,6 +429,9 @@ ipcMain.handle("listDir", async (_e, dirPath) => {
 let fileCache = { dir: null, list: null, time: 0 };
 const FILE_CACHE_TTL = 5000; // ms
 const FILE_CACHE_MAX = 5000; // 缓存条目上限，避免超大仓库吃内存
+// 与文件树同生命周期的内容缓存：grepFiles 逐键检索时，同一 TTL 窗口内
+// 复用已读过的文本内容（path -> 行数组，跳过的文件存 null），免去逐键全量读盘。
+let contentCache = new Map();
 
 async function listWorkdirFiles() {
   const now = Date.now();
@@ -436,6 +439,7 @@ async function listWorkdirFiles() {
     return fileCache.list;
   }
   fileCache.dirs = null;
+  contentCache = new Map(); // 文件树重建时一并失效内容缓存
   const all = [];
   const dirs = []; // 目录条目，供 @ 补全把整个目录纳入上下文
   const visited = new Set(); // 已访问目录的真实路径，防符号链接自指/环路重复遍历
@@ -516,13 +520,20 @@ ipcMain.handle("grepFiles", async (_e, query) => {
   for (const f of all) {
     if (out.length >= MAX_RESULTS) break;
     if (BINARY_EXTS.has(path.extname(f.path).toLowerCase())) continue;
-    let stat;
-    try { stat = await fs.stat(f.path); } catch { continue; }
-    if (stat.size > MAX_FILE_SIZE) continue;
-    let buf;
-    try { buf = await fs.readFile(f.path); } catch { continue; }
-    if (looksBinary(buf)) continue;
-    const lines = buf.toString("utf8").split("\n");
+    let lines;
+    if (contentCache.has(f.path)) {
+      lines = contentCache.get(f.path); // 命中缓存：null 表示此前判定为跳过
+      if (lines === null) continue;
+    } else {
+      let stat;
+      try { stat = await fs.stat(f.path); } catch { contentCache.set(f.path, null); continue; }
+      if (stat.size > MAX_FILE_SIZE) { contentCache.set(f.path, null); continue; }
+      let buf;
+      try { buf = await fs.readFile(f.path); } catch { contentCache.set(f.path, null); continue; }
+      if (looksBinary(buf)) { contentCache.set(f.path, null); continue; }
+      lines = buf.toString("utf8").split("\n");
+      contentCache.set(f.path, lines);
+    }
     let hits = 0;
     for (let i = 0; i < lines.length && hits < MAX_PER_FILE && out.length < MAX_RESULTS; i++) {
       if (lines[i].toLowerCase().includes(ql)) {
