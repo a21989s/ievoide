@@ -276,6 +276,7 @@
       #acctMenu .am-act { padding: 6px 10px; font-size: 12px; cursor: pointer; border-radius: 4px; color: var(--accent); }
       #acctMenu .am-act:hover { background: #2a2d2e; }
       #acctMenu .am-empty { padding: 6px 10px; font-size: 11px; color: var(--muted); }
+      #treeHead { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 0; font-size: 11px; letter-spacing: .6px; color: var(--muted); }
       #tree {
         flex: 1;
         overflow: auto;
@@ -689,6 +690,13 @@
         <div id="csBox">
           <input id="csInput" type="search" data-i18n-ph="搜索文件内容…" placeholder="搜索文件内容…" />
           <div id="csResults"></div>
+        </div>
+        <div id="treeHead">
+          <span data-i18n="文件">文件</span>
+          <span class="sc-actions">
+            <span id="newFile" data-i18n-title="新建文件" title="新建文件">🗎﹢</span>
+            <span id="newFolder" data-i18n-title="新建文件夹" title="新建文件夹">📁﹢</span>
+          </span>
         </div>
         <div id="tree"></div>
         </div>

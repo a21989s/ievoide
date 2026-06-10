@@ -11,6 +11,7 @@ contextBridge.exposeInMainWorld("api", {
   grepFiles: (q) => ipcRenderer.invoke("grepFiles", q),
   readFile: (p) => ipcRenderer.invoke("readFile", p),
   writeFile: (p, content) => ipcRenderer.invoke("writeFile", p, content),
+  mkdir: (p) => ipcRenderer.invoke("mkdir", p),
   readFileBuffer: (p) => ipcRenderer.invoke("readFileBuffer", p),
   saveAttachment: (payload) => ipcRenderer.invoke("saveAttachment", payload),
   savePdf: (payload) => ipcRenderer.invoke("savePdf", payload),

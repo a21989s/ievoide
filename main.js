@@ -584,6 +584,23 @@ ipcMain.handle("writeFile", async (_e, filePath, content) => {
   }
 });
 
+// ── 新建文件夹：递归创建，限制在当前工作目录内防 ../ 越界 ──────
+ipcMain.handle("mkdir", async (_e, dirPath) => {
+  try {
+    if (workdir) {
+      const root = path.resolve(workdir);
+      const abs = path.resolve(dirPath);
+      if (abs !== root && !abs.startsWith(root + path.sep)) {
+        return { ok: false, error: "路径越界" };
+      }
+    }
+    await fs.mkdir(dirPath, { recursive: true });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
 // ── 二进制读取（PDF 编辑器用），返回 base64 ────────────────────
 ipcMain.handle("readFileBuffer", async (_e, filePath) => {
   try {

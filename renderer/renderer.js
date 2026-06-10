@@ -171,6 +171,43 @@ $("pick").onclick = async () => {
   else { try { localStorage.removeItem("claudeTools.folder"); } catch {} } // 目录已不存在
 })();
 
+// ── 新建文件 / 新建文件夹：取相对路径，建好后刷新树，.md 自动进编辑 ──
+async function createEntry(isDir) {
+  if (!currentFolder) { toast(tr("请先选择文件夹"), "error"); return; }
+  const rel = ((await modalPrompt(tr(isDir ? "新建文件夹（相对路径）：" : "新建文件（相对路径）："))) || "")
+    .trim().replace(/^\/+/, "");
+  if (!rel) return;
+  const root = currentFolder.replace(/\/+$/, "");
+  const full = root + "/" + rel;
+  if (isDir) {
+    const r = await window.api.mkdir(full);
+    if (!r.ok) { toast(tr("创建失败：") + (r.error || ""), "error"); return; }
+  } else {
+    const slash = full.lastIndexOf("/");
+    const parent = full.slice(0, slash);
+    const name = full.slice(slash + 1);
+    if (parent && parent !== root) {
+      const r = await window.api.mkdir(parent);
+      if (!r.ok) { toast(tr("创建失败：") + (r.error || ""), "error"); return; }
+    }
+    // 防止误覆盖已存在的同名文件
+    const siblings = await window.api.listDir(parent || root);
+    if (siblings.some((s) => s.name === name)) { toast(tr("同名文件已存在"), "error"); return; }
+    const r = await window.api.writeFile(full, "");
+    if (!r.ok) { toast(tr("创建失败：") + (r.error || ""), "error"); return; }
+  }
+  // 刷新文件树
+  $("tree").innerHTML = "";
+  await renderChildren($("tree"), currentFolder, 0);
+  // 新建的 .md 文件自动打开并进入内联编辑
+  if (!isDir && /\.(md|markdown)$/i.test(rel)) {
+    await openFile(full, rel.split("/").pop());
+    if (!mdEditing) enterMdEdit();
+  }
+}
+$("newFile").onclick = () => createEntry(false);
+$("newFolder").onclick = () => createEntry(true);
+
 // ── 文件内容检索：左侧搜索框逐行匹配，点击命中直达预览 ────────
 let csToken = 0;
 async function runContentSearch() {
