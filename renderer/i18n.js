@@ -37,6 +37,11 @@
     "更改": "Changes",
     "丢弃所有更改": "Discard all changes",
     "全部暂存": "Stage all",
+    // —— 常用 skill 快捷按钮 ——
+    "推送代码": "Push",
+    "运行测试": "Run Tests",
+    "运行本项目的测试用例，并把结果汇报给我": "Run this project's tests and report the results to me",
+    "建 PR": "New PR",
     // —— 需求开发 ——
     "需求开发清单": "Requirements List",
     "逐条录入开发需求；点「开始处理」后右侧会按顺序分析并修改代码，完成一条自动继续下一条。运行中可继续添加。": "Add tasks one by one. After clicking “Start”, the right side analyzes and edits code in order, moving to the next one automatically. You can keep adding while it runs.",

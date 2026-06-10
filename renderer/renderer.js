@@ -1220,6 +1220,7 @@ $("langBtn").onclick = () => setLang(getLang() === "en" ? "zh" : "en");
 window.addEventListener("i18n", () => {
   refreshLangBtn();
   refreshSendBtn();
+  renderQuickbar();
   renderConvList();
   renderReqs();
   renderAttachList();
@@ -2016,6 +2017,34 @@ try {
   const h = localStorage.getItem("claudeTools.scH");
   if (h) { const p = $("branchpanel"); p.style.flex = "none"; p.style.height = h + "px"; }
 } catch {}
+
+// ── 常用 skill 快捷按钮 ─────────────────────────────────────
+// 点一下即把对应指令填入输入框并直接发送，省去手敲斜杠命令。
+const QUICK_SKILLS = [
+  { icon: "🚀", label: "推送代码", prompt: "/git-sync" },
+  { icon: "🔍", label: "Copilot Review", prompt: "/code-review" },
+  { icon: "🧪", label: "运行测试", prompt: "运行本项目的测试用例，并把结果汇报给我" },
+  { icon: "🔀", label: "建 PR", prompt: "/pr" },
+];
+function renderQuickbar() {
+  const bar = $("quickbar");
+  if (!bar) return;
+  bar.innerHTML = "";
+  QUICK_SKILLS.forEach((q) => {
+    const b = document.createElement("button");
+    b.className = "qbtn";
+    b.type = "button";
+    b.textContent = `${q.icon} ${tr(q.label)}`;
+    b.title = q.prompt;
+    b.onclick = () => {
+      const input = $("input");
+      input.value = q.prompt;
+      send(); // 复用既有发送逻辑（含排队 / 自动新对话标题等）
+    };
+    bar.appendChild(b);
+  });
+}
+renderQuickbar();
 
 // ── 斜杠命令 / skills 补全 ─────────────────────────────────
 let slashCommands = [];

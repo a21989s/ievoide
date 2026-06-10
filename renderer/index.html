@@ -327,6 +327,11 @@
       #input { resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: inherit; }
       #attachList { display: flex; flex-wrap: wrap; gap: 6px; }
       #attachList:empty { display: none; }
+      /* 常用 skill 快捷按钮：点一下即把对应指令发给模型 */
+      #quickbar { display: flex; flex-wrap: wrap; gap: 6px; }
+      #quickbar:empty { display: none; }
+      #quickbar .qbtn { background: #333; color: var(--fg); border: 1px solid var(--border); border-radius: 14px; padding: 3px 10px; font-size: 11px; line-height: 1.4; cursor: pointer; white-space: nowrap; }
+      #quickbar .qbtn:hover:not(:disabled) { background: var(--accent); color: #fff; border-color: var(--accent); }
       .attach-chip { display: flex; align-items: center; gap: 5px; background: #333; border: 1px solid var(--border); border-radius: 6px; padding: 2px 6px; font-size: 11px; max-width: 180px; }
       .attach-chip img { width: 22px; height: 22px; object-fit: cover; border-radius: 3px; }
       .attach-chip .an { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -534,6 +539,7 @@
         <div id="filePopup"></div>
         <div id="inputbar">
           <div class="input-col">
+            <div id="quickbar"></div>
             <div id="attachList"></div>
             <textarea id="input" rows="2" data-i18n-ph="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）" placeholder="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）"></textarea>
           </div>
