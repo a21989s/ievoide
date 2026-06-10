@@ -1866,7 +1866,11 @@ window.api.on("issues:update", () => {
 function applyPeriodic() {
   clearTimeout(_periodicTimer);
   if ($("evPeriodic").checked) {
-    const ms = +$("evInterval").value;
+    // 间隔被清空/填非法值时 +value 会是 NaN 或过小值，setTimeout 会按 0 处理导致循环被立即反复触发。
+    // 这里兜底为默认 30 分钟，并 clamp 到 60 秒下限。
+    let ms = +$("evInterval").value;
+    if (!Number.isFinite(ms) || ms <= 0) ms = 1800000;
+    ms = Math.max(60000, ms);
     const tick = () => {
       // 忙则稍后再试，别因为撞上一轮就把这一轮整个跳过
       if (evolveBusy) { _periodicTimer = setTimeout(tick, 15000); return; }
