@@ -114,6 +114,39 @@ $("pick").onclick = async () => {
   else { try { localStorage.removeItem("claudeTools.folder"); } catch {} } // 目录已不存在
 })();
 
+// ── 文件内容检索：左侧搜索框逐行匹配，点击命中直达预览 ────────
+let csToken = 0;
+async function runContentSearch() {
+  const q = $("csInput").value.trim();
+  const box = $("csResults");
+  if (!q) { box.innerHTML = ""; return; }
+  const token = ++csToken;
+  const hits = await window.api.grepFiles(q);
+  if (token !== csToken) return; // 已有更新的查询，丢弃过期结果
+  box.innerHTML = "";
+  if (!hits.length) {
+    box.innerHTML = `<div class="cs-empty">${tr("无匹配")}</div>`;
+    return;
+  }
+  hits.forEach((h) => {
+    const el = document.createElement("div");
+    el.className = "cs-hit";
+    el.title = `${h.rel}:${h.line}`;
+    el.innerHTML = `<span class="loc">${esc(h.rel)}:${h.line}</span><span class="txt">${esc(h.text)}</span>`;
+    el.onclick = () => openFile(h.path, h.name);
+    box.appendChild(el);
+  });
+}
+let csTimer = 0;
+$("csInput").addEventListener("input", () => {
+  clearTimeout(csTimer);
+  csTimer = setTimeout(runContentSearch, 250);
+});
+$("csInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { clearTimeout(csTimer); runContentSearch(); }
+  else if (e.key === "Escape") { $("csInput").value = ""; $("csResults").innerHTML = ""; }
+});
+
 // ── 预览面板：按扩展名渲染 md / mermaid / pdf / 文本 ──────────
 const vbody = $("vbody");
 const vframe = $("vframe");

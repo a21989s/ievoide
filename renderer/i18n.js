@@ -10,6 +10,8 @@
     "🗑 新建会话": "🗑 New Session",
     "清空对话并开启新会话": "Clear chat and start a new session",
     "未选择目录": "No folder selected",
+    "搜索文件内容…": "Search file contents…",
+    "无匹配": "No matches",
     "用量…": "Usage…",
     "点击刷新用量": "Click to refresh usage",
     "快捷键速查（按 ? 打开）": "Keyboard shortcuts (press ?)",

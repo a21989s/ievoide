@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld("api", {
   saveConvs: (data) => ipcRenderer.invoke("saveConvs", data),
   listDir: (p) => ipcRenderer.invoke("listDir", p),
   searchFiles: (q) => ipcRenderer.invoke("searchFiles", q),
+  grepFiles: (q) => ipcRenderer.invoke("grepFiles", q),
   readFile: (p) => ipcRenderer.invoke("readFile", p),
   writeFile: (p, content) => ipcRenderer.invoke("writeFile", p, content),
   readFileBuffer: (p) => ipcRenderer.invoke("readFileBuffer", p),

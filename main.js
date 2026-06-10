@@ -467,6 +467,40 @@ ipcMain.handle("searchFiles", async (_e, query) => {
   return out.map(({ name, path, rel }) => ({ name, path, rel }));
 });
 
+// ── 全文检索：遍历工作目录文本文件，逐行匹配关键词 ───────────
+// 复用 listWorkdirFiles 的文件树，跳过二进制/超大文件并限制结果数，
+// 返回「文件 + 行号 + 命中行文本」供左侧搜索框点击直达预览。
+ipcMain.handle("grepFiles", async (_e, query) => {
+  if (!workdir) return [];
+  const q = String(query || "").trim();
+  if (!q) return [];
+  const ql = q.toLowerCase();
+  const MAX_RESULTS = 200; // 命中行总数上限，避免大仓库刷屏卡顿
+  const MAX_PER_FILE = 20; // 单文件命中上限，防止单文件霸占结果
+  const MAX_FILE_SIZE = 1_000_000; // 超过 1MB 的文件跳过
+  const all = await listWorkdirFiles();
+  const out = [];
+  for (const f of all) {
+    if (out.length >= MAX_RESULTS) break;
+    if (BINARY_EXTS.has(path.extname(f.path).toLowerCase())) continue;
+    let stat;
+    try { stat = await fs.stat(f.path); } catch { continue; }
+    if (stat.size > MAX_FILE_SIZE) continue;
+    let buf;
+    try { buf = await fs.readFile(f.path); } catch { continue; }
+    if (looksBinary(buf)) continue;
+    const lines = buf.toString("utf8").split("\n");
+    let hits = 0;
+    for (let i = 0; i < lines.length && hits < MAX_PER_FILE && out.length < MAX_RESULTS; i++) {
+      if (lines[i].toLowerCase().includes(ql)) {
+        out.push({ name: f.name, path: f.path, rel: f.rel, line: i + 1, text: lines[i].trim().slice(0, 200) });
+        hits++;
+      }
+    }
+  }
+  return out;
+});
+
 // ── 保存粘贴/拖入的附件，返回绝对路径（供对话引用，让 Claude 读取）──
 ipcMain.handle("saveAttachment", async (_e, { name, base64 }) => {
   try {

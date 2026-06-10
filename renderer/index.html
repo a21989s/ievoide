@@ -269,6 +269,15 @@
         font-size: 12px;
         user-select: none;
       }
+      #csBox { padding: 6px 8px 0; }
+      #csInput { width: 100%; box-sizing: border-box; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; font: inherit; font-size: 12px; }
+      #csResults { max-height: 40%; overflow: auto; margin-top: 4px; font-size: 12px; }
+      #csResults:empty { display: none; }
+      .cs-hit { padding: 3px 6px; cursor: pointer; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .cs-hit:hover { background: #2a2d2e; }
+      .cs-hit .loc { color: var(--muted); font-family: ui-monospace, monospace; margin-right: 6px; }
+      .cs-hit .txt { color: #cfe6ff; }
+      .cs-empty { padding: 4px 6px; color: var(--muted); }
       .node { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .node:hover { background: #2a2d2e; }
       .node.active { background: #094771; color: #fff; }
@@ -585,6 +594,10 @@
           <div class="gitgraph" id="gitgraph"></div>
         </div>
         <div id="scResizer" class="resizer-h" title="拖动调整高度"></div>
+        <div id="csBox">
+          <input id="csInput" type="search" data-i18n-ph="搜索文件内容…" placeholder="搜索文件内容…" />
+          <div id="csResults"></div>
+        </div>
         <div id="tree"></div>
         </div>
         <div id="reqView">
