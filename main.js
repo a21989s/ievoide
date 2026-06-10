@@ -425,12 +425,40 @@ ipcMain.handle("saveAttachment", async (_e, { name, base64 }) => {
   }
 });
 
+// 常见二进制文件扩展名（按扩展名快速判定，无法以文本预览）
+const BINARY_EXTS = new Set([
+  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".ico", ".tiff", ".tif", ".heic", ".avif",
+  ".pdf", ".zip", ".gz", ".tar", ".rar", ".7z", ".bz2", ".xz",
+  ".mp3", ".wav", ".flac", ".ogg", ".m4a", ".aac",
+  ".mp4", ".mov", ".avi", ".mkv", ".webm", ".wmv",
+  ".woff", ".woff2", ".ttf", ".otf", ".eot",
+  ".exe", ".dll", ".so", ".dylib", ".bin", ".dat", ".class", ".o", ".a",
+  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".sqlite", ".db",
+]);
+
+// 按字节检测二进制：存在 NUL 字节，或不可打印字节占比过高
+function looksBinary(buf) {
+  const len = Math.min(buf.length, 8192);
+  let suspicious = 0;
+  for (let i = 0; i < len; i++) {
+    const c = buf[i];
+    if (c === 0) return true;
+    if (c < 7 || (c > 13 && c < 32)) suspicious++;
+  }
+  return len > 0 && suspicious / len > 0.3;
+}
+
 // ── 读取单个文件内容（点击文件预览）─────────────────────────
 ipcMain.handle("readFile", async (_e, filePath) => {
   try {
     const stat = await fs.stat(filePath);
     if (stat.size > 500_000) return "(文件过大，未显示)";
-    return await fs.readFile(filePath, "utf8");
+    if (BINARY_EXTS.has(path.extname(filePath).toLowerCase())) {
+      return "(二进制文件，无法以文本预览)";
+    }
+    const buf = await fs.readFile(filePath);
+    if (looksBinary(buf)) return "(二进制文件，无法以文本预览)";
+    return buf.toString("utf8");
   } catch (err) {
     return `(读取失败: ${String(err)})`;
   }
