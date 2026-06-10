@@ -1786,6 +1786,10 @@ async function openAcctMenu(anchor) {
       $("status").textContent = trf("切换到 {0}…", email);
       const r = await window.api.acctSwitch(email);
       if (r && r.ok) {
+        // 旧对话仍持有上一个账号的 sessionId，切换后清空所有对话的 session，
+        // 续聊时强制新建会话，杜绝多账号下的会话串用
+        conversations.forEach((c) => { c.sessionId = null; c.inited = false; });
+        persistConvs();
         $("status").textContent = trf("✅ 已切换到 {0}", email);
         _usageThrottle = 0; loadUsage(true);
       } else {
