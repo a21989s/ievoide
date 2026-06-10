@@ -18,7 +18,7 @@ contextBridge.exposeInMainWorld("api", {
   mobileStop: () => ipcRenderer.invoke("mobileStop"),
   chat: (payload) => ipcRenderer.send("chat", payload),
   stop: (convId) => ipcRenderer.send("stop", { convId }),
-  getUsage: () => ipcRenderer.invoke("getUsage"),
+  getUsage: (opts) => ipcRenderer.invoke("getUsage", opts),
   acctList: () => ipcRenderer.invoke("acctList"),
   acctSaveCurrent: () => ipcRenderer.invoke("acctSaveCurrent"),
   acctSwitch: (email) => ipcRenderer.invoke("acctSwitch", email),

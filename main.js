@@ -539,7 +539,12 @@ ipcMain.on("stop", (_e, { convId } = {}) => {
 });
 
 // ── 订阅用量 / 重置时间（实验性 API，容错；用空输入流只走控制通道，不消耗 token）──
-ipcMain.handle("getUsage", async () => {
+// 每次探测都要起一个 claude 子进程查用量端点。为省开销（进程 + 用量端点往返）：
+// ① 命中 30s 内的缓存直接复用；② 同时发起的多次调用合并到同一个在途请求。
+let usageCache = { ts: 0, value: null };
+let usageInflight = null;
+const USAGE_TTL = 30000;
+const probeUsage = async () => {
   const abort = new AbortController();
   const finish = (v) => {
     try { abort.abort(); } catch {}
@@ -560,6 +565,20 @@ ipcMain.handle("getUsage", async () => {
     return finish(usage);
   } catch (err) {
     return finish({ error: String(err?.message || err) });
+  }
+};
+ipcMain.handle("getUsage", async (_e, { force } = {}) => {
+  const fresh = !force && usageCache.value && Date.now() - usageCache.ts < USAGE_TTL;
+  if (fresh) return usageCache.value;
+  if (usageInflight) return usageInflight; // 合并并发探测
+  usageInflight = probeUsage();
+  try {
+    const usage = await usageInflight;
+    // 失败结果不写缓存，下次仍可立即重试
+    if (usage && !usage.error) usageCache = { ts: Date.now(), value: usage };
+    return usage;
+  } finally {
+    usageInflight = null;
   }
 });
 

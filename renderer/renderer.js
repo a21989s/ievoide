@@ -1197,7 +1197,7 @@ window.addEventListener("i18n", () => {
   renderAttachList();
   renderReqAttachList();
   renderReqLinkList();
-  loadUsage();
+  loadUsageThrottled();
   if (activeRepo) { loadStatus(activeRepo); loadGraph(activeRepo); }
 });
 refreshLangBtn();
@@ -1214,10 +1214,11 @@ function fmtTimeShort(t) {
   try { return new Date(t).toLocaleTimeString(getLang() === "en" ? "en-US" : "zh-CN", { hour: "2-digit", minute: "2-digit" }); }
   catch { return t; }
 }
-async function loadUsage() {
+async function loadUsage(force) {
   const el = $("usage");
   el.textContent = tr("用量…");
-  const u = await window.api.getUsage();
+  // force=true 跳过主进程的用量缓存（手动点击 / 切账号后需立即拿最新值）
+  const u = await window.api.getUsage(force ? { force: true } : undefined);
   if (!u || u.error || !u.rate_limits_available || !u.rate_limits) {
     el.textContent = u && u.subscription_type ? u.subscription_type.toUpperCase() : tr("用量 N/A");
     el.title = u && u.error ? tr("用量不可用：") + u.error : tr("当前会话无订阅用量信息（如用 API Key）");
@@ -1244,7 +1245,7 @@ function loadUsageThrottled() {
   _usageThrottle = now;
   loadUsage();
 }
-$("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(); };
+$("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
 
 // ── 打包：点 📦 弹三选一（完整备份 / 全量 / 给别人）→ 桌面 zip ──
@@ -1300,7 +1301,7 @@ async function openAcctMenu(anchor) {
       const r = await window.api.acctSwitch(email);
       if (r && r.ok) {
         $("status").textContent = trf("✅ 已切换到 {0}", email);
-        _usageThrottle = 0; loadUsage();
+        _usageThrottle = 0; loadUsage(true);
       } else {
         $("status").textContent = "";
         alert(tr("切换失败：") + (r?.error || tr("未知")));
