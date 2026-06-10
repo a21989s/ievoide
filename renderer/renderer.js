@@ -37,6 +37,9 @@ async function renderChildren(container, dirPath, depth) {
     } else {
       node.onclick = (e) => {
         e.stopPropagation();
+        // 高亮当前打开的文件（VSCode 资源管理器行为）
+        document.querySelectorAll("#tree .node.active").forEach((n) => n.classList.remove("active"));
+        node.classList.add("active");
         openFile(it.path, it.name);
       };
     }
@@ -1183,6 +1186,29 @@ $("input").addEventListener("keydown", (e) => {
 
 // ── 左侧栏折叠/展开 ────────────────────────────────────────
 $("toggleSidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
+
+// ── 全局快捷键（向 VSCode 看齐）──────────────────────────────
+// Cmd/Ctrl+B 折叠/展开侧栏；Esc 关闭最上层浮层（预览/弹窗/菜单）
+document.addEventListener("keydown", (e) => {
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
+    e.preventDefault();
+    $("sidebar").classList.toggle("collapsed");
+    return;
+  }
+  if (e.key === "Escape") {
+    // 按优先级关闭一个浮层（已被 input/evReq 内联处理的补全弹窗在此之前已消费）
+    if ($("viewer").style.display === "flex") { $("vclose").click(); return; }
+    // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
+    const ev = $("evolveModal");
+    if (ev.classList.contains("open") && !ev.classList.contains("docked")) { ev.classList.remove("open"); return; }
+    for (const id of ["historyModal", "mobileModal"]) {
+      if ($(id).classList.contains("open")) { $(id).classList.remove("open"); return; }
+    }
+    const ctx = $("ctxMenu"), acct = $("acctMenu");
+    if (ctx.classList.contains("open")) { ctx.classList.remove("open"); return; }
+    if (acct.classList.contains("open")) { acct.classList.remove("open"); return; }
+  }
+});
 
 // ── 中英双语切换 ───────────────────────────────────────────
 function refreshLangBtn() {
