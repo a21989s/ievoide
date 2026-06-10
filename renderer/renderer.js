@@ -114,7 +114,7 @@ async function openFile(path, name) {
 
   if (ext === "md" || ext === "markdown") {
     useBody("md");
-    vbody.innerHTML = window.marked ? marked.parse(content) : content;
+    vbody.innerHTML = safeMd(content);
     // 把 ```mermaid 代码块转成图
     const blocks = vbody.querySelectorAll("code.language-mermaid");
     const nodes = [];
@@ -154,6 +154,16 @@ $("vclose").onclick = () => {
 // ── Git 面板：仓库行 + 分支下拉 + 提交图 ───────────────────
 function esc(s) {
   return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
+// 把 Markdown 文本渲染为「净化」后的 HTML：marked 解析后用 DOMPurify 去除 script/onerror/javascript: 等活动内容，
+// 防止模型回复或文件内容里的注入代码在渲染进程执行。marked 未加载时回退为纯文本转义。
+function safeMd(raw) {
+  raw = raw || "";
+  if (!window.marked) return esc(raw);
+  const html = marked.parse(raw);
+  // DOMPurify 默认即剥离脚本与事件处理器，这里再显式允许 mermaid 代码块所需的 class 属性
+  return window.DOMPurify ? DOMPurify.sanitize(html, { ADD_ATTR: ["class"] }) : html;
 }
 
 // 解析 %D 装饰串为彩色胶囊：HEAD -> x / origin/x / tag: x / 本地分支
@@ -950,7 +960,7 @@ function appendText(conv, t) {
 
 // 把 bubble._raw 按 Markdown 渲染进 bubble（marked 已加载则用之，否则转义纯文本）
 function renderMd(bubble) {
-  bubble.innerHTML = window.marked ? marked.parse(bubble._raw || "") : esc(bubble._raw || "");
+  bubble.innerHTML = safeMd(bubble._raw || "");
 }
 
 // 把已完成 assistant 容器里的 ```mermaid 代码块渲染成图
