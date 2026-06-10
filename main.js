@@ -658,7 +658,9 @@ let usageInflight = null;
 const USAGE_TTL = 30000;
 const probeUsage = async () => {
   const abort = new AbortController();
+  let timer = null;
   const finish = (v) => {
+    if (timer) { clearTimeout(timer); timer = null; }
     try { abort.abort(); } catch {}
     return v;
   };
@@ -672,7 +674,7 @@ const probeUsage = async () => {
     });
     const usage = await Promise.race([
       q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
+      new Promise((_, rej) => { timer = setTimeout(() => rej(new Error("timeout")), 15000); }),
     ]);
     return finish(usage);
   } catch (err) {
