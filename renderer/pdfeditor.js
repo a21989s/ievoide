@@ -217,9 +217,30 @@ function addTextBox(p, x, y, whiteout, w, h) {
 }
 
 function enableDrag(box, p) {
+  let move = null;
   box.addEventListener("pointerdown", (e) => {
     if (state.tool !== "select" || e.target.classList.contains("del")) return;
     if (e.altKey === false && document.activeElement === box) return; // 编辑中不拖
+    const { x, y } = local(p.layer, e);
+    move = {
+      ox: x,
+      oy: y,
+      left: parseFloat(box.style.left) || 0,
+      top: parseFloat(box.style.top) || 0,
+    };
+    box.setPointerCapture(e.pointerId);
+    e.preventDefault();
+  });
+  box.addEventListener("pointermove", (e) => {
+    if (!move) return;
+    const { x, y } = local(p.layer, e);
+    box.style.left = move.left + (x - move.ox) + "px";
+    box.style.top = move.top + (y - move.oy) + "px";
+  });
+  box.addEventListener("pointerup", (e) => {
+    if (!move) return;
+    box.releasePointerCapture(e.pointerId);
+    move = null; // 坐标已写入 box.style，保存时直接读取
   });
 }
 
