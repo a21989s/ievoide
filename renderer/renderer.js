@@ -1691,6 +1691,46 @@ function renderReqs() {
     };
     listEl.appendChild(el);
   });
+  renderReqMini();
+}
+// 只保留最近 10 条：超出时优先移除最旧的「已完成/失败」项，不动待处理/进行中
+function trimReqs() {
+  const MAX = 10;
+  let over = requirements.length - MAX;
+  if (over <= 0) return;
+  for (let i = 0; i < requirements.length && over > 0; ) {
+    const r = requirements[i];
+    if (r.status === "done" || r.status === "failed") { requirements.splice(i, 1); over--; }
+    else i++;
+  }
+}
+// 聊天区右上角浮动「开发清单」进度卡：做完一条划掉一条，只显示最近 10 条
+let reqMiniCollapsed = localStorage.getItem("claudeTools.reqMiniCollapsed") === "1";
+function renderReqMini() {
+  const el = $("reqMini");
+  if (!el) return;
+  const items = requirements.slice(-10);
+  if (!items.length) { el.classList.add("hidden"); return; }
+  el.classList.remove("hidden");
+  el.classList.toggle("collapsed", reqMiniCollapsed);
+  const done = requirements.filter((r) => r.status === "done").length;
+  const itemsHtml = items
+    .map((r) => {
+      const ic = { pending: "○", running: "◐", done: "✓", failed: "✕" }[r.status] || "○";
+      return `<div class="rm-item ${r.status}"><span class="rm-ic">${ic}</span>` +
+        `<span class="rm-tx">${esc(r.text || tr("(附件)"))}</span></div>`;
+    })
+    .join("");
+  el.innerHTML =
+    `<div class="rm-head"><span class="rm-title">📋 ${tr("开发清单")}</span>` +
+    `<span class="rm-prog">${done}/${requirements.length}</span>` +
+    `<span class="rm-tog">${reqMiniCollapsed ? "▸" : "▾"}</span></div>` +
+    `<div class="rm-body">${itemsHtml}</div>`;
+  el.querySelector(".rm-head").onclick = () => {
+    reqMiniCollapsed = !reqMiniCollapsed;
+    localStorage.setItem("claudeTools.reqMiniCollapsed", reqMiniCollapsed ? "1" : "0");
+    renderReqMini();
+  };
 }
 // 识别链接类型（用于图标与标签）：Jira ticket / Confluence 文档 / 普通网址
 function linkMeta(url) {
@@ -1720,6 +1760,7 @@ function addRequirement(text) {
   });
   reqPendingAtts = [];
   reqPendingLinks = [];
+  trimReqs(); // 仅保留最近 10 条
   renderReqAttachList();
   renderReqLinkList();
   renderReqs();
@@ -1821,6 +1862,7 @@ function reqOnTurnEnd(conv, ok) {
   const cur = requirements.find((r) => r.status === "running");
   if (cur) {
     cur.status = ok ? "done" : "failed";
+    trimReqs(); // 完成后仅保留最近 10 条
     persistReqs();
     renderReqs();
     if (!ok) { reqRunning = false; renderReqs(); return; } // 失败 => 暂停，保留现场待人工处理
