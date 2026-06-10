@@ -1335,9 +1335,13 @@ $("packBtn").onclick = (e) => {
 };
 
 // ── Claude 账号快捷切换 ───────────────────────────────────────
+let _acctMenuToken = 0;
 async function openAcctMenu(anchor) {
   const m = $("acctMenu");
+  const token = ++_acctMenuToken;
   const { current, accounts } = await window.api.acctList();
+  // 异步期间用户可能已点击空白关闭或再次触发，过期则放弃本次渲染，避免菜单被点关后自行弹回或重复绑定监听
+  if (token !== _acctMenuToken) return;
   let html = `<div class="am-hd">${tr("CLAUDE 账号")}</div>`;
   if (!accounts.length) {
     html += `<div class="am-empty">${tr("暂无存档账号，先用下方按钮保存当前登录")}</div>`;
@@ -1394,10 +1398,10 @@ async function openAcctMenu(anchor) {
 }
 $("acctBtn").onclick = (e) => {
   e.stopPropagation();
-  if ($("acctMenu").classList.contains("open")) { $("acctMenu").classList.remove("open"); return; }
+  if ($("acctMenu").classList.contains("open")) { _acctMenuToken++; $("acctMenu").classList.remove("open"); return; }
   openAcctMenu(e.currentTarget);
 };
-document.addEventListener("click", () => $("acctMenu").classList.remove("open"));
+document.addEventListener("click", () => { _acctMenuToken++; $("acctMenu").classList.remove("open"); });
 $("acctMenu").addEventListener("click", (e) => e.stopPropagation());
 
 // ── 手机连接面板 ───────────────────────────────────────────
