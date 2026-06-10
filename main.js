@@ -663,16 +663,19 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
   // 不能只依赖 abort 后迭代器抛错——某些情况下 SDK 中止后迭代器会悬挂、
   // 永不返回，导致界面卡在“思考中”，看起来像“停止按钮没反应”。
   const entry = {
-    stop: () => {
+    // silent=true：仅中止查询、不发 chat:stopped（被新一轮覆盖旧查询时用——
+    // 此时渲染层已开始新一轮，若再发 stopped 会把新一轮的忙碌态/当前气泡清掉，
+    // 导致新一轮的流式文本全部被丢弃）。
+    stop: (silent) => {
       stopped = true;
       try { abort.abort(); } catch {}
-      send("chat:stopped", {});
+      if (!silent) send("chat:stopped", {});
     },
   };
   // 若同一 convId 已有在途查询，先中止旧的再覆盖——否则异常重试/并发场景下旧
   // AbortController 会随 entry 被覆盖而丢失，stop() 再也无法中止那次悬挂的查询。
   const prev = runs.get(convId);
-  if (prev) { try { prev.stop(); } catch {} }
+  if (prev) { try { prev.stop(true); } catch {} }
   runs.set(convId, entry);
   // 没选目录也能聊：用一个中性 scratch 目录当 cwd（无项目上下文）；选了目录则用目录（带文件上下文）
   const cwd = workdir || (await scratchDir());
