@@ -1,5 +1,5 @@
 {
   "systemPromptAppend": "始终用简体中文回答，除非用户明确要求使用其他语言。代码、命令、标识符等保持原样。",
   "permissionMode": "bypassPermissions",
-  "model": null
+  "model": "claude-fable-5"
 }
