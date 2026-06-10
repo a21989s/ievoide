@@ -1,7 +1,16 @@
 # Requirement Collector — 自动需求采集器
 
-定时跑**公开网络调研**，把竞品功能、用户痛点、行业趋势消化成结构化需求，去重后写入 `REQUIREMENTS.md`。
-这是「采集 → 消化」环节；「实现」环节由 `AUTOPILOT.md` 的自驱动回路消费 backlog 完成。
+跑**公开网络调研**，把竞品功能、用户痛点、行业趋势消化成结构化需求，去重后入池。
+这是「采集 → 消化」环节；「实现」环节由自进化引擎的持续进化循环消费 backlog 完成。
+
+## 已接入自进化引擎（运行时常驻，无需外部定时器）
+
+采集逻辑已内建到 `main.js` 的 **`evolveAudit`（巡检）** 步骤：每次巡检在「读源码找问题」之外，
+同时用 **WebSearch / WebFetch** 联网采集需求，统一注入运行时 backlog（`evolve-backlog.json`）。
+开启界面上的 **「持续进化」** 后：清单空了自动巡检（含联网采集）补充 → 按 severity 优先（high→medium→low）
+自动取一条改源码 → 检查点 + dry-run 校验 → 失败回滚、成功本地 commit（不 push）。本文件是采集的**范围与规则规格**，巡检提示词据此调研。
+
+> 本 `REQUIREMENTS.md` 为人读视角的需求池种子；引擎运行时的操作性 backlog 是 `evolve-backlog.json`（在 userData 目录）。
 
 ## 采集范围（本 App 定位：类 Claude Code 的 AI 编码桌面工具）
 

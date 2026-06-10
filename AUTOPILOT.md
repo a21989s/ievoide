@@ -29,6 +29,8 @@
 
 ## 已完成（按时间倒序）
 
+- 巡检接入联网需求采集：evolveAudit 在读源码外，用 WebSearch/WebFetch 调研竞品功能/用户痛点/趋势，统一注入 backlog（规则见 `COLLECTOR.md` / 种子见 `REQUIREMENTS.md`；超时提至 240s）
+- 持续进化按 severity 优先取条目（high→medium→low，同级 id 升序），让高优先级需求先实现
 - dev-watch 启动冒烟检查（按字节偏移扫日志，补 dry-run 抓不到的运行期错误）
 - 修复 disposed-frame 刷屏（渲染帧销毁时中止流式查询）— 实跑 app 发现
 - listDir 加错误兜底（无权限/已删目录返回空，不抛未捕获异常）
