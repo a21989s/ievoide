@@ -1700,30 +1700,37 @@ window.api.on("evolve:backlog", () => loadBacklog());
 
 // 持续进化：空闲时自动取一条优化项解决；清单空了就巡检补充——形成不停的自我改进循环
 let _continuousTimer = null;
-async function continuousTick() {
-  if (!$("evContinuous").checked) return;
-  if (evolveBusy) { _continuousTimer = setTimeout(continuousTick, 10000); return; }
+// 代次标记：每次 applyContinuous 自增，await 期间被重启的旧循环代次会失效，确保任意时刻只有一条循环在跑
+let _continuousGen = 0;
+async function continuousTick(gen) {
+  if (gen !== _continuousGen || !$("evContinuous").checked) return;
+  if (evolveBusy) { _continuousTimer = setTimeout(() => continuousTick(gen), 10000); return; }
   let list = (await window.api.getEvolveBacklog()) || [];
+  if (gen !== _continuousGen) return; // await 期间循环被重启，本代退出
   let next = list.find((x) => x.status === "open");
   if (!next) {
     evLog(tr("🔄 持续进化：清单已空，巡检源码补充优化点…"));
     await window.api.evolveAudit();
+    if (gen !== _continuousGen) return;
     list = (await window.api.getEvolveBacklog()) || [];
+    if (gen !== _continuousGen) return;
     next = list.find((x) => x.status === "open");
     if (!next) { // 巡检也没产出，过一阵再试，避免空转
-      if ($("evContinuous").checked) _continuousTimer = setTimeout(continuousTick, 60000);
+      if ($("evContinuous").checked) _continuousTimer = setTimeout(() => continuousTick(gen), 60000);
       return;
     }
   }
   await solveBacklogItem(next);
-  if ($("evContinuous").checked) _continuousTimer = setTimeout(continuousTick, 6000);
+  if (gen !== _continuousGen) return;
+  if ($("evContinuous").checked) _continuousTimer = setTimeout(() => continuousTick(gen), 6000);
 }
 function applyContinuous(initialDelay) {
   clearTimeout(_continuousTimer);
+  const gen = ++_continuousGen; // 自增代次，使所有在途的旧循环失效
   try { localStorage.setItem("claudeTools.evContinuous", $("evContinuous").checked ? "1" : ""); } catch {}
   if ($("evContinuous").checked) {
     evLog(tr("🧬 持续进化已开启：自动巡检并逐条解决优化点"));
-    _continuousTimer = setTimeout(continuousTick, initialDelay || 3000);
+    _continuousTimer = setTimeout(() => continuousTick(gen), initialDelay || 3000);
   }
 }
 $("evContinuous").onchange = () => { applyContinuous(); updateEvolveIndicator(); };
