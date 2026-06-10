@@ -124,7 +124,10 @@ function setTool(tool) {
 document.querySelectorAll(".pe-toolbar [data-tool]").forEach((b) => {
   b.onclick = () => setTool(b.dataset.tool);
 });
-$("peColor").onchange = (e) => (state.color = e.target.value);
+$("peColor").onchange = (e) => {
+  if (!state) return;
+  state.color = e.target.value;
+};
 $("peClose").onclick = () => {
   editorEl.style.display = "none";
   state = null;
@@ -365,7 +368,8 @@ $("peSave").onclick = async () => {
       if (!page) continue;
       const H = p.heightPt;
       const col = (hex) => {
-        const n = parseInt(hex.slice(1), 16);
+        let n = /^#[0-9a-fA-F]{6}$/.test(hex) ? parseInt(hex.slice(1), 16) : NaN;
+        if (Number.isNaN(n)) n = 0x000000;
         return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
       };
       const drawText = (el, x, y, color) => {
