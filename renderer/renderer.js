@@ -1,6 +1,14 @@
 const $ = (id) => document.getElementById(id);
 const chat = $("chat");
 
+// 状态栏延时清空：仅在 ms 后该消息仍是当前显示内容时才清空，
+// 避免延时到点时把期间设置的新状态消息误清空
+const clearStatusLater = (ms) => {
+  const el = $("status");
+  const snapshot = el.textContent;
+  setTimeout(() => { if (el.textContent === snapshot) el.textContent = ""; }, ms);
+};
+
 // 自进化健康心跳：渲染层成功加载即上报，宿主据此确认进化后的版本健康（否则自动回滚）
 try { window.api.evolveAlive(); } catch {}
 
@@ -285,7 +293,7 @@ async function doGit(fn, okMsg) {
   }
   if (okMsg) {
     $("status").textContent = okMsg;
-    setTimeout(() => ($("status").textContent = ""), 1800);
+    clearStatusLater(1800);
   }
   await loadStatus(activeRepo);
   await loadGraph(activeRepo);
@@ -1314,7 +1322,7 @@ async function doPack(mode) {
   const r = await window.api.packAll(mode);
   if (r && r.path) $("status").textContent = tr("✅ 已打包到桌面（Finder 已高亮）");
   else { $("status").textContent = ""; alert(tr("打包失败：") + "\n" + (r?.error || tr("未知"))); }
-  setTimeout(() => ($("status").textContent = ""), 5000);
+  clearStatusLater(5000);
 }
 $("packBtn").onclick = (e) => {
   e.stopPropagation();
@@ -1365,7 +1373,7 @@ async function openAcctMenu(anchor) {
         $("status").textContent = "";
         alert(tr("切换失败：") + (r?.error || tr("未知")));
       }
-      setTimeout(() => ($("status").textContent = ""), 5000);
+      clearStatusLater(5000);
     };
   });
   m.querySelectorAll(".am-del").forEach((x) => {
@@ -1381,7 +1389,7 @@ async function openAcctMenu(anchor) {
     const r = await window.api.acctSaveCurrent();
     if (r && r.ok) $("status").textContent = trf("✅ 已保存账号 {0}", r.email);
     else alert(tr("保存失败：") + (r?.error || tr("未知")));
-    setTimeout(() => ($("status").textContent = ""), 5000);
+    clearStatusLater(5000);
   };
 }
 $("acctBtn").onclick = (e) => {
