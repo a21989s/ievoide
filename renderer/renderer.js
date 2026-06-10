@@ -1433,8 +1433,29 @@ function updateEvolveIndicator() {
   if (st) {
     st.className = evolveBusy ? "busy" : armed ? "armed" : "";
     st.textContent = evolveBusy ? tr("● 进化中…") : armed ? tr("○ 待命中") : tr("空闲");
+    st.title = tr("点击查看完整状态自检（是否在找优化点 / 是否定时 / 找到后是否修复并提交）");
   }
   if (btn) btn.title = "🧬 " + (evolveBusy ? tr("正在进化（修改源码中）") : armed ? tr("自动模式已开启，空闲时会自动进化") : tr("自进化：让 App 改自己的源码（自动回滚保护）"));
+}
+// 状态自检：直接回答“现在启动了吗 / 在自我进化吗 / 在找优化点吗 / 定时吗 / 找到后修复并提交吗”。
+// 点状态徽标即把这份摘要打到进化日志里——把分散在各开关/记录里的状态汇成一句人话。
+async function evolveStatusReport() {
+  const cont = $("evContinuous")?.checked, auto = $("evAuto")?.checked, peri = $("evPeriodic")?.checked;
+  const ivMin = Math.round((+$("evInterval")?.value || 0) / 60000);
+  const backlog = (await window.api.getEvolveBacklog()) || [];
+  const open = backlog.filter((x) => x.status === "open" || x.status === "doing").length;
+  const hist = (await window.api.getEvolveHistory()) || [];
+  const last = hist[0];
+  const L = [];
+  L.push(evolveBusy ? tr("● 正在进化：此刻在修改源码")
+    : (cont || auto || peri) ? tr("○ 已启动 · 自动模式待命中（空闲到点会自动进化）")
+    : tr("· 已启动 · 手动模式（不会自动进化，需手动触发）"));
+  L.push(tr("· 找优化点：") + (cont ? tr("是——持续进化已开，清单空了自动巡检补充") : tr("否——需手动点 🔎 巡检")));
+  L.push(tr("· 定时启动：") + (peri ? trf("是——每 {0} 分钟自检一次", ivMin) : tr("否")) + (auto ? tr("；并在出现运行时错误时自动修复") : ""));
+  L.push(tr("· 找到后处理：自动改源码 → git 检查点 + 语法校验 → 失败自动回滚，成功则本地 git 提交（不推送）"));
+  L.push(trf("· 优化清单待办 {0} 项 · 历史进化 {1} 次", open, hist.length));
+  if (last) L.push(trf("· 最近一次：{0} — {1}", (EVOLVE_STATUS[last.status]?.label || last.status), (last.requirement || "").split("\n")[0].slice(0, 40)));
+  return L.join("\n");
 }
 // 附件（图片/文档），路径数组
 let evolveAttachments = [];
@@ -1552,6 +1573,13 @@ $("evReq").addEventListener("keydown", (e) => {
   }
 });
 $("evStop").onclick = () => window.api.evolveStop();
+// 点状态徽标 => 打开面板并把状态自检打到日志，直接回答“现在是否在自我进化”
+$("evStatus").onclick = async () => {
+  const m = $("evolveModal");
+  m.classList.add("open");
+  m.classList.remove("collapsed");
+  evLog("──────────\n📊 " + tr("状态自检") + "\n" + (await evolveStatusReport()));
+};
 
 // 问题清单
 async function loadIssues() {

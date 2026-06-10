@@ -403,7 +403,8 @@
       #evDock, #evCollapse { background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 2px 8px; cursor: pointer; font-size: 12px; margin-left: 6px; }
       .vhead .ev-head-btns { display: inline-flex; align-items: center; }
       /* 面板头部当前状态徽标 */
-      #evStatus { font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-left: 8px; color: #999; white-space: nowrap; }
+      #evStatus { font-size: 11px; padding: 1px 8px; border-radius: 10px; margin-left: 8px; color: #999; white-space: nowrap; cursor: pointer; }
+      #evStatus:hover { filter: brightness(1.25); text-decoration: underline; }
       #evStatus.busy { background: rgba(58,208,122,.16); color: #3ad07a; }
       #evStatus.armed { background: rgba(216,167,58,.16); color: #d8a73a; }
       #evBody { flex: 1; display: flex; flex-direction: column; gap: 8px; padding: 12px; min-height: 0; }
