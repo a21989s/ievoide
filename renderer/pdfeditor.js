@@ -215,7 +215,7 @@ function addTextBox(p, x, y, whiteout, w, h) {
   box.appendChild(del);
   p.layer.appendChild(box);
 
-  const annot = { type: whiteout ? "whiteout" : "text", el: box, whiteout };
+  const annot = { type: whiteout ? "whiteout" : "text", el: box, whiteout, color: whiteout ? "#000" : state.color };
   p.annots.push(annot);
   // 拖动（选择模式按住边缘移动）
   enableDrag(box, p);
@@ -406,7 +406,7 @@ $("peSave").onclick = async () => {
             });
             drawText(el, x + 2, y, rgb(0, 0, 0));
           } else {
-            drawText(el, x, y, col(state.color === el.style.color ? state.color : "#ff3b30"));
+            drawText(el, x, y, col(a.color || state.color));
           }
         }
       }
