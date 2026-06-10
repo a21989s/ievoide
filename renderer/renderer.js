@@ -3083,6 +3083,35 @@ function pickFile(f) {
   input.focus();
 }
 
+// 给「已完成且改动了文件」的轮次加「撤销本轮改动」按钮，点按把 git 工作区还原到本轮开始前
+function addRewindBtn(wrap, cpId) {
+  const role = wrap.querySelector(".role");
+  if (!role || role.querySelector(".rewind-btn")) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "reply-copy rewind-btn"; // 复用回复按钮样式
+  btn.title = tr("把工作区文件还原到本轮开始前");
+  btn.textContent = tr("↩ 撤销本轮改动");
+  btn.onclick = async () => {
+    if (!(await modalConfirm(tr("将丢弃本轮（及其之后）对文件的全部改动，恢复到本轮开始前。\n此操作不可撤销！"))))
+      return;
+    btn.disabled = true;
+    btn.textContent = tr("撤销中…");
+    const r = await window.api.chatRewind(cpId);
+    if (r && r.ok) {
+      btn.textContent = tr("✓ 已撤销");
+      btn.classList.add("copied");
+      toast(tr("已恢复到本轮开始前"), "success");
+      if (activeRepo) { loadStatus(activeRepo); loadGraph(activeRepo); } // git 面板若开着则刷新
+    } else {
+      btn.disabled = false;
+      btn.textContent = tr("↩ 撤销本轮改动");
+      toast(tr("撤销失败：") + (r?.error || tr("未知")), "error");
+    }
+  };
+  role.appendChild(btn);
+}
+
 function finishTurn(conv, metaText, errText) {
   if (!conv) return;
   conv.busy = false;
@@ -3152,8 +3181,9 @@ window.api.on("chat:tool", ({ convId, id, name, input }) =>
 window.api.on("chat:toolresult", ({ convId, id, isError, text }) =>
   appendToolResult(getConv(convId), id, isError, text)
 );
-window.api.on("chat:done", ({ convId, cost, ms, session, usage }) => {
+window.api.on("chat:done", ({ convId, cost, ms, session, usage, checkpoint }) => {
   const conv = getConv(convId);
+  const turnWrap = conv?.currentBubble; // 捕获本轮容器，finishTurn 会清空引用
   if (conv && session) conv.sessionId = session; // 记住本对话 session
   if (conv) {
     // 累计本会话费用与 token（usage 含输入/输出/缓存读写各项）
@@ -3163,6 +3193,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage }) => {
       (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
   }
   finishTurn(conv, `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}`);
+  if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 自动发下一条（续接同一 session）；否则推进需求清单

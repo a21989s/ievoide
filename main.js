@@ -678,6 +678,17 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
   const cwd = workdir || (await scratchDir());
   const mcpServers = await readMcpConfig(); // App 级 mcp.json（可选）
 
+  // 进入本轮前对 git 工作区打检查点，完成后若有改动可一键回滚（仅当 cwd 在 git 仓库且已有提交）
+  let cpId = null, cp = null;
+  try {
+    const root = await gitRoot(cwd);
+    if (root && (cp = await snapshotWorktree(root))) {
+      cpId = `cp-${process.pid}-${checkpointSeq++}`;
+      checkpoints.set(cpId, cp);
+      while (checkpoints.size > 50) checkpoints.delete(checkpoints.keys().next().value);
+    }
+  } catch {}
+
   // 跑一轮查询；resumeId 为要续接的 session（null=新会话）
   const run = async (resumeId) => {
     const response = query({
@@ -733,11 +744,21 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
           }
         }
       } else if (msg.type === "result") {
+        // 本轮是否真的改动了文件：按完整工作树比对快照，是才把检查点给前端（用于显示撤销按钮）
+        let checkpoint = null;
+        if (cp) {
+          try {
+            const now = await worktreeTree(cp.root);
+            if (now !== cp.tree) checkpoint = { id: cpId };
+            else { checkpoints.delete(cpId); cp = null; } // 无改动：丢弃检查点
+          } catch {}
+        }
         send("chat:done", {
           cost: msg.total_cost_usd,
           ms: msg.duration_ms,
           session: msg.session_id,
           usage: msg.usage || null, // {input_tokens, output_tokens, cache_*}，供渲染层累计本会话用量
+          checkpoint,
         });
       }
     }
@@ -762,6 +783,18 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
     }
   } finally {
     if (runs.get(convId) === entry) runs.delete(convId);
+  }
+});
+
+// ── 撤销某轮的文件改动：把 git 工作区还原到该轮开始前的检查点 ──────
+ipcMain.handle("chatRewind", async (_e, id) => {
+  const cp = checkpoints.get(id);
+  if (!cp) return { error: "检查点已失效（可能已重启或被清理）" };
+  try {
+    await restoreCheckpoint(cp);
+    return { ok: true };
+  } catch (err) {
+    return { error: String(err?.stderr || err?.message || err) };
   }
 });
 
@@ -1346,6 +1379,50 @@ async function currentBranch(dir) {
   } catch {
     return "";
   }
+}
+
+// ── 对话检查点（对齐 Claude Code /rewind）──────────────────────
+// 每轮 chat 前对 git 工作区打快照：用临时索引把「完整工作区(含未跟踪、依 .gitignore)」封进一个
+// 游离 commit，不动用户的索引/工作树；轮次完成且文件有改动时，前端提供「撤销本轮改动」按钮回滚。
+const checkpoints = new Map(); // id -> { root, head, tree, snap }
+let checkpointSeq = 0;
+
+async function gitRoot(dir) {
+  try {
+    return (await git(["rev-parse", "--show-toplevel"], dir)).stdout.trim();
+  } catch {
+    return null;
+  }
+}
+// 把当前工作区整体写成一个 tree（空临时索引 + add -A，纯内容、与 HEAD 无关，自动跳过 .gitignore）
+async function worktreeTree(root) {
+  const idx = path.join(os.tmpdir(), `ct-cp-${process.pid}-${checkpointSeq++}.idx`);
+  const env = { ...process.env, GIT_INDEX_FILE: idx };
+  const run = (args) => execFileAsync("git", args, { cwd: root, maxBuffer: 8 * 1024 * 1024, env });
+  try {
+    await run(["add", "-A"]);
+    return (await run(["write-tree"])).stdout.trim();
+  } finally {
+    try { await fs.unlink(idx); } catch {}
+  }
+}
+// 打快照：返回 { root, head, tree, snap }；空仓库(无提交)返回 null（不做检查点，避免边界问题）
+async function snapshotWorktree(root) {
+  let head;
+  try {
+    head = (await git(["rev-parse", "HEAD"], root)).stdout.trim();
+  } catch {
+    return null;
+  }
+  const tree = await worktreeTree(root);
+  const snap = (await git(["commit-tree", tree, "-p", head, "-m", "claude-tools checkpoint"], root)).stdout.trim();
+  return { root, head, tree, snap };
+}
+// 回滚：把工作树/索引硬重置到快照、清掉新增的未跟踪文件，再把分支指针挪回原 HEAD（仅恢复文件内容）
+async function restoreCheckpoint(cp) {
+  await git(["reset", "--hard", cp.snap], cp.root);
+  await git(["clean", "-fd"], cp.root);
+  await git(["reset", "--soft", cp.head], cp.root);
 }
 
 // 扫描工作目录：自身 + 直接子目录中的 git 仓库（VSCode 多仓库式）
