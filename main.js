@@ -552,6 +552,10 @@ ipcMain.on("chat", async (e, { prompt, resume, convId }) => {
       send("chat:stopped", {});
     },
   };
+  // 若同一 convId 已有在途查询，先中止旧的再覆盖——否则异常重试/并发场景下旧
+  // AbortController 会随 entry 被覆盖而丢失，stop() 再也无法中止那次悬挂的查询。
+  const prev = runs.get(convId);
+  if (prev) { try { prev.stop(); } catch {} }
   runs.set(convId, entry);
   // 没选目录也能聊：用一个中性 scratch 目录当 cwd（无项目上下文）；选了目录则用目录（带文件上下文）
   const cwd = workdir || (await scratchDir());
