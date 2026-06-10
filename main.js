@@ -231,6 +231,7 @@ ipcMain.handle("pickFolder", async () => {
   const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"] });
   if (r.canceled || !r.filePaths[0]) return null;
   workdir = r.filePaths[0];
+  fileCache = { dir: null, list: null, time: 0 }; // 切换目录失效文件缓存
   return workdir;
 });
 
@@ -358,13 +359,20 @@ ipcMain.handle("listDir", async (_e, dirPath) => {
 });
 
 // ── 模糊搜索工作目录下的文件（供对话框 @ 引用用）──────────────
-ipcMain.handle("searchFiles", async (_e, query) => {
-  if (!workdir) return [];
-  const q = String(query || "").toLowerCase();
-  const out = [];
-  const MAX = 50; // 最多返回 50 条，避免大仓库卡顿
+// 整棵文件树做短期内存缓存：切换 workdir 或超过 TTL 时失效，
+// 避免大仓库每次按键都重新遍历磁盘。
+let fileCache = { dir: null, list: null, time: 0 };
+const FILE_CACHE_TTL = 5000; // ms
+const FILE_CACHE_MAX = 5000; // 缓存条目上限，避免超大仓库吃内存
+
+async function listWorkdirFiles() {
+  const now = Date.now();
+  if (fileCache.dir === workdir && fileCache.list && now - fileCache.time < FILE_CACHE_TTL) {
+    return fileCache.list;
+  }
+  const all = [];
   async function walk(dir) {
-    if (out.length >= MAX) return;
+    if (all.length >= FILE_CACHE_MAX) return;
     let entries;
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
@@ -372,23 +380,35 @@ ipcMain.handle("searchFiles", async (_e, query) => {
       return;
     }
     for (const d of entries) {
-      if (out.length >= MAX) return;
+      if (all.length >= FILE_CACHE_MAX) return;
       if (d.name.startsWith(".") || IGNORE.has(d.name)) continue;
       const full = path.join(dir, d.name);
       if (d.isDirectory()) {
         await walk(full);
       } else {
         const rel = path.relative(workdir, full).replace(/\\/g, "/");
-        if (!q || rel.toLowerCase().includes(q)) {
-          out.push({ name: d.name, path: full, rel });
-        }
+        all.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
       }
     }
   }
   await walk(workdir);
+  fileCache = { dir: workdir, list: all, time: now };
+  return all;
+}
+
+ipcMain.handle("searchFiles", async (_e, query) => {
+  if (!workdir) return [];
+  const q = String(query || "").toLowerCase();
+  const all = await listWorkdirFiles();
+  const MAX = 50; // 最多返回 50 条，避免大仓库卡顿
+  const out = [];
+  for (const f of all) {
+    if (out.length >= MAX) break;
+    if (!q || f.relLower.includes(q)) out.push(f);
+  }
   // 匹配位置越靠前越优先
-  out.sort((a, b) => a.rel.toLowerCase().indexOf(q) - b.rel.toLowerCase().indexOf(q));
-  return out;
+  out.sort((a, b) => a.relLower.indexOf(q) - b.relLower.indexOf(q));
+  return out.map(({ name, path, rel }) => ({ name, path, rel }));
 });
 
 // ── 保存粘贴/拖入的附件，返回绝对路径（供对话引用，让 Claude 读取）──
