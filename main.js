@@ -329,7 +329,11 @@ ipcMain.handle("loadConvs", async () => {
 });
 ipcMain.handle("saveConvs", async (_e, data) => {
   try {
-    await fs.writeFile(convFile(), JSON.stringify(data));
+    // 原子写：先写临时文件再 rename 覆盖，避免写到一半被中断导致正式文件截断损坏
+    const target = convFile();
+    const tmp = `${target}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, JSON.stringify(data));
+    await fs.rename(tmp, target);
     return { ok: true };
   } catch (err) {
     return { error: String(err) };
