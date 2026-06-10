@@ -979,12 +979,42 @@ function appendTool(conv, id, name, inputObj) {
   scrollIfActive(conv);
 }
 
-// 把 AskUserQuestion 渲染成交互卡片：每题可点选项（单选/多选），点提交后把选择作为追问发回模型
+// 弹一条系统通知 + 状态栏提示，告诉用户「需要做选择」，避免被后台对话刷屏滚过
+function notifyDecision(text, urgent) {
+  try {
+    const s = $("status");
+    if (s) s.textContent = (urgent ? "⚠ " : "🔔 ") + text;
+  } catch {}
+  try {
+    if (typeof Notification === "undefined") return;
+    const show = () => {
+      try {
+        new Notification(urgent ? tr("Claude 需要你的决定") : tr("Claude 等待你选择"), { body: text });
+      } catch {}
+    };
+    if (Notification.permission === "granted") show();
+    else if (Notification.permission !== "denied") Notification.requestPermission().then((p) => { if (p === "granted") show(); });
+  } catch {}
+}
+
+// 把 AskUserQuestion 渲染成交互卡片：每题可点选项（单选/多选），点提交后把选择作为追问发回模型。
+// 两档处理：① 每题都有明确「推荐」选项时，限定时间内未回复则自动按推荐选择并提交；
+// ② 只要有一题没有推荐项（= 必须人工输入决定），则醒目提示并通知用户，绝不自动跳过。
 function appendAskQuestion(conv, id, questions) {
   const box = document.createElement("div");
   box.className = "askq";
   // 每题的当前选择：单选存字符串，多选存 Set
   const picks = questions.map((q) => (q.multiSelect ? new Set() : null));
+  // 每题的推荐项下标：标注了 (Recommended)/推荐 的选项；找不到则为 -1（=必须人工决定）
+  const recIdx = questions.map((q) => (q.options || []).findIndex((o) => /recommended|推荐/i.test(o.label || "")));
+  // 整张卡是否可在超时后自动按推荐选择：每题都得有明确推荐项
+  const canAuto = questions.length > 0 && recIdx.every((i) => i >= 0);
+  let interacted = false; // 用户一旦动手点选即取消自动倒计时
+  let timer = null;
+  function cancelCountdown() {
+    if (timer) { clearInterval(timer); timer = null; }
+    submit.textContent = tr("提交");
+  }
   questions.forEach((q, qi) => {
     const qd = document.createElement("div");
     qd.className = "q";
@@ -998,6 +1028,7 @@ function appendAskQuestion(conv, id, questions) {
         `${esc(o.label)}` +
         (o.description ? `<span class="desc">${esc(o.description)}</span>` : "");
       btn.onclick = () => {
+        interacted = true; cancelCountdown();
         if (q.multiSelect) {
           if (picks[qi].has(o.label)) { picks[qi].delete(o.label); btn.classList.remove("sel"); }
           else { picks[qi].add(o.label); btn.classList.add("sel"); }
@@ -1014,7 +1045,8 @@ function appendAskQuestion(conv, id, questions) {
   const submit = document.createElement("button");
   submit.className = "submit";
   submit.textContent = tr("提交");
-  submit.onclick = () => {
+  const doSubmit = () => {
+    cancelCountdown();
     const parts = questions.map((q, qi) => {
       const v = picks[qi];
       const ans = q.multiSelect ? [...(v || [])].join("、") : (v || "");
@@ -1023,10 +1055,40 @@ function appendAskQuestion(conv, id, questions) {
     box.classList.add("done");
     answerAskQuestion(conv, parts.join("\n"));
   };
+  submit.onclick = () => { interacted = true; doSubmit(); };
   box.appendChild(submit);
   conv.currentBubble.appendChild(box);
   if (id) conv.toolCards[id] = box;
   scrollIfActive(conv);
+
+  const firstQ = (questions[0] && (questions[0].question || questions[0].header)) || tr("请选择");
+  if (canAuto) {
+    // 有明确推荐项：限定时间内不回复则自动按推荐选择（仍先通知一次，避免被悄悄滚过）
+    notifyDecision(firstQ, false);
+    let left = 45;
+    const tick = () => {
+      if (interacted) { cancelCountdown(); return; }
+      submit.textContent = trf("提交（{0}s 后自动按推荐）", left);
+      if (left <= 0) {
+        cancelCountdown();
+        questions.forEach((q, qi) => {
+          const o = (q.options || [])[recIdx[qi]];
+          if (!o) return;
+          if (q.multiSelect) picks[qi] = new Set([o.label]);
+          else picks[qi] = o.label;
+        });
+        doSubmit();
+        return;
+      }
+      left--;
+    };
+    tick();
+    timer = setInterval(tick, 1000);
+  } else {
+    // 没有明确推荐项 = 必须人工输入决定：醒目高亮并通知，绝不自动跳过
+    box.classList.add("mustdecide");
+    notifyDecision(firstQ, true);
+  }
 }
 
 // 把用户对 AskUserQuestion 的选择作为一条追问发回（忙碌则排队）

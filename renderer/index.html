@@ -296,6 +296,8 @@
       .askq .opt .desc { display: block; font-size: 11px; color: var(--muted); margin-top: 2px; }
       .askq .submit { margin-top: 10px; background: #cdba7a; border: 0; border-radius: 6px; padding: 6px 14px; cursor: pointer; color: #1b1b1b; font-weight: 600; }
       .askq.done { opacity: 0.6; pointer-events: none; }
+      .askq.mustdecide { border-color: #e0a23a; box-shadow: 0 0 0 1px #e0a23a55; }
+      .askq.mustdecide .q:first-child::before { content: "⚠ "; }
       .meta { font-size: 11px; color: var(--muted); margin-top: 4px; }
       .err { color: #e57373; }
       #inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--panel); }
