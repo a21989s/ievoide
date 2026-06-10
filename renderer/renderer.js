@@ -964,7 +964,7 @@ function renderHistory(filter) {
   const box = $("histList");
   box.innerHTML = "";
   const q = (filter || "").toLowerCase();
-  const items = archived.filter((h) => !q || (h.title || "").toLowerCase().includes(q));
+  const items = archived.filter((h) => !q || (h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q));
   if (!items.length) {
     box.innerHTML = `<div class="hist-empty">${q ? tr("无匹配历史") : tr("暂无历史记录")}</div>`;
     return;
@@ -975,7 +975,7 @@ function renderHistory(filter) {
     const title = esc(h.title || tr("新对话"));
     row.innerHTML =
       `<div class="hist-main"><div class="hist-title">${title}</div>` +
-      `<div class="hist-meta">${fmtTime(h.archivedAt)}${h.sessionId ? " · " + tr("可续聊") : ""}</div></div>` +
+      `<div class="hist-meta">${fmtTime(h.archivedAt)}${h.sessionId ? `<span class="hist-badge">${tr("可续聊")}</span>` : ""}</div></div>` +
       `<button class="hist-open">${tr("打开")}</button><button class="hist-del" title="${tr("删除")}">×</button>`;
     row.querySelector(".hist-open").onclick = () => restoreFromHistory(h.id);
     row.querySelector(".hist-del").onclick = (e) => { e.stopPropagation(); deleteFromHistory(h.id); };

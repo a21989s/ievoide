@@ -444,6 +444,7 @@
       .hist-main { flex: 1; min-width: 0; }
       .hist-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .hist-meta { font-size: 12px; opacity: .6; margin-top: 2px; }
+      .hist-badge { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 11px; border-radius: 8px; background: rgba(80,160,90,.18); color: #4caf50; opacity: 1; }
       .hist-open { padding: 4px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; }
       .hist-open:hover { background: rgba(127,127,127,.15); }
       .hist-del { width: 26px; height: 26px; border: none; background: none; color: var(--fg); opacity: .5; font-size: 18px; cursor: pointer; border-radius: 6px; }
@@ -713,7 +714,7 @@
     <div id="historyModal">
       <div class="box">
         <div class="vhead"><span data-i18n="🕘 对话历史">🕘 对话历史</span><button id="histClose" data-i18n-title="关闭" title="关闭">✕</button></div>
-        <input id="histSearch" data-i18n-ph="搜索标题…" placeholder="搜索标题…" />
+        <input id="histSearch" data-i18n-ph="搜索标题或时间…" placeholder="搜索标题或时间…" />
         <div id="histList"></div>
       </div>
     </div>
