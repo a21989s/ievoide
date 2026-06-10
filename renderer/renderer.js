@@ -47,8 +47,13 @@ function toast(msg, type = "info") {
 // def 非 null 时为输入框（resolve 输入值或 null），为 null 时为确认（resolve true/false）。Esc 取消，Enter 确定。
 function modalDialog(text, def) {
   return new Promise((resolve) => {
-    const ov = $("modalDialog");
-    if (!ov) return resolve(def != null ? prompt(text, def) : confirm(text));
+    // Electron 渲染进程不支持原生 prompt()/confirm()，遮罩缺失时动态创建而非回退到原生对话框
+    let ov = $("modalDialog");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "modalDialog";
+      (document.body || document.documentElement).appendChild(ov);
+    }
     const isPrompt = def != null;
     const box = document.createElement("div");
     box.className = "box";
@@ -831,6 +836,7 @@ function showActive() {
   chat.replaceChildren(activeConv.pane); // 仅切换显示，不打断后台对话
   chat.scrollTop = chat.scrollHeight;
   refreshSendBtn();
+  renderCostReadout(); // 同步显示该会话累计用量
 }
 function refreshSendBtn() {
   const hasText = $("input").value.trim().length > 0;
@@ -866,6 +872,8 @@ function makeConv(seed) {
     busy: false,
     queue: [], // 当前轮进行中时，后续追问排队，依次自动发送
     askTimers: [], // AskUserQuestion 卡片的自动倒计时 setInterval，删除/重载时统一清理
+    costUsd: seed?.costUsd || 0, // 本会话累计费用（SDK 按当前模型单价结算的 total_cost_usd 累加）
+    tokens: seed?.tokens || 0, // 本会话累计 token（输入+输出+缓存）
   };
 }
 // 清掉某对话所有未结束的 AskUserQuestion 倒计时，避免 timer 在 conv 卸载后仍跑到超时
@@ -883,6 +891,8 @@ function buildConvState() {
       title: c.title,
       sessionId: c.sessionId,
       inited: c.inited,
+      costUsd: c.costUsd,
+      tokens: c.tokens,
       html: c.pane ? c.pane.innerHTML : c._html || "",
     })),
     active: activeConv?.id || null,
@@ -1001,6 +1011,22 @@ function deleteFromHistory(id) {
   renderHistory($("histSearch").value || "");
 }
 
+// 紧凑显示 token 数：1234→1.2k、1234567→1.2M
+function fmtTokens(n) {
+  if (!n) return "0";
+  if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+  if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
+  return String(n);
+}
+// 在输入区底部显示当前会话累计 token 与费用，让成本一目了然
+function renderCostReadout() {
+  const el = $("costReadout");
+  if (!el) return;
+  const c = activeConv;
+  if (!c || !c.tokens) { el.textContent = ""; el.title = ""; return; }
+  el.textContent = `${fmtTokens(c.tokens)} tok · $${c.costUsd.toFixed(4)}`;
+  el.title = trf("本会话累计：{0} tokens · 估算 ${1}", c.tokens.toLocaleString(), c.costUsd.toFixed(4));
+}
 // 渲染顶部 tab 标签条（tab 名=首条输入）
 function renderConvList() {
   const tabs = $("convTabs");
@@ -2982,10 +3008,18 @@ window.api.on("chat:tool", ({ convId, id, name, input }) =>
 window.api.on("chat:toolresult", ({ convId, id, isError, text }) =>
   appendToolResult(getConv(convId), id, isError, text)
 );
-window.api.on("chat:done", ({ convId, cost, ms, session }) => {
+window.api.on("chat:done", ({ convId, cost, ms, session, usage }) => {
   const conv = getConv(convId);
   if (conv && session) conv.sessionId = session; // 记住本对话 session
+  if (conv) {
+    // 累计本会话费用与 token（usage 含输入/输出/缓存读写各项）
+    if (typeof cost === "number") conv.costUsd += cost;
+    if (usage) conv.tokens +=
+      (usage.input_tokens || 0) + (usage.output_tokens || 0) +
+      (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+  }
   finishTurn(conv, `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}`);
+  renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 自动发下一条（续接同一 session）；否则推进需求清单
   if (conv && conv.queue.length) startTurn(conv, conv.queue.shift());

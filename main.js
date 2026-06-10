@@ -700,6 +700,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
           cost: msg.total_cost_usd,
           ms: msg.duration_ms,
           session: msg.session_id,
+          usage: msg.usage || null, // {input_tokens, output_tokens, cache_*}，供渲染层累计本会话用量
         });
       }
     }
