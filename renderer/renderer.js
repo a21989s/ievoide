@@ -1592,8 +1592,10 @@ window.api.on("evolve:log", (t) => evLog(t));
 window.api.on("evolve:done", (info) => {
   setEvolveBusy(false);
   if (info?.error) evLog(tr("✖ 失败：") + info.error);
+  else if (info?.stopped) evLog(tr("⤺ 已停止并回滚"));
   else if (info?.noChange) evLog(tr("（无改动）"));
   else if (info?.relaunch) evLog(tr("✔ 已应用，正在重启…"));
+  else if (info?.deferred) evLog(tr("✔ 已提交（下次重启/重载生效，不打断进化）"));
   else evLog(tr("✔ 已应用并重载"));
   loadEvolveHistory();
 });

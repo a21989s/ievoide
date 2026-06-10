@@ -38,6 +38,9 @@ const DEFAULT_CONFIG = {
     "始终用简体中文回答，除非用户明确要求使用其他语言。代码、命令、标识符等保持原样。",
   permissionMode: "bypassPermissions",
   model: null,
+  // 进化改完后是否立即重启/重载来生效。默认 false：不打断进化循环——主进程改动
+  // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
+  evolveAutoRestart: false,
 };
 function loadConfig() {
   const file = path.join(TOOLS_DIR, "config.json");
@@ -791,6 +794,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
   evolveAbort = abort;
   const send = (ch, p) => { if (win && !win.isDestroyed()) win.webContents.send(ch, p); };
   const log = (t) => send("evolve:log", t);
+  let checkpoint = null;
   try {
     // 1) 检查点
     if (ensureRepo()) log("📦 未检测到 git 仓库，已自动初始化");
@@ -798,7 +802,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
       gitT(["add", "-A"]);
       gitT(["commit", "-m", "evolve: checkpoint", "--allow-empty"]);
     } catch {}
-    const checkpoint = gitT(["rev-parse", "HEAD"]).trim();
+    checkpoint = gitT(["rev-parse", "HEAD"]).trim();
     log(`📌 检查点 ${checkpoint.slice(0, 7)}`);
 
     // 2) Claude 改源码
@@ -852,6 +856,15 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
       }
     }
 
+    // 用户中途停止：丢弃未提交的半成品改动，回滚到检查点，避免被下一轮 checkpoint 吞进历史
+    if (abort.signal.aborted) {
+      rollback(checkpoint);
+      evolving = false;
+      recordEvolve({ requirement, checkpoint, summary, changed: [], status: "rolledback", reason: "已停止" });
+      send("evolve:done", { stopped: true, summary });
+      return { ok: true, stopped: true };
+    }
+
     // 3) 改了哪些文件
     const changed = gitT(["status", "--porcelain"])
       .split("\n").map((s) => s.slice(3).trim()).filter(Boolean);
@@ -883,6 +896,21 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     gitT(["commit", "-m", `evolve: ${requirement.slice(0, 60)}`]);
     const needRelaunch = changed.some((f) => f === "main.js" || f === "preload.cjs");
     evolving = false;
+
+    // 默认不打断进化循环：改动已提交即视为应用成功，不强制重启/重载。
+    // 主进程改动写 pending 标记，交由下次（自然/手动）重启时的 bootGuard 自检并在异常时回滚；
+    // 渲染层改动下次重载即生效。可在 config.json 设 evolveAutoRestart:true 恢复"改完即重启/重载"。
+    if (!appConfig.evolveAutoRestart) {
+      if (needRelaunch)
+        fsSync.writeFileSync(markerPath(), JSON.stringify({ status: "pending", sha: checkpoint }));
+      recordEvolve({ requirement, checkpoint, summary, changed, status: "applied" });
+      log(needRelaunch
+        ? "✅ 已提交主进程改动，下次重启生效（不打断进化）"
+        : "✅ 已提交渲染层改动，下次重载生效（不打断进化）");
+      send("evolve:done", { ok: true, changed, summary, deferred: true });
+      return { ok: true, changed };
+    }
+
     if (needRelaunch) {
       fsSync.writeFileSync(markerPath(), JSON.stringify({ status: "pending", sha: checkpoint }));
       recordEvolve({ requirement, checkpoint, summary, changed, status: "relaunch" });
@@ -909,6 +937,13 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     return { ok: true, changed };
   } catch (err) {
     evolving = false;
+    // 中止（用户停止）：回滚半成品并报为已停止，不当作失败
+    if (abort.signal.aborted) {
+      if (checkpoint) rollback(checkpoint);
+      recordEvolve({ requirement, checkpoint, status: "rolledback", reason: "已停止" });
+      send("evolve:done", { stopped: true });
+      return { ok: true, stopped: true };
+    }
     const m = String(err?.stack || err);
     recordEvolve({ requirement, status: "error", error: m });
     send("evolve:done", { error: m });
