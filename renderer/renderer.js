@@ -208,6 +208,48 @@ async function createEntry(isDir) {
 $("newFile").onclick = () => createEntry(false);
 $("newFolder").onclick = () => createEntry(true);
 
+// ── 项目规则：探测 workdir 根目录的 AGENTS.md / CLAUDE.md，无则一键创建，复用 md 内联编辑器维护跨会话约定 ──
+const AGENTS_MD_TEMPLATE = `# AGENTS.md
+
+> 跨会话的项目约定，供 AI 助手与协作者共同遵循。
+
+## 项目简介
+<!-- 这是什么项目、技术栈、目录结构要点 -->
+
+## 构建与测试命令
+<!-- 例如：npm install / npm test / npm run build -->
+
+## 代码风格与规范
+<!-- 命名、格式化、提交信息约定等 -->
+
+## 注意事项
+<!-- 易踩的坑、不要改动的地方、外部依赖等 -->
+`;
+async function openProjectRules() {
+  if (!currentFolder) { toast(tr("请先选择文件夹"), "error"); return; }
+  const root = currentFolder.replace(/\/+$/, "");
+  const items = await window.api.listDir(root);
+  const find = (n) => items.find((it) => !it.isDir && it.name.toLowerCase() === n);
+  const agents = find("agents.md"), claude = find("claude.md");
+  let target = agents || claude, created = false;
+  if (agents && claude) {
+    // 两者都在：默认打开 AGENTS.md，取消则打开 CLAUDE.md
+    target = (await modalConfirm(tr("同时存在 AGENTS.md 与 CLAUDE.md，打开 AGENTS.md？（取消则打开 CLAUDE.md）"))) ? agents : claude;
+  } else if (!target) {
+    if (!(await modalConfirm(tr("未找到项目规则文件，创建 AGENTS.md？")))) return;
+    const full = root + "/AGENTS.md";
+    const r = await window.api.writeFile(full, AGENTS_MD_TEMPLATE);
+    if (!r.ok) { toast(tr("创建失败：") + (r.error || ""), "error"); return; }
+    $("tree").innerHTML = "";
+    await renderChildren($("tree"), root, 0);
+    target = { path: full, name: "AGENTS.md" };
+    created = true;
+  }
+  await openFile(target.path, target.name);
+  if (created && !mdEditing) enterMdEdit(); // 新建的直接进编辑态
+}
+$("projectRules").onclick = openProjectRules;
+
 // ── 文件内容检索：左侧搜索框逐行匹配，点击命中直达预览 ────────
 let csToken = 0;
 async function runContentSearch() {
