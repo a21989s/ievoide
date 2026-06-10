@@ -589,7 +589,14 @@ function makeConv(seed) {
     toolCards: {},
     busy: false,
     queue: [], // 当前轮进行中时，后续追问排队，依次自动发送
+    askTimers: [], // AskUserQuestion 卡片的自动倒计时 setInterval，删除/重载时统一清理
   };
+}
+// 清掉某对话所有未结束的 AskUserQuestion 倒计时，避免 timer 在 conv 卸载后仍跑到超时
+function clearAskTimers(conv) {
+  if (!conv || !conv.askTimers) return;
+  conv.askTimers.forEach((t) => clearInterval(t));
+  conv.askTimers.length = 0;
 }
 let _saveTimer = null;
 let archived = []; // 已关闭对话的历史归档（与手机端共用同一份文件的 history 字段）
@@ -637,6 +644,7 @@ function deleteConv(id) {
   const i = conversations.findIndex((c) => c.id === id);
   if (i < 0) return;
   const conv = conversations[i];
+  clearAskTimers(conv); // 停掉它残留的 AskUserQuestion 倒计时，避免删除后仍 doSubmit 到已卸载的 conv
   if (conv.busy) window.api.stop(conv.id); // 删除前停掉它的查询
   if (conv.id === reqConvId) reqConvId = null; // 解绑需求清单（pumpReqs 会重新绑定）
   archiveConv(conv); // 关闭前归档到历史，可在「🕘 历史」里重新打开续聊
@@ -920,6 +928,7 @@ function renderMsgAttachments(bubble, atts) {
 
 // 在某对话里开始新一轮（立即发送或从队列取出后调用）
 function startTurn(conv, text) {
+  clearAskTimers(conv); // 上一轮遗留的 AskUserQuestion 卡片即将作废，先清掉其倒计时
   conv.toolCards = {};
   const wrap = document.createElement("div");
   wrap.className = "msg assistant";
@@ -1030,7 +1039,14 @@ function appendAskQuestion(conv, id, questions) {
   let interacted = false; // 用户一旦动手点选即取消自动倒计时
   let timer = null;
   function cancelCountdown() {
-    if (timer) { clearInterval(timer); timer = null; }
+    if (timer) {
+      clearInterval(timer);
+      if (conv && conv.askTimers) {
+        const k = conv.askTimers.indexOf(timer);
+        if (k >= 0) conv.askTimers.splice(k, 1);
+      }
+      timer = null;
+    }
     submit.textContent = tr("提交");
   }
   questions.forEach((q, qi) => {
@@ -1102,6 +1118,7 @@ function appendAskQuestion(conv, id, questions) {
     };
     tick();
     timer = setInterval(tick, 1000);
+    if (conv && conv.askTimers) conv.askTimers.push(timer); // 登记，便于删除/重载时统一 clearInterval
   } else {
     // 没有明确推荐项 = 必须人工输入决定：醒目高亮并通知，绝不自动跳过
     box.classList.add("mustdecide");
