@@ -448,7 +448,7 @@
   <body>
     <div id="topbar">
       <button id="toggleSidebar" data-i18n-title="折叠/展开左侧栏" title="折叠/展开左侧栏">◧</button>
-      <button id="pick" data-i18n="📁 选择文件夹">📁 选择文件夹</button>
+      <button id="pick" data-i18n-title="选择文件夹" title="选择文件夹">📁</button>
       <span class="folder" id="folder" data-i18n="未选择目录">未选择目录</span>
       <span class="meta" id="status"></span>
       <span class="usage" id="usage" data-i18n-title="点击刷新用量" title="点击刷新用量">用量…</span>
@@ -484,7 +484,7 @@
           <div class="branch-dd" id="branchDropdown"></div>
           <div id="scCommitBox">
             <textarea id="scMsg" rows="1" data-i18n-ph="提交信息（Ctrl+Enter 提交已暂存）" placeholder="提交信息（Ctrl+Enter 提交已暂存）"></textarea>
-            <button id="scCommit" data-i18n="✓ 提交" data-i18n-title="提交已暂存的更改" title="提交已暂存的更改">✓ 提交</button>
+            <button id="scCommit" data-i18n-title="提交已暂存的更改" title="提交已暂存的更改">✓</button>
           </div>
           <div class="sc-grp"><span data-i18n="暂存的更改">暂存的更改</span><span class="sc-n" id="scStagedN">0</span><span class="sc-grp-act" id="scUnstageAll" data-i18n-title="全部取消暂存" title="全部取消暂存">−</span></div>
           <div id="scStaged" class="sc-files"></div>
@@ -506,15 +506,15 @@
             <div id="reqAttachList"></div>
             <div id="reqLinkList"></div>
             <div class="req-addrow">
-              <button id="reqAttach" class="req-attbtn" data-i18n="📎 附件" data-i18n-title="添加附件（图片 / Word / PDF / 其他文件）" title="添加附件（图片 / Word / PDF / 其他文件）">📎 附件</button>
-              <button id="reqLink" class="req-attbtn" data-i18n="🔗 链接" data-i18n-title="添加链接（Jira ticket / Confluence 文档 / 任意网址）" title="添加链接（Jira ticket / Confluence 文档 / 任意网址）">🔗 链接</button>
-              <button id="reqAdd" data-i18n="＋ 添加需求" data-i18n-title="添加到清单" title="添加到清单">＋ 添加需求</button>
+              <button id="reqAttach" class="req-attbtn" data-i18n-title="添加附件（图片 / Word / PDF / 其他文件）" title="添加附件（图片 / Word / PDF / 其他文件）">📎</button>
+              <button id="reqLink" class="req-attbtn" data-i18n-title="添加链接（Jira ticket / Confluence 文档 / 任意网址）" title="添加链接（Jira ticket / Confluence 文档 / 任意网址）">🔗</button>
+              <button id="reqAdd" data-i18n-title="添加到清单" title="添加到清单">＋</button>
             </div>
           </div>
           <div class="req-actions">
-            <button id="reqStart" data-i18n="▶ 开始处理">▶ 开始处理</button>
-            <button id="reqStop" data-i18n="⏹ 停止" disabled>⏹ 停止</button>
-            <span class="sc-grp-act" id="reqClear" data-i18n="清空" data-i18n-title="清空清单" title="清空清单">清空</span>
+            <button id="reqStart" data-i18n-title="开始处理" title="开始处理">▶</button>
+            <button id="reqStop" data-i18n-title="停止" title="停止" disabled>⏹</button>
+            <span class="sc-grp-act" id="reqClear" data-i18n-title="清空清单" title="清空清单">🗑</span>
           </div>
           <div id="reqList" class="req-list"></div>
         </div>
@@ -540,7 +540,7 @@
     </div>
     <div id="viewer">
       <div class="box">
-        <div class="vhead"><span id="vtitle"></span><button id="vclose" data-i18n="关闭">关闭</button></div>
+        <div class="vhead"><span id="vtitle"></span><button id="vclose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <div id="vbody"></div>
         <iframe id="vframe" style="display:none"></iframe>
       </div>
@@ -549,19 +549,19 @@
     <div id="acctMenu"></div>
     <div id="mobileModal">
       <div class="box">
-        <div class="vhead"><span data-i18n="📱 手机连接（同一 Wi-Fi）">📱 手机连接（同一 Wi-Fi）</span><button id="mobClose" data-i18n="关闭">关闭</button></div>
+        <div class="vhead"><span data-i18n="📱 手机连接（同一 Wi-Fi）">📱 手机连接（同一 Wi-Fi）</span><button id="mobClose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <div id="mobBody">
           <p class="mob-tip" data-i18n="手机与本机连同一个 Wi-Fi，扫码或在手机浏览器打开下方地址即可遥控。⚠️ 该服务以全权限运行，勿暴露公网、妥善保管令牌。">手机与本机连同一个 Wi-Fi，扫码或在手机浏览器打开下方地址即可遥控。⚠️ 该服务以全权限运行，勿暴露公网、妥善保管令牌。</p>
           <div class="mob-row">
-            <button id="mobToggle" data-i18n="▶ 启动服务">▶ 启动服务</button>
+            <button id="mobToggle" data-i18n-title="启动服务" title="启动服务">▶</button>
             <span id="mobState" class="meta"></span>
           </div>
           <div id="mobConn" style="display:none">
             <img id="mobQr" alt="QR" />
             <div class="mob-url"><code id="mobUrl"></code></div>
             <div class="mob-row">
-              <button id="mobCopy" data-i18n="复制地址">复制地址</button>
-              <button id="mobOpen" data-i18n="本机浏览器打开">本机浏览器打开</button>
+              <button id="mobCopy" data-i18n-title="复制地址" title="复制地址">📋</button>
+              <button id="mobOpen" data-i18n-title="本机浏览器打开" title="本机浏览器打开">🌐</button>
             </div>
           </div>
         </div>
@@ -569,21 +569,21 @@
     </div>
     <div id="historyModal">
       <div class="box">
-        <div class="vhead"><span data-i18n="🕘 对话历史">🕘 对话历史</span><button id="histClose" data-i18n="关闭">关闭</button></div>
+        <div class="vhead"><span data-i18n="🕘 对话历史">🕘 对话历史</span><button id="histClose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <input id="histSearch" data-i18n-ph="搜索标题…" placeholder="搜索标题…" />
         <div id="histList"></div>
       </div>
     </div>
     <div id="evolveModal">
       <div class="box">
-        <div class="vhead"><span data-i18n="🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）">🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）</span><span class="ev-head-btns"><button id="evDock" data-i18n-title="停靠到右侧/居中显示" title="停靠到右侧/居中显示">⇥ 停靠</button><button id="evCollapse" data-i18n-title="隐藏到一侧" title="隐藏到一侧">▸ 隐藏</button><button id="evClose" data-i18n="关闭">关闭</button></span></div>
+        <div class="vhead"><span data-i18n="🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）">🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）</span><span class="ev-head-btns"><button id="evDock" data-i18n-title="停靠到右侧/居中显示" title="停靠到右侧/居中显示">⇥</button><button id="evCollapse" data-i18n-title="隐藏到一侧" title="隐藏到一侧">▸</button><button id="evClose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
         <div id="evBody">
           <textarea id="evReq" rows="2" data-i18n-ph="描述需求或要修复的问题，例如：修复 XX 报错 / 给对话加一个导出按钮…" placeholder="描述需求或要修复的问题，例如：修复 XX 报错 / 给对话加一个导出按钮…"></textarea>
           <div id="evAttach"></div>
           <div class="ev-row">
-            <button id="evAttachBtn" data-i18n="📎 添加图片/文档">📎 添加图片/文档</button>
-            <button id="evRun" data-i18n="开始">开始</button>
-            <button id="evStop" data-i18n="停止" disabled>停止</button>
+            <button id="evAttachBtn" data-i18n-title="添加图片/文档" title="添加图片/文档">📎</button>
+            <button id="evRun" data-i18n-title="开始" title="开始">▶</button>
+            <button id="evStop" data-i18n-title="停止" title="停止" disabled>⏹</button>
             <label><input type="checkbox" id="evAuto" /> <span data-i18n="自动修复运行时错误">自动修复运行时错误</span></label>
             <label><input type="checkbox" id="evPeriodic" /> <span data-i18n="定期自检">定期自检</span></label>
             <select id="evInterval">
@@ -592,35 +592,35 @@
               <option value="10800000" data-i18n="每 3 小时">每 3 小时</option>
             </select>
           </div>
-          <div class="ev-sub"><span data-i18n="问题清单">问题清单</span> <span class="sc-n" id="evIssueN">0</span><span class="sc-grp-act" id="evClearIssues" data-i18n="清空" data-i18n-title="清空" title="清空">清空</span></div>
+          <div class="ev-sub"><span data-i18n="问题清单">问题清单</span> <span class="sc-n" id="evIssueN">0</span><span class="sc-grp-act" id="evClearIssues" data-i18n-title="清空" title="清空">🗑</span></div>
           <div id="evIssues"></div>
-          <div class="ev-sub"><span data-i18n="进化记录">进化记录</span> <span class="sc-n" id="evHistN">0</span><span class="sc-grp-act" id="evClearHist" data-i18n="清空" data-i18n-title="清空" title="清空">清空</span></div>
+          <div class="ev-sub"><span data-i18n="进化记录">进化记录</span> <span class="sc-n" id="evHistN">0</span><span class="sc-grp-act" id="evClearHist" data-i18n-title="清空" title="清空">🗑</span></div>
           <div id="evHistory"></div>
           <div class="ev-sub" data-i18n="进化日志">进化日志</div>
           <pre id="evLog"></pre>
         </div>
       </div>
     </div>
-    <button id="evRestore" data-i18n="🧬 自进化" title="展开自进化">🧬 自进化</button>
+    <button id="evRestore" data-i18n-title="展开自进化" title="展开自进化">🧬</button>
     <div id="pdfeditor">
       <div class="pe-toolbar">
-        <button data-tool="select" class="active" data-i18n="↖ 选择">↖ 选择</button>
-        <button data-tool="draw" data-i18n="✏️ 画笔">✏️ 画笔</button>
-        <button data-tool="highlight" data-i18n="🖍 高亮">🖍 高亮</button>
-        <button data-tool="text" data-i18n="🔤 文字">🔤 文字</button>
-        <button data-tool="whiteout" data-i18n="⬜ 遮盖改字">⬜ 遮盖改字</button>
+        <button data-tool="select" class="active" data-i18n-title="选择" title="选择">↖</button>
+        <button data-tool="draw" data-i18n-title="画笔" title="画笔">✏️</button>
+        <button data-tool="highlight" data-i18n-title="高亮" title="高亮">🖍</button>
+        <button data-tool="text" data-i18n-title="文字" title="文字">🔤</button>
+        <button data-tool="whiteout" data-i18n-title="遮盖改字" title="遮盖改字">⬜</button>
         <input type="color" id="peColor" value="#ff3b30" data-i18n-title="颜色" title="颜色" />
         <span class="sep"></span>
-        <button id="peRotate" data-i18n="⟳ 旋转页">⟳ 旋转页</button>
-        <button id="peDelete" data-i18n="🗑 删页">🗑 删页</button>
-        <button id="peForm" data-i18n="📝 表单">📝 表单</button>
+        <button id="peRotate" data-i18n-title="旋转页" title="旋转页">⟳</button>
+        <button id="peDelete" data-i18n-title="删页" title="删页">🗑</button>
+        <button id="peForm" data-i18n-title="表单" title="表单">📝</button>
         <span class="spacer"></span>
         <span id="peStatus"></span>
-        <button id="peSave" data-i18n="💾 保存">💾 保存</button>
-        <button id="peClose" data-i18n="关闭">关闭</button>
+        <button id="peSave" data-i18n-title="保存" title="保存">💾</button>
+        <button id="peClose" data-i18n-title="关闭" title="关闭">✕</button>
       </div>
       <div id="pePages"></div>
-      <div id="peForms"><h4 data-i18n="表单字段">表单字段</h4><div id="peFormFields"></div><button id="peFormApply" style="margin-top:10px" data-i18n="应用到文档">应用到文档</button></div>
+      <div id="peForms"><h4 data-i18n="表单字段">表单字段</h4><div id="peFormFields"></div><button id="peFormApply" style="margin-top:10px" data-i18n-title="应用到文档" title="应用到文档">✓</button></div>
     </div>
     <script src="../node_modules/marked/lib/marked.umd.js"></script>
     <script src="../node_modules/mermaid/dist/mermaid.min.js"></script>

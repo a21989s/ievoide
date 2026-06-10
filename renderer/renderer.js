@@ -546,10 +546,12 @@ function refreshSendBtn() {
   const btn = $("send");
   // 有文字 => 发送（忙碌则排队）；无文字且忙碌 => 停止
   if (hasText || !busy) {
-    btn.textContent = tr("发送");
+    btn.textContent = "↑";
+    btn.title = tr("发送（Ctrl/⌘+Enter）");
     btn.style.background = "";
   } else {
-    btn.textContent = tr("停止");
+    btn.textContent = "⏹";
+    btn.title = tr("停止");
     btn.style.background = "#a33";
   }
   const q = activeConv?.queue?.length || 0;
@@ -1336,7 +1338,9 @@ $("acctMenu").addEventListener("click", (e) => e.stopPropagation());
 // ── 手机连接面板 ───────────────────────────────────────────
 function renderMobile(info) {
   const running = info && info.running;
-  $("mobToggle").textContent = running ? tr("⏹ 停止服务") : tr("▶ 启动服务");
+  const mt = $("mobToggle");
+  mt.textContent = running ? "⏹" : "▶";
+  mt.title = running ? tr("停止服务") : tr("启动服务");
   $("mobState").textContent = running ? tr("运行中") : tr("未启动");
   $("mobConn").style.display = running && info.url ? "block" : "none";
   if (running && info.url) {
@@ -1377,8 +1381,8 @@ function setEvolveBusy(b) {
   evolveBusy = b;
   // 进化进行中：开始按钮变为“调整方向”，仍可向当前会话追加 update 消息
   const run = $("evRun");
-  run.textContent = b ? tr("↳ 调整方向") : tr("开始");
-  run.title = b ? tr("向进行中的进化追加方向调整（Ctrl+Enter）") : "";
+  run.textContent = b ? "↳" : "▶";
+  run.title = b ? tr("向进行中的进化追加方向调整（Ctrl+Enter）") : tr("开始");
   $("evStop").disabled = !b;
 }
 // 附件（图片/文档），路径数组
@@ -1645,7 +1649,9 @@ function renderReqs() {
   $("reqCount").textContent = requirements.length;
   const pending = requirements.some((r) => r.status === "pending");
   $("reqStart").disabled = reqRunning || !pending;
-  $("reqStart").textContent = reqRunning ? tr("⏳ 处理中…") : tr("▶ 开始处理");
+  const rs = $("reqStart");
+  rs.textContent = reqRunning ? "⏳" : "▶";
+  rs.title = reqRunning ? tr("⏳ 处理中…") : tr("开始处理");
   $("reqStop").disabled = !reqRunning;
   listEl.innerHTML = "";
   requirements.forEach((r, i) => {

@@ -193,6 +193,24 @@
     "已保存到 ": "Saved to ",
     "（注意：非拉丁字符未写入，需嵌入中文字体）": " (note: non-Latin characters were not written; embedding a CJK font is required)",
     "保存出错：": "Save error: ",
+    // —— 图标按钮 tooltip ——
+    "选择文件夹": "Open folder",
+    "开始处理": "Start",
+    "启动服务": "Start service",
+    "停止服务": "Stop service",
+    "复制地址": "Copy address",
+    "本机浏览器打开": "Open in browser",
+    "添加图片/文档": "Add image / document",
+    "展开自进化": "Open self-evolve",
+    "选择": "Select",
+    "画笔": "Pen",
+    "高亮": "Highlight",
+    "文字": "Text",
+    "遮盖改字": "Whiteout",
+    "旋转页": "Rotate page",
+    "删页": "Delete page",
+    "表单": "Form",
+    "保存": "Save",
   };
 
   let lang = "zh";
