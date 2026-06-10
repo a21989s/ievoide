@@ -43,6 +43,58 @@ function toast(msg, type = "info") {
   }, type === "error" ? 6000 : 3500);
 }
 
+// 轻量模态对话：替代阻塞式 prompt()/confirm()，复用应用配色与遮罩。
+// def 非 null 时为输入框（resolve 输入值或 null），为 null 时为确认（resolve true/false）。Esc 取消，Enter 确定。
+function modalDialog(text, def) {
+  return new Promise((resolve) => {
+    const ov = $("modalDialog");
+    if (!ov) return resolve(def != null ? prompt(text, def) : confirm(text));
+    const isPrompt = def != null;
+    const box = document.createElement("div");
+    box.className = "box";
+    const msg = document.createElement("div");
+    msg.className = "md-msg";
+    msg.textContent = text;
+    box.appendChild(msg);
+    let input;
+    if (isPrompt) {
+      input = document.createElement("input");
+      input.className = "md-input";
+      input.value = def;
+      box.appendChild(input);
+    }
+    const btns = document.createElement("div");
+    btns.className = "md-btns";
+    const cancel = document.createElement("button");
+    cancel.className = "md-cancel";
+    cancel.textContent = tr("取消");
+    const ok = document.createElement("button");
+    ok.textContent = tr("确定");
+    btns.appendChild(cancel);
+    btns.appendChild(ok);
+    box.appendChild(btns);
+    const close = (val) => {
+      document.removeEventListener("keydown", onKey, true);
+      ov.classList.remove("open");
+      ov.innerHTML = "";
+      resolve(val);
+    };
+    cancel.onclick = () => close(isPrompt ? null : false);
+    ok.onclick = () => close(isPrompt ? input.value : true);
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); cancel.click(); }
+      else if (e.key === "Enter") { e.preventDefault(); ok.click(); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    ov.innerHTML = "";
+    ov.appendChild(box);
+    ov.classList.add("open");
+    if (isPrompt) { input.focus(); input.select(); } else ok.focus();
+  });
+}
+const modalPrompt = (title, def = "") => modalDialog(title, def == null ? "" : def);
+const modalConfirm = (msg) => modalDialog(msg, null);
+
 // 自进化健康心跳：渲染层成功加载即上报，宿主据此确认进化后的版本健康（否则自动回滚）
 try { window.api.evolveAlive(); } catch {}
 
@@ -466,12 +518,12 @@ function fileRow(f, staged) {
     `<span class="sc-stat ${cls}">${cls}</span>` +
     `<span class="sc-name">${esc(f.path)}</span>` +
     `<span class="sc-fileact">${acts}</span>`;
-  el.onclick = (e) => {
+  el.onclick = async (e) => {
     const act = e.target.dataset?.act;
     if (act === "stage") doGit(() => window.api.gitStage(activeRepo, f.path));
     else if (act === "unstage") doGit(() => window.api.gitUnstage(activeRepo, f.path));
     else if (act === "discard") {
-      if (confirm(trf("丢弃对 {0} 的更改？此操作不可撤销。", f.path)))
+      if (await modalConfirm(trf("丢弃对 {0} 的更改？此操作不可撤销。", f.path)))
         doGit(() => window.api.gitDiscard(activeRepo, f.path, !!f.untracked));
     } else openDiff(f.path, staged, f.untracked);
   };
@@ -599,15 +651,15 @@ $("scPull").onclick = () => doGit(() => window.api.gitPull(activeRepo), tr("已�
 $("scPush").onclick = () => doGit(() => window.api.gitPush(activeRepo), tr("已推送"));
 $("scFetch").onclick = () => doGit(() => window.api.gitFetch(activeRepo), tr("已抓取"));
 $("scNewBranch").onclick = async () => {
-  const name = prompt(tr("新分支名："));
+  const name = await modalPrompt(tr("新分支名："));
   if (name && name.trim()) doGit(() => window.api.gitCreateBranch(activeRepo, name.trim()), tr("已创建分支"));
 };
-$("scDiscardAll").onclick = () => {
-  if (confirm(tr("丢弃所有未暂存更改，并删除未跟踪文件/目录？\n此操作不可撤销！")))
+$("scDiscardAll").onclick = async () => {
+  if (await modalConfirm(tr("丢弃所有未暂存更改，并删除未跟踪文件/目录？\n此操作不可撤销！")))
     doGit(() => window.api.gitDiscardAll(activeRepo), tr("已丢弃所有更改"));
 };
-$("scUndoCommit").onclick = () => {
-  if (confirm(tr("撤销上次提交？\n（改动会保留在暂存区，可重新提交）")))
+$("scUndoCommit").onclick = async () => {
+  if (await modalConfirm(tr("撤销上次提交？\n（改动会保留在暂存区，可重新提交）")))
     doGit(() => window.api.gitUndoLastCommit(activeRepo), tr("已撤销上次提交"));
 };
 
@@ -645,7 +697,7 @@ function commitMenu(c, x, y) {
   showMenu(x, y, [
     {
       label: tr("检出此提交（分离 HEAD）"),
-      run: () => confirm(trf("检出 {0}？将进入分离 HEAD 状态。", c.short)) &&
+      run: async () => (await modalConfirm(trf("检出 {0}？将进入分离 HEAD 状态。", c.short))) &&
         doGit(() => window.api.gitCheckoutCommit(activeRepo, c.full)),
     },
     {
@@ -655,13 +707,13 @@ function commitMenu(c, x, y) {
     { sep: true },
     {
       label: tr("软重置到此（保留改动）"),
-      run: () => confirm(trf("reset --soft 到 {0}？\n此提交之后的提交将撤销，改动保留。", c.short)) &&
+      run: async () => (await modalConfirm(trf("reset --soft 到 {0}？\n此提交之后的提交将撤销，改动保留。", c.short))) &&
         doGit(() => window.api.gitResetSoft(activeRepo, c.full)),
     },
     {
       label: tr("硬重置到此（丢弃之后的提交）"),
       danger: true,
-      run: () => confirm(trf("reset --hard 到 {0}？\n此提交之后的提交与改动将永久丢失，不可撤销！", c.short)) &&
+      run: async () => (await modalConfirm(trf("reset --hard 到 {0}？\n此提交之后的提交与改动将永久丢失，不可撤销！", c.short))) &&
         doGit(() => window.api.gitResetHard(activeRepo, c.full)),
     },
     { sep: true },
@@ -1746,7 +1798,7 @@ async function openAcctMenu(anchor) {
   m.querySelectorAll(".am-del").forEach((x) => {
     x.onclick = async (e) => {
       e.stopPropagation();
-      if (!confirm(trf("删除存档账号 {0}？", x.dataset.del))) return;
+      if (!(await modalConfirm(trf("删除存档账号 {0}？", x.dataset.del)))) return;
       await window.api.acctDelete(x.dataset.del);
       openAcctMenu(anchor); // 重新渲染
     };
@@ -2486,8 +2538,8 @@ function renderReqLinkList() {
     el.appendChild(chip);
   });
 }
-function addReqLink() {
-  const raw = (prompt(tr("粘贴链接（Jira ticket / Confluence 文档 / 任意网址）：")) || "").trim();
+async function addReqLink() {
+  const raw = ((await modalPrompt(tr("粘贴链接（Jira ticket / Confluence 文档 / 任意网址）："))) || "").trim();
   if (!raw) return;
   const url = /^https?:\/\//i.test(raw) ? raw : "https://" + raw;
   reqPendingLinks.push(url);
@@ -2657,13 +2709,13 @@ function persistQuickSkills() {
   try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {}
 }
 // idx>=0 为编辑现有项；idx=-1 为新增。编辑时清空「名称」与「命令」即删除该项。
-function editQuickSkill(idx) {
+async function editQuickSkill(idx) {
   const cur = idx >= 0 ? QUICK_SKILLS[idx] : { icon: "", label: "", prompt: "" };
-  const icon = prompt(tr("图标（emoji，可留空）："), cur.icon);
+  const icon = await modalPrompt(tr("图标（emoji，可留空）："), cur.icon);
   if (icon === null) return;
-  const label = prompt(tr("名称："), cur.label);
+  const label = await modalPrompt(tr("名称："), cur.label);
   if (label === null) return;
-  const p = prompt(tr("要发送的 prompt / 斜杠命令："), cur.prompt);
+  const p = await modalPrompt(tr("要发送的 prompt / 斜杠命令："), cur.prompt);
   if (p === null) return;
   if (!label.trim() && !p.trim()) {
     if (idx >= 0) { QUICK_SKILLS.splice(idx, 1); persistQuickSkills(); renderQuickbar(); }
