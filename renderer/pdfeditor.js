@@ -10,6 +10,16 @@ const editorEl = $("pdfeditor");
 const pagesEl = $("pePages");
 
 let state = null; // { bytes, name, path, pages:[], tool, color }
+let peDoc = null; // 当前 pdf.js 文档，关闭/切换前 destroy() 释放 worker 缓存
+
+function destroyPeDoc() {
+  if (peDoc) {
+    try {
+      peDoc.destroy();
+    } catch (_) {}
+    peDoc = null;
+  }
+}
 
 // ── 打开 ───────────────────────────────────────────────────
 window.openPdfEditor = async function (path, name) {
@@ -19,6 +29,7 @@ window.openPdfEditor = async function (path, name) {
     return;
   }
   const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+  destroyPeDoc(); // 释放上一个 PDF 的 worker 缓存，避免反复打开内存增长
   state = { bytes, name, path, pages: [], tool: "select", color: "#ff3b30" };
   const myState = state; // 渲染期间用于检测 state 是否被关闭/切换
   editorEl.style.display = "flex";
@@ -27,7 +38,11 @@ window.openPdfEditor = async function (path, name) {
 
   // pdf.js 需要独立副本（它会 transfer/detach buffer）
   const doc = await pdfjsLib.getDocument({ data: bytes.slice() }).promise;
-  if (state !== myState) return; // 已关闭或切换到别的 PDF
+  if (state !== myState) {
+    try { doc.destroy(); } catch (_) {} // 已关闭或切换，本次 doc 不会被使用，立即释放
+    return;
+  }
+  peDoc = doc; // 记录当前文档，供 peClose / 下次打开时 destroy
   const containerW = pagesEl.clientWidth - 40;
   for (let i = 1; i <= doc.numPages; i++) {
     if (state !== myState) return; // 大 PDF 渲染中途被关闭/切换，立即中止循环
@@ -113,6 +128,7 @@ $("peColor").onchange = (e) => (state.color = e.target.value);
 $("peClose").onclick = () => {
   editorEl.style.display = "none";
   state = null;
+  destroyPeDoc();
 };
 
 // ── 每页的指针交互 ─────────────────────────────────────────
