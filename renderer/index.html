@@ -14,6 +14,7 @@
         --accent: #5e81ac;
         --user: #2d4a63;
         --tool: #3a3a2a;
+        --ev-dock-w: 440px;
       }
       * { box-sizing: border-box; }
       body {
@@ -391,9 +392,16 @@
       #evolveModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 40; }
       #evolveModal.open { display: flex; }
       #evolveModal .box { width: 70%; max-width: 760px; height: 76%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
-      /* 停靠到右侧：不挡对话，可继续交互 */
+      /* 停靠到右侧：占据真实布局空间（仿 VS Code），不与主内容/文件查看器重叠 */
       #evolveModal.docked { inset: auto; top: 0; right: 0; bottom: 0; left: auto; background: none; justify-content: flex-end; align-items: stretch; pointer-events: none; }
-      #evolveModal.docked .box { pointer-events: auto; width: 440px; max-width: 46vw; height: 100%; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; box-shadow: -6px 0 20px rgba(0,0,0,.45); }
+      #evolveModal.docked .box { pointer-events: auto; width: var(--ev-dock-w); max-width: 80vw; height: 100%; border-radius: 0; border-top: 0; border-right: 0; border-bottom: 0; box-shadow: -6px 0 20px rgba(0,0,0,.45); }
+      /* 停靠时为右侧面板预留空间：主区域与文件查看器整体左缩 */
+      body.ev-docked { padding-right: var(--ev-dock-w); }
+      body.ev-docked #viewer { right: var(--ev-dock-w); }
+      /* 停靠面板左缘的拖动手柄：调整面板宽度 */
+      #evResizer { display: none; }
+      body.ev-docked #evResizer { display: block; position: fixed; top: 0; bottom: 0; right: var(--ev-dock-w); width: 6px; margin-right: -3px; cursor: col-resize; z-index: 42; pointer-events: auto; }
+      #evResizer:hover, #evResizer.drag { background: var(--accent); }
       /* 隐藏到一侧：只留一个还原小条 */
       #evolveModal.docked.collapsed { pointer-events: none; }
       #evolveModal.docked.collapsed .box { display: none; }
@@ -621,6 +629,7 @@
       </div>
     </div>
     <div id="evolveModal">
+      <div id="evResizer" title="拖动调整宽度"></div>
       <div class="box">
         <div class="vhead"><span data-i18n="🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）">🧬 自进化 · 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）</span><span class="ev-head-btns"><span id="evStatus"></span><button id="evDock" data-i18n-title="停靠到右侧/居中显示" title="停靠到右侧/居中显示">⇥</button><button id="evCollapse" data-i18n-title="隐藏到一侧" title="隐藏到一侧">▸</button><button id="evClose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
         <div id="evBody">

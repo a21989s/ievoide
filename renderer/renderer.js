@@ -1517,6 +1517,7 @@ evReqEl.addEventListener("drop", (e) => {
 async function runEvolve(requirement) {
   if (evolveBusy || !requirement.trim()) return;
   $("evolveModal").classList.add("open");
+  syncEvDock();
   setEvolveBusy(true);
   const attachments = evolveAttachments.slice();
   evLog("──────────\n▶ " + requirement + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
@@ -1527,29 +1528,65 @@ async function runEvolve(requirement) {
   return r;
 }
 
-// 停靠 / 隐藏 自进化面板（记忆状态，停靠后不挡对话）
+// 停靠 / 隐藏 自进化面板（记忆状态，停靠后仿 VS Code 占据真实布局空间）
+// 恢复上次拖动保存的停靠宽度
+{
+  const w = parseInt(localStorage.getItem("evolveDockW") || "0", 10);
+  if (w >= 280) document.documentElement.style.setProperty("--ev-dock-w", w + "px");
+}
+// 仅当「停靠且打开且未隐藏」时，才给 body 预留右侧空间
+function syncEvDock() {
+  const m = $("evolveModal");
+  const reserve = m.classList.contains("docked") && m.classList.contains("open") && !m.classList.contains("collapsed");
+  document.body.classList.toggle("ev-docked", reserve);
+}
 if (localStorage.getItem("evolveDocked") === "1") $("evolveModal").classList.add("docked");
 $("evolveBtn").onclick = () => {
   const m = $("evolveModal");
   m.classList.add("open");
   m.classList.remove("collapsed");
+  syncEvDock();
   loadIssues();
   loadBacklog();
   loadEvolveHistory();
 };
-$("evClose").onclick = () => $("evolveModal").classList.remove("open", "collapsed");
+$("evClose").onclick = () => { $("evolveModal").classList.remove("open", "collapsed"); syncEvDock(); };
 $("evDock").onclick = () => {
   const docked = $("evolveModal").classList.toggle("docked");
   $("evolveModal").classList.remove("collapsed");
   localStorage.setItem("evolveDocked", docked ? "1" : "0");
+  syncEvDock();
 };
 $("evCollapse").onclick = () => {
   // 隐藏需停靠态：未停靠时先切到停靠
   $("evolveModal").classList.add("docked");
   localStorage.setItem("evolveDocked", "1");
   $("evolveModal").classList.add("collapsed");
+  syncEvDock();
 };
-$("evRestore").onclick = () => $("evolveModal").classList.remove("collapsed");
+$("evRestore").onclick = () => { $("evolveModal").classList.remove("collapsed"); syncEvDock(); };
+// 拖动停靠面板左缘调整宽度
+(() => {
+  const rz = $("evResizer");
+  if (!rz) return;
+  rz.addEventListener("mousedown", (e) => {
+    e.preventDefault();
+    rz.classList.add("drag");
+    const move = (ev) => {
+      const w = Math.max(280, Math.min(window.innerWidth * 0.8, window.innerWidth - ev.clientX));
+      document.documentElement.style.setProperty("--ev-dock-w", w + "px");
+    };
+    const up = () => {
+      rz.classList.remove("drag");
+      document.removeEventListener("mousemove", move);
+      document.removeEventListener("mouseup", up);
+      const cur = getComputedStyle(document.documentElement).getPropertyValue("--ev-dock-w").trim();
+      localStorage.setItem("evolveDockW", parseInt(cur, 10) || 440);
+    };
+    document.addEventListener("mousemove", move);
+    document.addEventListener("mouseup", up);
+  });
+})();
 // 开始进化；进化进行中则改为向当前会话追加“调整方向”消息
 function evRunOrSteer() {
   const req = $("evReq").value.trim();
@@ -1578,6 +1615,7 @@ $("evStatus").onclick = async () => {
   const m = $("evolveModal");
   m.classList.add("open");
   m.classList.remove("collapsed");
+  syncEvDock();
   evLog("──────────\n📊 " + tr("状态自检") + "\n" + (await evolveStatusReport()));
 };
 
@@ -1640,6 +1678,7 @@ async function solveBacklogItem(it) {
 }
 $("evAuditBtn").onclick = async () => {
   $("evolveModal").classList.add("open");
+  syncEvDock();
   await window.api.evolveAudit();
   loadBacklog();
 };
@@ -1769,6 +1808,7 @@ window.api.on("evolve:done", (info) => {
 });
 window.api.on("evolve:rolledback", (m) => {
   $("evolveModal").classList.add("open");
+  syncEvDock();
   evLog(tr("⚠️ 上次进化导致启动异常，已自动回滚到 ") + String(m.sha || "").slice(0, 7));
 });
 window.api.on("issues:update", () => {
