@@ -1034,7 +1034,9 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     if (ensureRepo()) log("📦 未检测到 git 仓库，已自动初始化");
     try {
       gitT(["add", "-A"]);
-      gitT(["commit", "-m", "evolve: checkpoint", "--allow-empty"]);
+      // 不加 --allow-empty：无未提交改动时此 commit 会失败并被忽略，
+      // checkpoint 回退为当前 HEAD，既能用于 diff/回滚，又不会在历史里堆积空的 checkpoint 提交。
+      gitT(["commit", "-m", "evolve: checkpoint"]);
     } catch {}
     checkpoint = gitT(["rev-parse", "HEAD"]).trim();
     log(`📌 检查点 ${checkpoint.slice(0, 7)}`);
