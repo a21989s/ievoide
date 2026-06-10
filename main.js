@@ -175,6 +175,19 @@ function createWindow() {
   });
   win.loadFile(path.join(__dirname, "renderer", "index.html"));
 
+  // 拦截外链导航：marked 渲染出的 <a> 或 window.open 若指向 http(s)，会把本窗口导航走、
+  // 丢失整个应用界面。统一用系统浏览器打开，本窗口只允许停留在自身 file:// 页面。
+  win.webContents.on("will-navigate", (e, url) => {
+    if (/^https?:\/\//i.test(url)) {
+      e.preventDefault();
+      shell.openExternal(url);
+    }
+  });
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) shell.openExternal(url);
+    return { action: "deny" };
+  });
+
   // 渲染进程崩溃/被杀（最常见的"窗口突然消失→应用退出"原因）
   win.webContents.on("render-process-gone", (_e, details) => {
     crashLog("render-process-gone", `reason=${details.reason} exitCode=${details.exitCode}`);
