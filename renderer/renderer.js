@@ -2590,12 +2590,18 @@ function renderQuickbar() {
 }
 renderQuickbar();
 
-// ── 斜杠命令 / skills 补全 ─────────────────────────────────
-let slashCommands = [];
+// ── 斜杠命令 / skills / subagent 补全 ───────────────────────
+let slashCommands = []; // [{ name, kind: 'command'|'skill'|'agent' }]
 let slashMatches = [];
 let slashSel = 0;
+// 兼容旧版（纯字符串数组）与对象数组，并接受名字字符串或 {name}
+function normSlash(arr, kind = "command") {
+  return (Array.isArray(arr) ? arr : [])
+    .map((c) => (typeof c === "string" ? { name: c, kind } : { name: c && c.name, kind }))
+    .filter((c) => c.name);
+}
 try {
-  slashCommands = JSON.parse(localStorage.getItem("claudeTools.cmds") || "[]");
+  slashCommands = normSlash(JSON.parse(localStorage.getItem("claudeTools.cmds") || "[]"));
 } catch {}
 
 function updateSlash() {
@@ -2608,8 +2614,8 @@ function updateSlash() {
   }
   const q = m[1].toLowerCase();
   slashMatches = slashCommands
-    .filter((c) => c.toLowerCase().includes(q))
-    .sort((a, b) => a.toLowerCase().indexOf(q) - b.toLowerCase().indexOf(q))
+    .filter((c) => c.name.toLowerCase().includes(q))
+    .sort((a, b) => a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q))
     .slice(0, 50);
   if (!slashMatches.length) {
     popup.classList.remove("open");
@@ -2620,7 +2626,9 @@ function updateSlash() {
   slashMatches.forEach((c) => {
     const el = document.createElement("div");
     el.className = "slash-item";
-    el.innerHTML = `<span class="cmd">/${esc(c)}</span>`;
+    el.innerHTML =
+      `<span class="cmd">/${esc(c.name)}</span>` +
+      (c.kind !== "command" ? `<span class="kind">${esc(c.kind)}</span>` : "");
     el.onmousedown = (e) => {
       e.preventDefault();
       pickSlash(c);
@@ -2641,8 +2649,9 @@ function highlightSlash() {
 }
 
 function pickSlash(c) {
-  if (!c) return;
-  $("input").value = "/" + c + " ";
+  const name = typeof c === "string" ? c : c && c.name;
+  if (!name) return;
+  $("input").value = "/" + name + " ";
   $("slashPopup").classList.remove("open");
   $("input").focus();
 }
@@ -2759,9 +2768,14 @@ function finishTurn(conv, metaText, errText) {
 
 // ── 来自主进程的流式事件（按 convId 路由到对应对话，支持后台并行）──
 window.api.on("chat:init", ({ convId, model, tools, mcp, commands, skills, agents }) => {
-  // 缓存命令列表供 / 补全（含 skills），持久化以便下次启动即可用
-  if (commands && commands.length) {
-    slashCommands = commands;
+  // 合并 命令/skill/subagent 三类来源供 / 补全（带 kind 标记区分），持久化以便下次启动即可用
+  const merged = [
+    ...normSlash(commands, "command"),
+    ...normSlash(skills, "skill"),
+    ...normSlash(agents, "agent"),
+  ];
+  if (merged.length) {
+    slashCommands = merged;
     try {
       localStorage.setItem("claudeTools.cmds", JSON.stringify(slashCommands));
     } catch {}
