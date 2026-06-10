@@ -88,7 +88,25 @@ if (window.mermaid) mermaid.initialize({ startOnLoad: false, theme: "default" })
 
 function showViewer(title) {
   $("vtitle").textContent = title;
-  $("viewer").style.display = "flex";
+  const v = $("viewer");
+  v.style.display = "flex";
+  v.classList.add("open");
+}
+// 无法内联预览（Word/Excel/超大文件）时，给出「用系统默认程序打开」兜底
+function showFallback(path, msg) {
+  useBody("");
+  vbody.innerHTML = "";
+  const box = document.createElement("div");
+  box.className = "v-fallback";
+  const ic = document.createElement("div"); ic.className = "vf-ic"; ic.textContent = "📄";
+  const tip = document.createElement("div"); tip.textContent = msg;
+  const btn = document.createElement("button"); btn.className = "vf-open"; btn.textContent = tr("用系统默认程序打开");
+  btn.onclick = async () => {
+    const r = await window.api.openPath(path);
+    if (r && !r.ok) tip.textContent = tr("打开失败：") + (r.error || "");
+  };
+  box.append(ic, tip, btn);
+  vbody.appendChild(box);
 }
 function useBody(cls) {
   vframe.style.display = "none";
@@ -117,8 +135,19 @@ async function openFile(path, name) {
     return;
   }
 
+  // Word/Excel/PPT 等无法内联渲染：直接给出「用系统程序打开」兜底
+  if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) {
+    showViewer(name);
+    showFallback(path, tr("此文件类型暂不支持内联预览。"));
+    return;
+  }
+
   showViewer(name);
   const content = await window.api.readFile(path);
+
+  // 超大或二进制文件无法以文本预览时，同样给出兜底
+  if (content === "(文件过大，未显示)") { showFallback(path, tr("文件过大，无法内联预览。")); return; }
+  if (content === "(二进制文件，无法以文本预览)") { showFallback(path, tr("此文件无法以文本预览。")); return; }
 
   if (ext === "md" || ext === "markdown") {
     useBody("md");
@@ -155,9 +184,22 @@ async function openFile(path, name) {
 }
 
 $("vclose").onclick = () => {
-  $("viewer").style.display = "none";
+  const v = $("viewer");
+  v.style.display = "none";
+  v.classList.remove("open");
   vframe.removeAttribute("src"); // 卸载 PDF，释放资源
 };
+// 停靠到中间（仿 VS Code）↔ 浮窗显示：占据真实布局而非覆盖
+$("vdock").onclick = () => {
+  const docked = $("viewer").classList.toggle("docked");
+  localStorage.setItem("viewerDocked", docked ? "1" : "0");
+};
+// 恢复上次的停靠状态与宽度
+if (localStorage.getItem("viewerDocked") === "1") $("viewer").classList.add("docked");
+{
+  const w = parseInt(localStorage.getItem("viewerDockW") || "0", 10);
+  if (w >= 320) document.documentElement.style.setProperty("--view-dock-w", w + "px");
+}
 
 // ── Git 面板：仓库行 + 分支下拉 + 提交图 ───────────────────
 function esc(s) {
@@ -2267,6 +2309,14 @@ makeResizer(
   (v) => ($("sidebar").style.width = v + "px"),
   180, () => Math.min(700, innerWidth - 320),
   "claudeTools.sidebarW"
+);
+// 停靠后的文档预览宽度（拖动右缘，仿 VS Code 编辑器列）
+makeResizer(
+  $("viewerResizer"), "x",
+  () => $("viewer").getBoundingClientRect().width,
+  (v) => document.documentElement.style.setProperty("--view-dock-w", v + "px"),
+  320, () => innerWidth - $("sidebar").getBoundingClientRect().width - 360,
+  "viewerDockW"
 );
 // Source Control 面板高度（与文件树的上下分割）
 makeResizer(

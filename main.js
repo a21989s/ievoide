@@ -266,6 +266,13 @@ ipcMain.handle("openExternal", async (_e, url) => {
   if (typeof url === "string" && /^https?:\/\//i.test(url)) await shell.openExternal(url);
 });
 
+// ── 用系统默认程序打开本地文件（Word/Excel 等无法内联预览时的兜底）──
+ipcMain.handle("openPath", async (_e, p) => {
+  if (typeof p !== "string" || !p) return { ok: false, error: "无效路径" };
+  const err = await shell.openPath(p);
+  return { ok: !err, error: err || "" };
+});
+
 // ── 手机/远程端：在 App 内启动 server.mjs（同一 Wi-Fi 用手机浏览器遥控）──
 let mobileProc = null;
 const MOBILE_PORT = Number(process.env.PORT) || 8787;
@@ -478,7 +485,7 @@ function looksBinary(buf) {
 ipcMain.handle("readFile", async (_e, filePath) => {
   try {
     const stat = await fs.stat(filePath);
-    if (stat.size > 500_000) return "(文件过大，未显示)";
+    if (stat.size > 2_000_000) return "(文件过大，未显示)";
     if (BINARY_EXTS.has(path.extname(filePath).toLowerCase())) {
       return "(二进制文件，无法以文本预览)";
     }

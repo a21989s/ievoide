@@ -347,11 +347,26 @@
       .msg-attach { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
       .msg-attach img { max-width: 160px; max-height: 120px; border-radius: 6px; }
       .msg-attach .file { background: #1b1b1b; border-radius: 6px; padding: 4px 8px; font-size: 11px; font-family: ui-monospace, monospace; }
-      #viewer { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; }
+      #viewer { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 30; }
       #viewer .box { width: 76%; height: 76%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
-      #viewer .vhead { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+      #viewer .vhead { padding: 8px 12px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+      #viewer .vhead #vtitle { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .vhead-btns { display: flex; gap: 6px; flex: none; }
+      /* 停靠到中间（仿 VS Code）：占据真实布局空间，不再浮层覆盖 */
+      #viewer.docked { position: static; inset: auto; background: none; flex: 0 0 var(--view-dock-w, 52%); align-items: stretch; justify-content: stretch; min-width: 320px; }
+      #viewer.docked .box { width: 100%; height: 100%; border-radius: 0; border-top: 0; border-bottom: 0; border-left: 0; }
+      #viewerResizer { display: none; }
+      #viewer.docked.open + #viewerResizer { display: block; }
+      /* 内联兜底：无法预览时（Word/Excel/超大文件）提供「用系统程序打开」 */
+      .v-fallback { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; height: 100%; color: var(--muted); text-align: center; padding: 24px; }
+      .v-fallback .vf-ic { font-size: 40px; opacity: .7; }
+      .v-fallback .vf-open { padding: 7px 16px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; font-size: 13px; }
+      .v-fallback .vf-open:hover { filter: brightness(1.08); }
       #vclose, #evClose, #peClose { background: #add8e6; border-color: #add8e6; color: #0a3d62; }
       #vclose:hover, #evClose:hover, #peClose:hover { background: #9ccbe0; }
+      #vdock { background: var(--bg); border: 1px solid var(--border); color: var(--fg); }
+      #vdock:hover { background: rgba(127,127,127,.15); }
+      #viewer.docked #vdock { background: var(--accent); border-color: var(--accent); color: #fff; }
       #vbody { flex: 1; margin: 0; overflow: auto; padding: 16px 20px; font-size: 13px; }
       #vbody.raw { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
       #vframe { flex: 1; border: 0; width: 100%; background: #fff; }
@@ -573,6 +588,14 @@
         </div>
       </div>
       <div id="sidebarResizer" class="resizer-v" title="拖动调整宽度"></div>
+      <div id="viewer">
+        <div class="box">
+          <div class="vhead"><span id="vtitle"></span><span class="vhead-btns"><button id="vdock" data-i18n-title="停靠到中间 / 浮窗显示" title="停靠到中间 / 浮窗显示">⇥</button><button id="vclose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
+          <div id="vbody"></div>
+          <iframe id="vframe" style="display:none"></iframe>
+        </div>
+      </div>
+      <div id="viewerResizer" class="resizer-v" title="拖动调整宽度"></div>
       <div id="chatcol">
         <div id="convbar">
           <div id="convTabs"></div>
@@ -590,13 +613,6 @@
           </div>
           <button id="send" data-i18n-title="发送（Ctrl/⌘+Enter）" title="发送（Ctrl/⌘+Enter）">↑</button>
         </div>
-      </div>
-    </div>
-    <div id="viewer">
-      <div class="box">
-        <div class="vhead"><span id="vtitle"></span><button id="vclose" data-i18n-title="关闭" title="关闭">✕</button></div>
-        <div id="vbody"></div>
-        <iframe id="vframe" style="display:none"></iframe>
       </div>
     </div>
     <div id="ctxMenu"></div>

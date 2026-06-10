@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld("api", {
   saveAttachment: (payload) => ipcRenderer.invoke("saveAttachment", payload),
   savePdf: (payload) => ipcRenderer.invoke("savePdf", payload),
   openExternal: (url) => ipcRenderer.invoke("openExternal", url),
+  openPath: (p) => ipcRenderer.invoke("openPath", p),
   mobileStatus: () => ipcRenderer.invoke("mobileStatus"),
   mobileStart: () => ipcRenderer.invoke("mobileStart"),
   mobileStop: () => ipcRenderer.invoke("mobileStop"),
