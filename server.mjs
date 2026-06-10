@@ -301,7 +301,7 @@ const server = http.createServer(async (req, res) => {
         }
       } catch (err) {
         const m = String(err?.stack || err);
-        if (abort.signal.aborted && resume && /No conversation found|session id/i.test(m)) {
+        if (!abort.signal.aborted && resume && /No conversation found|session id/i.test(m)) {
           // 续接失败：起新会话重试一次
           try {
             const r2 = query({ prompt, options: { cwd: cwd || os.homedir(), permissionMode, includePartialMessages: true, systemPrompt: { type: "preset", preset: "claude_code", append: sysAppend }, abortController: abort } });
