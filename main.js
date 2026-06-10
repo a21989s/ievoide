@@ -108,6 +108,38 @@ function markLastEvolve(patch) {
   if (list[0]) { Object.assign(list[0], patch); writeEvolveHistory(list); }
 }
 
+// ── 自进化优化清单：系统自己巡检源码、给自己提出的待办需求 ─────────
+const evolveBacklogPath = () => path.join(app.getPath("userData"), "evolve-backlog.json");
+function readBacklog() {
+  try { return JSON.parse(fsSync.readFileSync(evolveBacklogPath(), "utf8")); } catch { return []; }
+}
+function writeBacklog(list) {
+  try { fsSync.writeFileSync(evolveBacklogPath(), JSON.stringify(list.slice(0, 100), null, 2)); } catch {}
+}
+// 追加巡检结果（按标题去重，已存在/已完成的不重复加），返回新增条数
+function addBacklog(items) {
+  const list = readBacklog();
+  const have = new Set(list.map((x) => (x.title || "").trim().toLowerCase()));
+  let seq = list.reduce((m, x) => Math.max(m, x.id || 0), 0);
+  let added = 0;
+  for (const it of items || []) {
+    const requirement = String((it && (it.requirement || it.title)) || "").trim();
+    let title = String((it && it.title) || requirement).trim().slice(0, 80);
+    if (!requirement || have.has(title.toLowerCase())) continue;
+    have.add(title.toLowerCase());
+    const sev = String((it && it.severity) || "medium").toLowerCase();
+    list.push({ id: ++seq, title, requirement, severity: ["high", "medium", "low"].includes(sev) ? sev : "medium", status: "open" });
+    added++;
+  }
+  writeBacklog(list);
+  return added;
+}
+function updateBacklog(id, patch) {
+  const list = readBacklog();
+  const e = list.find((x) => x.id === id);
+  if (e) { Object.assign(e, patch); writeBacklog(list); }
+}
+
 let evolveRolledBack = null;
 function bootGuard() {
   try {
@@ -764,6 +796,76 @@ ipcMain.handle("clearIssues", () => {
 });
 ipcMain.handle("getEvolveHistory", () => readEvolveHistory());
 ipcMain.handle("clearEvolveHistory", () => { writeEvolveHistory([]); return { ok: true }; });
+// 查看某次进化实际改了哪些代码：返回 git diff（检查点 → 本次提交）
+ipcMain.handle("evolveDiff", (_e, payload) => {
+  const checkpoint = payload && payload.checkpoint;
+  if (!checkpoint) return { error: "该记录无检查点，无法查看改动" };
+  try {
+    let commit = payload && payload.commit;
+    if (!commit) {
+      // 兼容未记录 commit 的旧条目：检查点之后第一个提交即本次进化的提交
+      commit = gitT(["log", "--format=%H", "--reverse", "--ancestry-path", `${checkpoint}..HEAD`])
+        .split("\n").filter(Boolean)[0] || "HEAD";
+    }
+    const stat = gitT(["diff", "--stat", checkpoint, commit]);
+    const diff = gitT(["diff", checkpoint, commit]);
+    if (!diff.trim()) return { ok: true, diff: "", stat: "", empty: true };
+    return { ok: true, diff, stat, commit };
+  } catch (err) {
+    return { error: String(err?.stderr || err).trim() };
+  }
+});
+ipcMain.handle("getEvolveBacklog", () => readBacklog());
+ipcMain.handle("clearEvolveBacklog", () => { writeBacklog([]); return { ok: true }; });
+ipcMain.handle("removeEvolveBacklog", (_e, id) => { writeBacklog(readBacklog().filter((x) => x.id !== id)); return { ok: true }; });
+ipcMain.handle("updateEvolveBacklog", (_e, { id, patch }) => { updateBacklog(id, patch || {}); return { ok: true }; });
+
+// 巡检：让 Claude 只读地审视源码，给自己提出一批具体的优化需求，写入优化清单
+let auditing = false;
+ipcMain.handle("evolveAudit", async () => {
+  if (auditing) return { error: "巡检进行中" };
+  auditing = true;
+  const send = (ch, p) => { if (win && !win.isDestroyed()) win.webContents.send(ch, p); };
+  try {
+    send("evolve:log", "🔎 巡检源码，寻找优化点…");
+    const recent = readEvolveHistory().slice(0, 12).map((h) => "- " + (h.requirement || "").split("\n")[0]).join("\n");
+    const openTitles = readBacklog().filter((x) => x.status !== "done").map((x) => "- " + x.title).join("\n");
+    const prompt =
+      "审视当前 Electron 应用「Claude Tools」的源码（main.js / preload.cjs / renderer/*），找出 3-6 个具体、可独立完成的改进点：bug、隐患、体验或性能优化。" +
+      "用 Read/Grep 查看，**不要修改任何文件**。" +
+      (recent ? `\n\n最近已做过的进化（不要重复提）：\n${recent}` : "") +
+      (openTitles ? `\n\n优化清单里已有的项（不要重复提）：\n${openTitles}` : "") +
+      '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求","severity":"high|medium|low"}。';
+    const response = query({
+      prompt,
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND } },
+    });
+    let text = "";
+    for await (const msg of response) {
+      if (msg.type === "assistant")
+        for (const b of msg.message.content) {
+          if (b.type === "text") text += b.text;
+          else if (b.type === "tool_use") send("evolve:log", `🔧 ${b.name}`);
+        }
+    }
+    const m = text.match(/\[[\s\S]*\]/);
+    let items = [];
+    try { items = JSON.parse(m ? m[0] : text); } catch {}
+    if (!Array.isArray(items) || !items.length) {
+      send("evolve:log", "⚠️ 巡检未解析出优化点");
+      return { error: "未解析出优化点" };
+    }
+    const added = addBacklog(items);
+    send("evolve:backlog", readBacklog());
+    send("evolve:log", `📋 巡检完成，新增 ${added} 个优化点`);
+    return { ok: true, added };
+  } catch (err) {
+    return { error: String(err?.stack || err) };
+  } finally {
+    auditing = false;
+  }
+});
+
 ipcMain.on("evolveStop", () => evolveAbort?.abort());
 // 进化进行中追加一条“调整方向”消息（流式输入，下一轮会纳入上下文）
 ipcMain.on("evolveSteer", (_e, text) => {
@@ -894,6 +996,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     // 5) 提交并应用
     gitT(["add", "-A"]);
     gitT(["commit", "-m", `evolve: ${requirement.slice(0, 60)}`]);
+    const commit = gitT(["rev-parse", "HEAD"]).trim(); // 本次进化的提交，供“查看改动”精确取 diff
     const needRelaunch = changed.some((f) => f === "main.js" || f === "preload.cjs");
     evolving = false;
 
@@ -903,7 +1006,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     if (!appConfig.evolveAutoRestart) {
       if (needRelaunch)
         fsSync.writeFileSync(markerPath(), JSON.stringify({ status: "pending", sha: checkpoint }));
-      recordEvolve({ requirement, checkpoint, summary, changed, status: "applied" });
+      recordEvolve({ requirement, checkpoint, commit, summary, changed, status: "applied" });
       log(needRelaunch
         ? "✅ 已提交主进程改动，下次重启生效（不打断进化）"
         : "✅ 已提交渲染层改动，下次重载生效（不打断进化）");
@@ -913,12 +1016,12 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
 
     if (needRelaunch) {
       fsSync.writeFileSync(markerPath(), JSON.stringify({ status: "pending", sha: checkpoint }));
-      recordEvolve({ requirement, checkpoint, summary, changed, status: "relaunch" });
+      recordEvolve({ requirement, checkpoint, commit, summary, changed, status: "relaunch" });
       log("🔄 改动涉及主进程，重启自检中…（崩溃将自动回滚）");
       send("evolve:done", { ok: true, relaunch: true, changed, summary });
       setTimeout(() => { app.relaunch(); app.exit(0); }, 900);
     } else {
-      recordEvolve({ requirement, checkpoint, summary, changed, status: "applied" });
+      recordEvolve({ requirement, checkpoint, commit, summary, changed, status: "applied" });
       log("🔄 重载界面并自检（8s 内无心跳将回滚）…");
       clearTimeout(healthTimer);
       evolveHealthPending = checkpoint;

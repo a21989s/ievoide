@@ -412,6 +412,19 @@
       #evIssues { max-height: 120px; overflow: auto; }
       #evIssues .iss { padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; font-family: ui-monospace, monospace; color: #e08a8a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       #evIssues .iss:hover { background: #2a2d2e; }
+      #evBacklog { max-height: 150px; overflow: auto; }
+      #evBacklog .bk { display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 4px; font-size: 11px; }
+      #evBacklog .bk:hover { background: #2a2d2e; }
+      #evBacklog .bk.done { opacity: .45; }
+      #evBacklog .bk.doing { background: #1e2e3a; }
+      #evBacklog .bk .bk-sev { flex-shrink: 0; width: 7px; height: 7px; border-radius: 50%; background: #888; }
+      #evBacklog .bk.sev-high .bk-sev { background: #e06464; }
+      #evBacklog .bk.sev-medium .bk-sev { background: #d6b35a; }
+      #evBacklog .bk.sev-low .bk-sev { background: #5a9bd4; }
+      #evBacklog .bk .bk-title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #ddd; }
+      #evBacklog .bk .bk-act { flex-shrink: 0; cursor: pointer; opacity: .6; padding: 0 3px; }
+      #evBacklog .bk .bk-act:hover { opacity: 1; }
+      #evBacklog .bk-empty { padding: 6px 8px; font-size: 11px; color: #666; }
       #evHistory { max-height: 150px; overflow: auto; }
       #evHistory .evh { padding: 5px 8px; border-radius: 4px; cursor: pointer; font-size: 11px; border-left: 2px solid transparent; }
       #evHistory .evh:hover { background: #2a2d2e; }
@@ -427,6 +440,19 @@
       #evHistory .evh.bad .evh-badge { background: #3a1e1e; color: #e08a8a; }
       #evHistory .evh.neutral .evh-badge { background: #2a2a2a; color: #aaa; }
       #evLog { flex: 1; overflow: auto; background: #141414; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
+      #evHistory .evh .evh-diff { flex-shrink: 0; padding: 0 5px; border-radius: 3px; cursor: pointer; opacity: .65; }
+      #evHistory .evh .evh-diff:hover { opacity: 1; background: rgba(127,127,127,.2); }
+      /* 查看改动 diff 浮层 */
+      #evDiffModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 50; }
+      #evDiffModal.open { display: flex; }
+      #evDiffModal .box { width: 78%; max-width: 980px; height: 82%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
+      #evDiffStat { padding: 8px 12px; font-size: 11px; font-family: ui-monospace, monospace; color: var(--muted); white-space: pre-wrap; border-bottom: 1px solid var(--border); max-height: 120px; overflow: auto; }
+      #evDiffStat:empty { display: none; }
+      #evDiffBody { flex: 1; overflow: auto; background: #141414; margin: 0; padding: 12px; font-size: 12px; font-family: ui-monospace, monospace; white-space: pre; line-height: 1.45; }
+      #evDiffBody .d-add { color: #6dca9f; }
+      #evDiffBody .d-del { color: #e08a8a; }
+      #evDiffBody .d-hunk { color: #5a9bd4; }
+      #evDiffBody .d-file { color: #d6b35a; font-weight: bold; }
       /* ── PDF 编辑器 ── */
       #pdfeditor { position: fixed; inset: 0; background: #2b2b2b; display: none; flex-direction: column; z-index: 20; }
       .pe-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
@@ -600,7 +626,10 @@
               <option value="3600000" selected data-i18n="每 1 小时">每 1 小时</option>
               <option value="10800000" data-i18n="每 3 小时">每 3 小时</option>
             </select>
+            <label><input type="checkbox" id="evContinuous" /> <span data-i18n="持续进化（自动巡检并逐条解决）">持续进化（自动巡检并逐条解决）</span></label>
           </div>
+          <div class="ev-sub"><span data-i18n="优化清单">优化清单</span> <span class="sc-n" id="evBacklogN">0</span><span class="sc-grp-act" id="evAuditBtn" data-i18n-title="立即巡检源码、寻找优化点" title="立即巡检源码、寻找优化点">🔎</span><span class="sc-grp-act" id="evClearBacklog" data-i18n-title="清空" title="清空">🗑</span></div>
+          <div id="evBacklog"></div>
           <div class="ev-sub"><span data-i18n="问题清单">问题清单</span> <span class="sc-n" id="evIssueN">0</span><span class="sc-grp-act" id="evClearIssues" data-i18n-title="清空" title="清空">🗑</span></div>
           <div id="evIssues"></div>
           <div class="ev-sub"><span data-i18n="进化记录">进化记录</span> <span class="sc-n" id="evHistN">0</span><span class="sc-grp-act" id="evClearHist" data-i18n-title="清空" title="清空">🗑</span></div>
@@ -611,6 +640,13 @@
       </div>
     </div>
     <button id="evRestore" data-i18n-title="展开自进化" title="展开自进化">🧬</button>
+    <div id="evDiffModal">
+      <div class="box">
+        <div class="vhead"><span id="evDiffTitle" data-i18n="🔍 查看改动">🔍 查看改动</span><span class="ev-head-btns"><button id="evDiffClose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
+        <div id="evDiffStat"></div>
+        <pre id="evDiffBody"></pre>
+      </div>
+    </div>
     <div id="pdfeditor">
       <div class="pe-toolbar">
         <button data-tool="select" class="active" data-i18n-title="选择" title="选择">↖</button>

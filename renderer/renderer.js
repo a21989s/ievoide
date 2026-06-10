@@ -1486,8 +1486,10 @@ async function runEvolve(requirement) {
   const attachments = evolveAttachments.slice();
   evLog("──────────\n▶ " + requirement + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
   const r = await window.api.evolve({ requirement, attachments });
-  // evolve:done 事件会兜底设状态；这里只处理立即错误
-  if (r && r.error && !r.relaunch) setEvolveBusy(false);
+  // evolve:done 事件通常会兜底设状态；但无改动等分支不发该事件，这里据返回值兜底，
+  // 避免忙状态卡死（也让持续进化能据返回值推进下一条）。relaunch 会重启，无需处理。
+  if (!(r && r.relaunch)) setEvolveBusy(false);
+  return r;
 }
 
 // 停靠 / 隐藏 自进化面板（记忆状态，停靠后不挡对话）
@@ -1497,6 +1499,7 @@ $("evolveBtn").onclick = () => {
   m.classList.add("open");
   m.classList.remove("collapsed");
   loadIssues();
+  loadBacklog();
   loadEvolveHistory();
 };
 $("evClose").onclick = () => $("evolveModal").classList.remove("open", "collapsed");
@@ -1554,6 +1557,83 @@ async function loadIssues() {
 }
 $("evClearIssues").onclick = async () => { await window.api.clearIssues(); loadIssues(); };
 
+// 优化清单：系统自己巡检源码、给自己提出的待办需求；可逐条解决，也可“持续进化”自动跑通
+async function loadBacklog() {
+  const list = (await window.api.getEvolveBacklog()) || [];
+  $("evBacklogN").textContent = list.filter((x) => x.status === "open" || x.status === "doing").length;
+  const el = $("evBacklog");
+  el.innerHTML = "";
+  if (!list.length) {
+    const e = document.createElement("div");
+    e.className = "bk-empty";
+    e.textContent = tr("点 🔎 巡检源码，自动找出可优化点；或勾选「持续进化」让它不停地自我改进");
+    el.appendChild(e);
+    return;
+  }
+  list.slice(0, 40).forEach((it) => {
+    const d = document.createElement("div");
+    const stCls = it.status === "done" ? " done" : it.status === "doing" ? " doing" : it.status === "skipped" ? " skipped" : "";
+    d.className = "bk sev-" + (it.severity || "medium") + stCls;
+    d.innerHTML =
+      `<span class="bk-sev"></span><span class="bk-title"></span>` +
+      `<span class="bk-act bk-run" data-i18n-title="解决这一条" title="解决这一条">▶</span>` +
+      `<span class="bk-act bk-del" data-i18n-title="移除" title="移除">✕</span>`;
+    d.querySelector(".bk-title").textContent = it.title;
+    d.title = it.requirement + (it.status && it.status !== "open" ? "\n[" + it.status + "]" : "");
+    d.querySelector(".bk-run").onclick = () => solveBacklogItem(it);
+    d.querySelector(".bk-del").onclick = async () => { await window.api.removeEvolveBacklog(it.id); loadBacklog(); };
+    el.appendChild(d);
+  });
+}
+// 解决一条优化项：标记 doing → 进化 → 据结果标记 done/skipped
+async function solveBacklogItem(it) {
+  if (evolveBusy) return;
+  await window.api.updateEvolveBacklog(it.id, { status: "doing" });
+  loadBacklog();
+  const r = await runEvolve(it.requirement);
+  const solved = r && !r.error && !r.stopped;
+  await window.api.updateEvolveBacklog(it.id, { status: solved ? "done" : "skipped" });
+  loadBacklog();
+  return solved;
+}
+$("evAuditBtn").onclick = async () => {
+  $("evolveModal").classList.add("open");
+  await window.api.evolveAudit();
+  loadBacklog();
+};
+$("evClearBacklog").onclick = async () => { await window.api.clearEvolveBacklog(); loadBacklog(); };
+window.api.on("evolve:backlog", () => loadBacklog());
+
+// 持续进化：空闲时自动取一条优化项解决；清单空了就巡检补充——形成不停的自我改进循环
+let _continuousTimer = null;
+async function continuousTick() {
+  if (!$("evContinuous").checked) return;
+  if (evolveBusy) { _continuousTimer = setTimeout(continuousTick, 10000); return; }
+  let list = (await window.api.getEvolveBacklog()) || [];
+  let next = list.find((x) => x.status === "open");
+  if (!next) {
+    evLog(tr("🔄 持续进化：清单已空，巡检源码补充优化点…"));
+    await window.api.evolveAudit();
+    list = (await window.api.getEvolveBacklog()) || [];
+    next = list.find((x) => x.status === "open");
+    if (!next) { // 巡检也没产出，过一阵再试，避免空转
+      if ($("evContinuous").checked) _continuousTimer = setTimeout(continuousTick, 60000);
+      return;
+    }
+  }
+  await solveBacklogItem(next);
+  if ($("evContinuous").checked) _continuousTimer = setTimeout(continuousTick, 6000);
+}
+function applyContinuous(initialDelay) {
+  clearTimeout(_continuousTimer);
+  try { localStorage.setItem("claudeTools.evContinuous", $("evContinuous").checked ? "1" : ""); } catch {}
+  if ($("evContinuous").checked) {
+    evLog(tr("🧬 持续进化已开启：自动巡检并逐条解决优化点"));
+    _continuousTimer = setTimeout(continuousTick, initialDelay || 3000);
+  }
+}
+$("evContinuous").onchange = () => applyContinuous();
+
 // 进化记录（最近几次，供参考）
 const EVOLVE_STATUS = {
   applied:    { cls: "ok",      label: "✔ 已应用" },
@@ -1579,9 +1659,13 @@ async function loadEvolveHistory() {
       h.checkpoint ? "📌 " + String(h.checkpoint).slice(0, 7) : "",
       h.reason || "",
     ].filter(Boolean).join("  ·  ");
+    // 仅成功落地的进化才有可查看的持久 diff（已回滚/无改动的不显示）
+    const canDiff = h.checkpoint && (h.status === "applied" || h.status === "relaunch");
     d.innerHTML =
       `<div class="evh-top"><span class="evh-badge">${tr(st.label)}</span>` +
-      `<span class="evh-req"></span><span class="evh-time"></span></div>` +
+      `<span class="evh-req"></span>` +
+      (canDiff ? `<span class="evh-diff" data-i18n-title="查看本次改动的代码 diff" title="查看本次改动的代码 diff">🔍</span>` : "") +
+      `<span class="evh-time"></span></div>` +
       (meta ? `<div class="evh-meta"></div>` : "");
     d.querySelector(".evh-req").textContent = req;
     d.querySelector(".evh-time").textContent = t;
@@ -1593,10 +1677,41 @@ async function loadEvolveHistory() {
       h.error ? "\n错误：" + h.error : "",
     ].join("");
     d.onclick = () => { $("evReq").value = h.requirement || ""; };
+    if (canDiff) {
+      d.querySelector(".evh-diff").onclick = (e) => { e.stopPropagation(); showEvolveDiff(h, req); };
+    }
     el.appendChild(d);
   });
 }
 $("evClearHist").onclick = async () => { await window.api.clearEvolveHistory(); loadEvolveHistory(); };
+
+// 查看某次进化实际改了哪些代码：拉取 git diff 并按行高亮展示
+function renderDiff(text) {
+  const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text.split("\n").map((line) => {
+    let cls = "";
+    if (line.startsWith("+++") || line.startsWith("---")) cls = "d-file";
+    else if (line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("new file") || line.startsWith("deleted file") || line.startsWith("rename ")) cls = "d-file";
+    else if (line.startsWith("@@")) cls = "d-hunk";
+    else if (line.startsWith("+")) cls = "d-add";
+    else if (line.startsWith("-")) cls = "d-del";
+    return cls ? `<span class="${cls}">${esc(line)}</span>` : esc(line);
+  }).join("\n");
+}
+async function showEvolveDiff(h, req) {
+  const modal = $("evDiffModal");
+  $("evDiffTitle").textContent = "🔍 " + tr("查看改动") + (req ? "：" + req : "");
+  $("evDiffStat").textContent = "";
+  $("evDiffBody").textContent = tr("加载中…");
+  modal.classList.add("open");
+  const r = await window.api.evolveDiff({ checkpoint: h.checkpoint, commit: h.commit });
+  if (!r || r.error) { $("evDiffBody").textContent = tr("✖ 无法获取改动：") + ((r && r.error) || "?"); return; }
+  if (r.empty || !r.diff) { $("evDiffBody").textContent = tr("（本次未产生代码改动）"); return; }
+  if (r.stat) $("evDiffStat").textContent = r.stat.trim();
+  $("evDiffBody").innerHTML = renderDiff(r.diff);
+}
+$("evDiffClose").onclick = () => $("evDiffModal").classList.remove("open");
+$("evDiffModal").onclick = (e) => { if (e.target.id === "evDiffModal") $("evDiffModal").classList.remove("open"); };
 
 // 进化事件
 window.api.on("evolve:log", (t) => evLog(t));
@@ -1661,9 +1776,14 @@ try {
   if (localStorage.getItem("claudeTools.evPeriodic")) $("evPeriodic").checked = true;
   const iv = localStorage.getItem("claudeTools.evInterval");
   if (iv) $("evInterval").value = iv;
+  if (localStorage.getItem("claudeTools.evContinuous")) {
+    $("evContinuous").checked = true;
+    applyContinuous(15000); // 启动后稍等再续跑，避开启动自检/回滚抢跑
+  }
 } catch {}
 applyPeriodic();
 loadIssues();
+loadBacklog();
 loadEvolveHistory();
 
 // ── 需求驱动开发：左侧「需求」视图，逐条让右侧分析并修改代码 ──
