@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("api", {
   packAll: (mode) => ipcRenderer.invoke("packAll", mode),
   evolve: (payload) => ipcRenderer.invoke("evolve", payload),
   evolveStop: () => ipcRenderer.send("evolveStop"),
+  evolveSteer: (text) => ipcRenderer.send("evolveSteer", text),
   evolveAlive: () => ipcRenderer.send("evolveAlive"),
   getIssues: () => ipcRenderer.invoke("getIssues"),
   getCrashLog: () => ipcRenderer.invoke("getCrashLog"),

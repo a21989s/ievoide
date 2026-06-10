@@ -705,6 +705,7 @@ ipcMain.handle("packAll", async (_e, mode = "full") => {
 // ── 自进化引擎：改自己的源码并安全应用 ────────────────────────
 let evolving = false;
 let evolveAbort = null;
+let evolveSteer = null; // 进化进行中时挂载：向当前会话追加“调整方向”的消息
 let evolveHealthPending = null; // 仅渲染层重载时的待确认检查点
 let healthTimer = null;
 
@@ -742,6 +743,10 @@ ipcMain.handle("clearIssues", () => {
 ipcMain.handle("getEvolveHistory", () => readEvolveHistory());
 ipcMain.handle("clearEvolveHistory", () => { writeEvolveHistory([]); return { ok: true }; });
 ipcMain.on("evolveStop", () => evolveAbort?.abort());
+// 进化进行中追加一条“调整方向”消息（流式输入，下一轮会纳入上下文）
+ipcMain.on("evolveSteer", (_e, text) => {
+  if (evolveSteer && typeof text === "string" && text.trim()) evolveSteer.push(text.trim());
+});
 ipcMain.on("evolveAlive", () => {
   // 渲染层加载成功的心跳
   try {
@@ -785,8 +790,29 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
       attachNote = `\n\n参考附件（用 Read 工具查看，图片可直接识别）：\n${files.map((f) => "- " + f).join("\n")}`;
       log("📎 附件：" + files.map((f) => path.basename(f)).join(", "));
     }
+    // 流式输入：首条是需求；进化期间用户可经 evolveSteer 追加“调整方向”消息，
+    // 它们会在下一轮被纳入上下文。一轮结束且无待处理消息时收尾、结束输入流。
+    const userMsg = (text) => ({
+      type: "user", message: { role: "user", content: text }, parent_tool_use_id: null,
+    });
+    const steer = { queue: [], wake: null, done: false };
+    evolveSteer = {
+      push: (text) => {
+        steer.queue.push(text);
+        log("↳ 调整方向：" + text.split("\n")[0].slice(0, 120));
+        if (steer.wake) { steer.wake(); steer.wake = null; }
+      },
+    };
+    const inputStream = (async function* () {
+      yield userMsg(`需求/问题：\n${requirement}${attachNote}\n\n请直接修改源码实现它（用 Read/Grep 定位，Edit/Write 修改）。`);
+      while (true) {
+        if (steer.queue.length) { yield userMsg(steer.queue.shift()); continue; }
+        if (steer.done || abort.signal.aborted) return;
+        await new Promise((res) => { steer.wake = res; });
+      }
+    })();
     const response = query({
-      prompt: `需求/问题：\n${requirement}${attachNote}\n\n请直接修改源码实现它（用 Read/Grep 定位，Edit/Write 修改）。`,
+      prompt: inputStream,
       options: {
         cwd: TOOLS_DIR,
         permissionMode: "bypassPermissions",
@@ -801,6 +827,10 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
           if (b.type === "text") { summary += b.text; log(b.text); }
           else if (b.type === "tool_use") log(`🔧 ${b.name}`);
         }
+      else if (msg.type === "result") {
+        // 本轮结束：没有待追加的调整消息则收尾结束输入流；否则继续下一轮
+        if (!steer.queue.length) { steer.done = true; if (steer.wake) { steer.wake(); steer.wake = null; } }
+      }
     }
 
     // 3) 改了哪些文件
@@ -864,6 +894,8 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     recordEvolve({ requirement, status: "error", error: m });
     send("evolve:done", { error: m });
     return { error: m };
+  } finally {
+    evolveSteer = null; // 进化结束（成功/回滚/中止/出错）后停止接受方向调整
   }
 });
 

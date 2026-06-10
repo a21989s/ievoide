@@ -1312,7 +1312,10 @@ function evLog(t) {
 }
 function setEvolveBusy(b) {
   evolveBusy = b;
-  $("evRun").disabled = b;
+  // 进化进行中：开始按钮变为“调整方向”，仍可向当前会话追加 update 消息
+  const run = $("evRun");
+  run.textContent = b ? tr("↳ 调整方向") : tr("开始");
+  run.title = b ? tr("向进行中的进化追加方向调整（Ctrl+Enter）") : "";
   $("evStop").disabled = !b;
 }
 // 附件（图片/文档），路径数组
@@ -1405,10 +1408,28 @@ $("evCollapse").onclick = () => {
   $("evolveModal").classList.add("collapsed");
 };
 $("evRestore").onclick = () => $("evolveModal").classList.remove("collapsed");
-$("evRun").onclick = () => {
+// 开始进化；进化进行中则改为向当前会话追加“调整方向”消息
+function evRunOrSteer() {
   const req = $("evReq").value.trim();
-  if (req) { runEvolve(req); $("evReq").value = ""; evolveAttachments = []; renderAttachments(); }
-};
+  if (!req) return;
+  if (evolveBusy) {
+    window.api.evolveSteer(req);
+    $("evReq").value = "";
+  } else {
+    runEvolve(req);
+    $("evReq").value = "";
+    evolveAttachments = [];
+    renderAttachments();
+  }
+}
+$("evRun").onclick = evRunOrSteer;
+// Ctrl/Cmd+Enter 快捷触发（开始 / 调整方向）
+$("evReq").addEventListener("keydown", (e) => {
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+    e.preventDefault();
+    evRunOrSteer();
+  }
+});
 $("evStop").onclick = () => window.api.evolveStop();
 
 // 问题清单
