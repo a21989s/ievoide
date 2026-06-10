@@ -1704,10 +1704,20 @@ function renderReqs() {
         }).join("") +
         `</div>`
       : "";
+    const canRetry = r.status === "done" || r.status === "failed";
     el.innerHTML =
       `<span class="req-ic">${ic}</span>` +
       `<div class="req-text">${esc(r.text)}${attsHtml}${linksHtml}</div>` +
+      (canRetry ? `<span class="req-retry" title="${tr("重新执行")}">↻</span>` : "") +
       `<span class="req-del" title="${tr("删除")}">×</span>`;
+    const retryEl = el.querySelector(".req-retry");
+    if (retryEl) retryEl.onclick = (e) => {
+      e.stopPropagation();
+      r.status = "pending"; // 重新排队；运行中会自动衔接，否则点「开始处理」
+      renderReqs();
+      persistReqs();
+      if (reqRunning) pumpReqs();
+    };
     el.querySelectorAll(".req-link").forEach((ln) => {
       ln.onclick = (e) => {
         e.stopPropagation();
