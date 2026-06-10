@@ -823,6 +823,9 @@ ipcMain.handle("acctSwitch", async (_e, email) => {
     const tmp = `${CLAUDE_JSON}.${process.pid}.tmp`;
     fsSync.writeFileSync(tmp, JSON.stringify(cj, null, 2));
     fsSync.renameSync(tmp, CLAUDE_JSON);
+    // 切换账号后立即作废用量缓存与进行中的探测，避免界面在 USAGE_TTL 内仍显示上一个账号的旧用量
+    usageCache = { ts: 0, value: null };
+    usageInflight = null;
     return { ok: true, email };
   } catch (err) {
     return { error: String(err?.message || err) };
