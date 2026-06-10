@@ -46,7 +46,8 @@
         font-size: 12px;
       }
       button:disabled { opacity: 0.5; cursor: default; }
-      #send { width: 32px; height: 32px; padding: 0; border-radius: 50%; font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: flex-end; }
+      #send { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: flex-end; background: #4a4a4a; }
+      #send:hover:not(:disabled) { background: var(--accent); }
       .folder { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .usage { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; white-space: nowrap; }
       .usage:hover { color: var(--fg); border-color: var(--accent); }
