@@ -728,7 +728,6 @@ function renderConvList() {
 }
 
 $("newconv").onclick = newConversation;
-$("newsession").onclick = newConversation;
 
 // 启动：优先从磁盘恢复对话历史，回退 localStorage（迁移旧数据）
 (async function initConvs() {
