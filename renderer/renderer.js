@@ -1,4 +1,23 @@
 const $ = (id) => document.getElementById(id);
+// 拖拽附件工厂：高亮 dragover，drop 时把文件逐个交给 onFiles
+function setupDropZone(el, onFiles) {
+  ["dragenter", "dragover"].forEach((ev) =>
+    el.addEventListener(ev, (e) => {
+      e.preventDefault();
+      el.classList.add("dragover");
+    })
+  );
+  ["dragleave", "drop"].forEach((ev) =>
+    el.addEventListener(ev, (e) => {
+      e.preventDefault();
+      if (ev === "dragleave" && el.contains(e.relatedTarget)) return;
+      el.classList.remove("dragover");
+    })
+  );
+  el.addEventListener("drop", (e) => {
+    [...(e.dataTransfer?.files || [])].forEach(onFiles);
+  });
+}
 const chat = $("chat");
 
 // 状态栏延时清空：仅在 ms 后该消息仍是当前显示内容时才清空，
@@ -898,24 +917,7 @@ $("input").addEventListener("paste", (e) => {
   }
 });
 // 拖拽
-const bar = $("inputbar");
-["dragenter", "dragover"].forEach((ev) =>
-  bar.addEventListener(ev, (e) => {
-    e.preventDefault();
-    bar.classList.add("dragover");
-  })
-);
-["dragleave", "drop"].forEach((ev) =>
-  bar.addEventListener(ev, (e) => {
-    e.preventDefault();
-    if (ev === "dragleave" && bar.contains(e.relatedTarget)) return;
-    bar.classList.remove("dragover");
-  })
-);
-bar.addEventListener("drop", (e) => {
-  const files = [...(e.dataTransfer?.files || [])];
-  files.forEach(addAttachment);
-});
+setupDropZone($("inputbar"), addAttachment);
 
 function send() {
   const input = $("input");
@@ -1584,21 +1586,7 @@ $("evReq").addEventListener("paste", (e) => {
   }
 });
 // 拖入图片/文档
-const evReqEl = $("evReq");
-["dragenter", "dragover"].forEach((ev) =>
-  evReqEl.addEventListener(ev, (e) => { e.preventDefault(); evReqEl.classList.add("dragover"); })
-);
-["dragleave", "drop"].forEach((ev) =>
-  evReqEl.addEventListener(ev, (e) => {
-    e.preventDefault();
-    if (ev === "dragleave" && evReqEl.contains(e.relatedTarget)) return;
-    evReqEl.classList.remove("dragover");
-  })
-);
-evReqEl.addEventListener("drop", (e) => {
-  const files = [...(e.dataTransfer?.files || [])];
-  files.forEach(addEvolveFile);
-});
+setupDropZone($("evReq"), addEvolveFile);
 
 async function runEvolve(requirement) {
   if (evolveBusy || !requirement.trim()) return;
@@ -2257,20 +2245,7 @@ $("reqInput").addEventListener("paste", (e) => {
   const files = [...(e.clipboardData?.files || [])];
   if (files.length) { e.preventDefault(); files.forEach(addReqAttachment); }
 });
-const reqBar = document.querySelector(".req-inputbar");
-["dragenter", "dragover"].forEach((ev) =>
-  reqBar.addEventListener(ev, (e) => { e.preventDefault(); reqBar.classList.add("dragover"); })
-);
-["dragleave", "drop"].forEach((ev) =>
-  reqBar.addEventListener(ev, (e) => {
-    e.preventDefault();
-    if (ev === "dragleave" && reqBar.contains(e.relatedTarget)) return;
-    reqBar.classList.remove("dragover");
-  })
-);
-reqBar.addEventListener("drop", (e) => {
-  [...(e.dataTransfer?.files || [])].forEach(addReqAttachment);
-});
+setupDropZone(document.querySelector(".req-inputbar"), addReqAttachment);
 $("reqStart").onclick = startReqs;
 $("reqStop").onclick = stopReqs;
 $("reqClear").onclick = () => {
