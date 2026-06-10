@@ -870,7 +870,7 @@ function rollback(sha) {
   } catch {}
 }
 const EVOLVE_APPEND =
-  "你正在改进你自己所在的 Electron 桌面应用「Claude Tools」，源码就在当前工作目录。结构：main.js=Electron 主进程(所有 IPC/git/SDK 调用)；preload.cjs=contextBridge 暴露 window.api；renderer/index.html+renderer.js=界面与逻辑；renderer/pdfeditor.js=PDF 编辑器。务必：① 改完保证应用能正常启动与加载、不破坏现有功能；② 只改必要文件、与周围代码风格一致；③ 不要运行 npm start 或重启应用（宿主会自动重载/重启并自检）。最后用简体中文一句话说明你改了什么。";
+  "你正在改进你自己所在的 Electron 桌面应用「Claude Tools」，源码就在当前工作目录。结构：main.js=Electron 主进程(所有 IPC/git/SDK 调用)；preload.cjs=contextBridge 暴露 window.api；renderer/index.html+renderer.js=界面与逻辑；renderer/pdfeditor.js=PDF 编辑器。本产品定位是面向开发与日常文档维护的工具集，进化的总目标是让它更【易用、易组装搭配、简洁】，请让每次改动都朝这个方向推进。务必：① 改完保证应用能正常启动与加载、不破坏现有功能；② 只改必要文件、与周围代码风格一致；③ 不要运行 npm start 或重启应用（宿主会自动重载/重启并自检）。最后用简体中文一句话说明你改了什么。";
 
 ipcMain.handle("getIssues", () => issues);
 ipcMain.handle("clearIssues", () => {
@@ -918,7 +918,13 @@ ipcMain.handle("evolveAudit", async () => {
     const recent = readEvolveHistory().slice(0, 12).map((h) => "- " + (h.requirement || "").split("\n")[0]).join("\n");
     const openTitles = readBacklog().filter((x) => x.status !== "done").map((x) => "- " + x.title).join("\n");
     const prompt =
-      "审视当前 Electron 应用「Claude Tools」的源码（main.js / preload.cjs / renderer/*），找出 3-6 个具体、可独立完成的改进点：bug、隐患、体验或性能优化。" +
+      "审视当前 Electron 应用「Claude Tools」的源码（main.js / preload.cjs / renderer/*），找出 3-6 个具体、可独立完成的改进点。" +
+      "本产品定位是面向开发与日常文档维护的工具集，自进化的总目标是让它更【易用、易组装搭配、简洁】。" +
+      "因此除了 bug、隐患、体验或性能优化外，请优先考虑能提升以下方面的改进：" +
+      "① 易用性（上手简单、交互直观、减少操作步骤、降低认知负担）；" +
+      "② 易组装与搭配（功能模块化、可灵活组合、便于与其他工具/工作流衔接）；" +
+      "③ 简洁（界面与代码精简、去除冗余、降低复杂度）；" +
+      "④ 作为开发工具与文档维护工具的实用性与完整度。" +
       "用 Read/Grep 查看，**不要修改任何文件**。" +
       (recent ? `\n\n最近已做过的进化（不要重复提）：\n${recent}` : "") +
       (openTitles ? `\n\n优化清单里已有的项（不要重复提）：\n${openTitles}` : "") +
