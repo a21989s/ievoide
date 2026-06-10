@@ -1842,7 +1842,7 @@ function renderCmdk(q) {
     const token = ++cmdkFileToken;
     window.api.searchFiles(ql).then((files) => {
       if (token !== cmdkFileToken || !$("cmdkModal").classList.contains("open")) return;
-      const fileItems = (files || []).slice(0, 8).map((f) => ({
+      const fileItems = (files || []).filter((f) => !f.dir).slice(0, 8).map((f) => ({
         kind: "file", ic: "📄", label: f.rel, hint: tr("打开"),
         run: () => openFile(f.path, f.name),
       }));
@@ -3170,7 +3170,9 @@ async function updateMention() {
   fileMatches.forEach((f) => {
     const el = document.createElement("div");
     el.className = "slash-item";
-    el.innerHTML = `<span class="cmd">${esc(f.name)}</span><span class="rel">${esc(f.rel)}</span>`;
+    // 目录条目用尾斜杠 + 📁 区分：选中后插入 @相对目录/，让模型把整个目录纳入上下文
+    const label = f.dir ? "📁 " + f.name + "/" : f.name;
+    el.innerHTML = `<span class="cmd">${esc(label)}</span><span class="rel">${esc(f.rel)}</span>`;
     el.onmousedown = (e) => {
       e.preventDefault();
       pickFile(f);
@@ -3194,7 +3196,7 @@ function pickFile(f) {
   if (!f || mentionStart < 0) return;
   const input = $("input");
   const caret = input.selectionStart;
-  const ref = "@" + f.rel + " ";
+  const ref = "@" + f.rel + (f.dir ? "/ " : " ");
   input.value = input.value.slice(0, mentionStart) + ref + input.value.slice(caret);
   const pos = mentionStart + ref.length;
   input.setSelectionRange(pos, pos);

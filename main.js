@@ -435,7 +435,9 @@ async function listWorkdirFiles() {
   if (fileCache.dir === workdir && fileCache.list && now - fileCache.time < FILE_CACHE_TTL) {
     return fileCache.list;
   }
+  fileCache.dirs = null;
   const all = [];
+  const dirs = []; // 目录条目，供 @ 补全把整个目录纳入上下文
   const visited = new Set(); // 已访问目录的真实路径，防符号链接自指/环路重复遍历
   async function walk(dir) {
     if (all.length >= FILE_CACHE_MAX) return;
@@ -458,6 +460,8 @@ async function listWorkdirFiles() {
       if (d.name.startsWith(".") || IGNORE.has(d.name)) continue;
       const full = path.join(dir, d.name);
       if (d.isDirectory()) {
+        const rel = path.relative(workdir, full).replace(/\\/g, "/");
+        dirs.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
         await walk(full);
       } else {
         const rel = path.relative(workdir, full).replace(/\\/g, "/");
@@ -466,7 +470,7 @@ async function listWorkdirFiles() {
     }
   }
   await walk(workdir);
-  fileCache = { dir: workdir, list: all, time: now };
+  fileCache = { dir: workdir, list: all, dirs, time: now };
   return all;
 }
 
@@ -474,7 +478,15 @@ ipcMain.handle("searchFiles", async (_e, query) => {
   if (!workdir) return [];
   const q = String(query || "").toLowerCase();
   const all = await listWorkdirFiles();
+  const dirs = fileCache.dirs || [];
   const MAX = 50; // 最多返回 50 条，避免大仓库卡顿
+  // 目录优先排在前面，选中后插入 @相对目录/ 让模型把整个目录纳入上下文
+  const dirOut = [];
+  for (const d of dirs) {
+    if (dirOut.length >= MAX) break;
+    if (!q || d.relLower.includes(q)) dirOut.push(d);
+  }
+  dirOut.sort((a, b) => a.relLower.indexOf(q) - b.relLower.indexOf(q));
   const out = [];
   for (const f of all) {
     if (out.length >= MAX) break;
@@ -482,7 +494,10 @@ ipcMain.handle("searchFiles", async (_e, query) => {
   }
   // 匹配位置越靠前越优先
   out.sort((a, b) => a.relLower.indexOf(q) - b.relLower.indexOf(q));
-  return out.map(({ name, path, rel }) => ({ name, path, rel }));
+  return [
+    ...dirOut.map(({ name, path, rel }) => ({ name, path, rel, dir: true })),
+    ...out.map(({ name, path, rel }) => ({ name, path, rel })),
+  ].slice(0, MAX);
 });
 
 // ── 全文检索：遍历工作目录文本文件，逐行匹配关键词 ───────────
