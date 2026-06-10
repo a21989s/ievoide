@@ -789,7 +789,10 @@ ipcMain.handle("acctSwitch", async (_e, email) => {
     writeCredentials(acct.credentials);
     const cj = readJson(CLAUDE_JSON) || {};
     cj.oauthAccount = acct.oauthAccount;
-    fsSync.writeFileSync(CLAUDE_JSON, JSON.stringify(cj, null, 2));
+    // 原子写：先写临时文件再 rename 覆盖，避免写到一半被中断/崩溃把真实 ~/.claude.json 截断损坏导致登录失效
+    const tmp = `${CLAUDE_JSON}.${process.pid}.tmp`;
+    fsSync.writeFileSync(tmp, JSON.stringify(cj, null, 2));
+    fsSync.renameSync(tmp, CLAUDE_JSON);
     return { ok: true, email };
   } catch (err) {
     return { error: String(err?.message || err) };
