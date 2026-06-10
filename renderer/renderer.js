@@ -174,6 +174,7 @@ function resetMdEdit() {
 // 把 markdown 渲染进任意容器，并把 ```mermaid 代码块转成图
 function renderMdInto(el, content) {
   el.innerHTML = safeMd(content);
+  hlBlocks(el);
   const nodes = [];
   el.querySelectorAll("code.language-mermaid").forEach((code) => {
     const div = document.createElement("div");
@@ -298,9 +299,14 @@ async function openFile(path, name) {
     return;
   }
 
-  // 其它：纯文本
+  // 其它：纯文本（源码按扩展名做轻量语法高亮，其余保持纯文本）
   useBody("raw");
-  vbody.textContent = content;
+  const lang = hlLang(ext);
+  if (lang) {
+    vbody.innerHTML = '<pre class="hl"><code>' + highlightCode(content, lang) + "</code></pre>";
+  } else {
+    vbody.textContent = content;
+  }
 }
 
 $("vclose").onclick = () => {
@@ -337,6 +343,51 @@ function safeMd(raw) {
   const html = marked.parse(raw);
   // DOMPurify 默认即剥离脚本与事件处理器，这里再显式允许 mermaid 代码块所需的 class 属性
   return window.DOMPurify ? DOMPurify.sanitize(html, { ADD_ATTR: ["class"] }) : html;
+}
+
+// ── 轻量语法高亮：零依赖，按扩展名/代码块语言着色 .js/.ts/.json/.py 等 ──
+const HL_KW = {
+  js: new Set("const let var function return if else for while do switch case break continue new class extends super this typeof instanceof in of try catch finally throw async await yield import export from default void delete null true false undefined NaN Infinity static get set interface type enum implements namespace as keyof readonly public private protected abstract".split(" ")),
+  py: new Set("def return if elif else for while break continue class import from as pass lambda yield with try except finally raise global nonlocal in is not and or None True False async await del assert self print None".split(" ")),
+  json: new Set("true false null".split(" ")),
+};
+// 扩展名 / ```语言标识 → 高亮语言族
+const HL_LANG = { js:"js", mjs:"js", cjs:"js", jsx:"js", ts:"js", tsx:"js", typescript:"js", javascript:"js", node:"js", json:"json", jsonc:"json", py:"py", python:"py" };
+function hlLang(tag) { return HL_LANG[(tag || "").toLowerCase()] || ""; }
+// 把一段源码转成带 <span class="tok-*"> 的安全 HTML（按词逐段消费，token 文本均经 esc）
+function highlightCode(code, lang) {
+  if (!lang || !HL_KW[lang]) return esc(code);
+  const kw = HL_KW[lang];
+  const rules = [
+    lang !== "json" && { cls: "tok-c", re: /\/\*[\s\S]*?\*\//y },
+    lang === "py" ? { cls: "tok-c", re: /#[^\n]*/y } : (lang !== "json" && { cls: "tok-c", re: /\/\/[^\n]*/y }),
+    lang === "py" && { cls: "tok-s", re: /"""[\s\S]*?"""|'''[\s\S]*?'''/y },
+    { cls: "tok-s", re: /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`/y },
+    { cls: "tok-n", re: /0[xX][0-9a-fA-F]+|\d+\.?\d*(?:[eE][+-]?\d+)?/y },
+  ].filter(Boolean);
+  const word = /[A-Za-z_$][\w$]*/y;
+  let out = "", i = 0;
+  while (i < code.length) {
+    let hit = null;
+    for (const r of rules) { r.re.lastIndex = i; const m = r.re.exec(code); if (m && m.index === i && m[0]) { out += `<span class="${r.cls}">${esc(m[0])}</span>`; i += m[0].length; hit = true; break; } }
+    if (hit) continue;
+    word.lastIndex = i; const w = word.exec(code);
+    if (w && w.index === i) { out += kw.has(w[0]) ? `<span class="tok-k">${w[0]}</span>` : esc(w[0]); i += w[0].length; continue; }
+    out += esc(code[i]); i++;
+  }
+  return out;
+}
+// 对容器内已渲染的 ```代码块就地着色（跳过 mermaid，由专门逻辑处理）
+function hlBlocks(root) {
+  if (!root) return;
+  root.querySelectorAll("pre code").forEach((code) => {
+    if (code.dataset.hl) return;
+    const cls = [...code.classList].find((c) => c.startsWith("language-"));
+    const lang = hlLang(cls ? cls.slice(9) : "");
+    if (!lang) return; // 未知语言保持纯文本
+    code.innerHTML = highlightCode(code.textContent, lang);
+    code.dataset.hl = "1";
+  });
 }
 
 // 解析 %D 装饰串为彩色胶囊：HEAD -> x / origin/x / tag: x / 本地分支
@@ -1126,6 +1177,7 @@ function appendText(conv, t) {
 // 把 bubble._raw 按 Markdown 渲染进 bubble（marked 已加载则用之，否则转义纯文本）
 function renderMd(bubble) {
   bubble.innerHTML = safeMd(bubble._raw || "");
+  hlBlocks(bubble);
 }
 
 // 把已完成 assistant 容器里的 ```mermaid 代码块渲染成图

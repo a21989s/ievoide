@@ -390,6 +390,12 @@
       #viewer.docked #vdock { background: var(--accent); border-color: var(--accent); color: #fff; }
       #vbody { flex: 1; margin: 0; overflow: auto; padding: 16px 20px; font-size: 13px; }
       #vbody.raw { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+      #vbody.raw pre.hl { margin: 0; white-space: pre; overflow: auto; }
+      /* 轻量语法高亮 token 配色（预览面板与对话气泡共用） */
+      .tok-k { color: #569cd6; }
+      .tok-s { color: #ce9178; }
+      .tok-c { color: #6a9955; font-style: italic; }
+      .tok-n { color: #b5cea8; }
       #vframe { flex: 1; border: 0; width: 100%; background: #fff; }
       /* markdown 渲染样式 */
       #vbody.md h1, #vbody.md h2 { border-bottom: 1px solid var(--border); padding-bottom: 4px; }
