@@ -1615,13 +1615,25 @@ window.api.on("issues:update", () => {
 });
 
 // 定期自检
+// 用「记录上次运行时刻 + 自重排的 setTimeout」代替裸 setInterval：
+// 进化循环会频繁重载/重启，裸 setInterval 每次都从零重新计时（甚至一直被重置而再不触发）。
+// 这里据 evLastRun 补齐剩余间隔，重启后到点（或已逾期）即续跑，让循环不被打断。
 function applyPeriodic() {
-  clearInterval(_periodicTimer);
+  clearTimeout(_periodicTimer);
   if ($("evPeriodic").checked) {
     const ms = +$("evInterval").value;
-    _periodicTimer = setInterval(() => {
-      if (!evolveBusy) runEvolve("审视你自己的源码，找出一个明确的 bug、隐患或可改进点并修复（只改一处、保持稳定）。");
-    }, ms);
+    const tick = () => {
+      // 忙则稍后再试，别因为撞上一轮就把这一轮整个跳过
+      if (evolveBusy) { _periodicTimer = setTimeout(tick, 15000); return; }
+      try { localStorage.setItem("claudeTools.evLastRun", String(Date.now())); } catch {}
+      runEvolve("审视你自己的源码，找出一个明确的 bug、隐患或可改进点并修复（只改一处、保持稳定）。");
+      _periodicTimer = setTimeout(tick, ms);
+    };
+    let last = 0;
+    try { last = +localStorage.getItem("claudeTools.evLastRun") || 0; } catch {}
+    const remaining = last ? Math.max(0, ms - (Date.now() - last)) : ms;
+    // 逾期则留一点启动稳定时间（避开启动自检/回滚抢跑），否则按剩余间隔续跑
+    _periodicTimer = setTimeout(tick, last ? Math.max(8000, remaining) : ms);
   }
   try {
     localStorage.setItem("claudeTools.evAuto", $("evAuto").checked ? "1" : "");
