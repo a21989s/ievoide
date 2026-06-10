@@ -8,7 +8,7 @@
     <style>
       :root { --bg:#1e1e1e; --panel:#252526; --border:#333; --fg:#d4d4d4; --muted:#888; --accent:#c97c5d; --user:#2d4a63; }
       * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-      html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system,"Segoe UI",sans-serif; }
+      html, body { margin:0; height:100%; width:100%; max-width:100%; overflow-x:hidden; background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system,"Segoe UI",sans-serif; }
       body { display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
       #bar { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--panel); border-bottom:1px solid var(--border); padding-top:max(10px,env(safe-area-inset-top)); }
       #bar b { font-size:15px; }
@@ -24,21 +24,21 @@
       .tab .x { color:#777; padding:0 2px; }
       .tab .run { color:#3fb950; font-size:9px; }
       #newTab { flex:none; background:transparent; color:var(--muted); border:0; padding:0 16px; font-size:20px; }
-      #chat { flex:1; overflow:auto; padding:14px; -webkit-overflow-scrolling:touch; }
-      .msg { margin-bottom:14px; max-width:92%; }
+      #chat { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px; -webkit-overflow-scrolling:touch; }
+      .msg { margin-bottom:12px; max-width:92%; overflow-wrap:anywhere; }
       .msg .role { font-size:11px; color:var(--muted); margin-bottom:3px; }
       .bubble { padding:10px 13px; border-radius:12px; white-space:pre-wrap; word-break:break-word; }
       .msg.user { margin-left:auto; }
       .msg.user .bubble { background:var(--user); }
       .msg.assistant .bubble { background:var(--panel); border:1px solid var(--border); }
-      .tool { font-size:11px; color:#cdba7a; font-family:ui-monospace,monospace; margin:4px 0; }
+      .tool { font-size:11px; color:#cdba7a; font-family:ui-monospace,monospace; margin:4px 0; white-space:pre-wrap; word-break:break-word; overflow-wrap:anywhere; }
       .meta { font-size:11px; color:var(--muted); margin-top:4px; }
       .err { color:#e57373; }
       /* 视图切换 + 源代码管理 */
       #views { display:flex; background:#1a1a1a; border-bottom:1px solid var(--border); }
-      .vtab { flex:1; text-align:center; padding:9px; font-size:13px; color:var(--muted); border-bottom:2px solid transparent; }
+      .vtab { flex:1; text-align:center; padding:8px; font-size:17px; color:var(--muted); border-bottom:2px solid transparent; }
       .vtab.active { color:var(--fg); border-bottom-color:var(--accent); }
-      #scView { flex:1; overflow:auto; padding:12px; display:none; }
+      #scView { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px; display:none; }
       body.sc-mode #tabs, body.sc-mode #chat, body.sc-mode #inbar { display:none; }
       body.sc-mode #scView { display:block; }
       .sc-top { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
@@ -77,7 +77,7 @@
       .matt img { max-width:140px; max-height:110px; border-radius:8px; }
       .matt .f { background:#1b1b1b; border-radius:6px; padding:3px 7px; font-size:11px; font-family:ui-monospace,monospace; }
       /* 需求视图 */
-      #reqView { flex:1; overflow:auto; padding:12px; display:none; flex-direction:column; }
+      #reqView { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px; display:none; flex-direction:column; }
       body.req-mode #tabs, body.req-mode #chat, body.req-mode #inbar, body.req-mode #attRow { display:none; }
       body.req-mode #reqView { display:flex; }
       #reqInputWrap { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
@@ -127,9 +127,9 @@
       <button class="ghost" id="pickBtn">📁</button>
     </div>
     <div id="views">
-      <div class="vtab active" data-v="chat">💬 对话</div>
-      <div class="vtab" data-v="req">✓ 需求</div>
-      <div class="vtab" data-v="sc">⎇ 源代码管理</div>
+      <div class="vtab active" data-v="chat" title="对话">💬</div>
+      <div class="vtab" data-v="req" title="需求">📋</div>
+      <div class="vtab" data-v="sc" title="源代码管理">⎇</div>
     </div>
     <div id="tabs"></div>
     <div id="chat"></div>
