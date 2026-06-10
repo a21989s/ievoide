@@ -1399,9 +1399,19 @@ let evolveBusy = false;
 let _autoCooldown = 0;
 let _periodicTimer = null;
 
+// 进化日志会被流式逐块写入（每个 token 一次），多轮进化/周期自检持续累积。
+// 不设上限时 <pre> 文本节点会无限增长，每次追加都要整段重排，最终拖垮渲染层
+// —— 表现为输入框卡死、面板无响应。这里只保留尾部，按字符数封顶。
+const EV_LOG_MAX = 60000;
 function evLog(t) {
   const el = $("evLog");
-  el.textContent += (el.textContent ? "\n" : "") + t;
+  let s = el.textContent;
+  s += (s ? "\n" : "") + t;
+  if (s.length > EV_LOG_MAX) {
+    // 截掉头部并补齐被切断的半行，保留可读的尾部
+    s = "…\n" + s.slice(s.length - EV_LOG_MAX).replace(/^[^\n]*\n?/, "");
+  }
+  el.textContent = s;
   el.scrollTop = el.scrollHeight;
 }
 function setEvolveBusy(b) {
