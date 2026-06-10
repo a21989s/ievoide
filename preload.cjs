@@ -24,6 +24,8 @@ contextBridge.exposeInMainWorld("api", {
   chatRewind: (id) => ipcRenderer.invoke("chatRewind", id),
   stop: (convId) => ipcRenderer.send("stop", { convId }),
   getUsage: (opts) => ipcRenderer.invoke("getUsage", opts),
+  getModel: () => ipcRenderer.invoke("getModel"),
+  setModel: (model) => ipcRenderer.invoke("setModel", model),
   acctList: () => ipcRenderer.invoke("acctList"),
   acctSaveCurrent: () => ipcRenderer.invoke("acctSaveCurrent"),
   acctSwitch: (email) => ipcRenderer.invoke("acctSwitch", email),

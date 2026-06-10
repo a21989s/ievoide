@@ -856,6 +856,21 @@ ipcMain.handle("getUsage", async (_e, { force } = {}) => {
   }
 });
 
+// ── 模型切换 ─────────────────────────────────────────────────
+// 读/写当前模型（空=用账号默认）。setModel 写回 tools/config.json 并更新内存中的
+// appConfig.model，下一轮 chat 即生效，无需重启；与顶栏用量/费用展示联动控成本。
+ipcMain.handle("getModel", () => appConfig.model || "");
+ipcMain.handle("setModel", (_e, model) => {
+  appConfig.model = model || null;
+  try {
+    const file = path.join(TOOLS_DIR, "config.json");
+    let cur = {};
+    try { cur = JSON.parse(fsSync.readFileSync(file, "utf8")); } catch {}
+    fsSync.writeFileSync(file, JSON.stringify({ ...cur, model: appConfig.model }, null, 2));
+  } catch (e) { return { ok: false, error: String(e?.message || e) }; }
+  return { ok: true, model: appConfig.model };
+});
+
 // ── Claude 账号快捷切换 ───────────────────────────────────────
 // 一个账号 = 凭证文件(~/.claude/.credentials.json) + 身份(~/.claude.json 的 oauthAccount)。
 // 切换即把存档的凭证写回，并把 oauthAccount 合并进 .claude.json，使 SDK 与用量显示同步生效。

@@ -52,6 +52,8 @@
       .folder { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .usage { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; white-space: nowrap; }
       .usage:hover { color: var(--fg); border-color: var(--accent); }
+      .model-select { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 8px; white-space: nowrap; outline: none; }
+      .model-select:hover { color: var(--fg); border-color: var(--accent); }
       .kbd-help { -webkit-app-region: no-drag; cursor: pointer; width: 20px; height: 20px; line-height: 18px; text-align: center; font-size: 12px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 50%; flex: none; }
       .kbd-help:hover { color: var(--fg); border-color: var(--accent); }
       #kbdModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 47; }
@@ -623,6 +625,12 @@
       <span class="folder" id="folder" data-i18n="未选择目录">未选择目录</span>
       <span class="meta" id="status"></span>
       <span class="usage" id="usage" data-i18n-title="点击刷新用量" title="点击刷新用量">用量…</span>
+      <select class="model-select" id="modelSelect" data-i18n-title="切换模型（下一轮对话生效）控制费用" title="切换模型（下一轮对话生效）控制费用">
+        <option value="">默认模型</option>
+        <option value="opus">Opus</option>
+        <option value="sonnet">Sonnet</option>
+        <option value="haiku">Haiku</option>
+      </select>
       <span class="kbd-help" id="kbdHelpBtn" data-i18n-title="快捷键速查（按 ? 打开）" title="快捷键速查（按 ? 打开）">?</span>
     </div>
     <div id="main">

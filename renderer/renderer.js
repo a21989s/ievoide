@@ -1871,6 +1871,20 @@ function loadUsageThrottled() {
 $("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
 
+// ── 模型切换：顶栏下拉，写回 config 后下一轮 chat 即生效，与用量/费用联动控成本 ──
+(async () => {
+  const sel = $("modelSelect");
+  if (!sel) return;
+  try { sel.value = (await window.api.getModel()) || ""; } catch {}
+  sel.onchange = async () => {
+    const r = await window.api.setModel(sel.value);
+    if (r && r.ok) {
+      $("status").textContent = trf("已切换模型：{0}（下一轮对话生效）", sel.value || tr("默认"));
+      loadUsage(true); // 顺带刷新用量/费用展示
+    }
+  };
+})();
+
 // ── 打包：点 📦 弹三选一（完整备份 / 全量 / 给别人）→ 桌面 zip ──
 async function doPack(mode) {
   const label = { full: tr("全量(含依赖,零安装)"), backup: tr("完整备份(含历史)"), dist: tr("给别人(不含私有数据)") }[mode];
