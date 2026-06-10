@@ -28,6 +28,21 @@ const clearStatusLater = (ms) => {
   setTimeout(() => { if (el.textContent === snapshot) el.textContent = ""; }, ms);
 };
 
+// 非阻塞提示：右下角浮层，type 为 error/success/info（默认 info），数秒后自动消失
+function toast(msg, type = "info") {
+  const box = $("toasts");
+  if (!box) return alert(msg);
+  const el = document.createElement("div");
+  el.className = "toast " + type;
+  el.textContent = msg;
+  box.appendChild(el);
+  requestAnimationFrame(() => el.classList.add("show"));
+  setTimeout(() => {
+    el.classList.remove("show");
+    setTimeout(() => el.remove(), 250);
+  }, type === "error" ? 6000 : 3500);
+}
+
 // 自进化健康心跳：渲染层成功加载即上报，宿主据此确认进化后的版本健康（否则自动回滚）
 try { window.api.evolveAlive(); } catch {}
 
@@ -349,7 +364,7 @@ async function doGit(fn, okMsg) {
   const r = await fn();
   $("status").textContent = "";
   if (r && r.error) {
-    alert(tr("Git 操作失败：") + "\n" + r.error);
+    toast(tr("Git 操作失败：") + "\n" + r.error, "error");
     return false;
   }
   if (okMsg) {
@@ -364,7 +379,7 @@ async function doGit(fn, okMsg) {
 // 显示 diff（复用查看器浮层）；未跟踪文件显示为全新增，目录给提示
 async function openDiff(file, staged, untracked) {
   if (file.endsWith("/")) {
-    alert(tr("这是未跟踪的目录，请在左侧文件树展开查看其中文件。"));
+    toast(tr("这是未跟踪的目录，请在左侧文件树展开查看其中文件。"));
     return;
   }
   const r = await window.api.gitDiff(activeRepo, file, staged);
@@ -588,7 +603,7 @@ async function checkout(branch) {
   const r = await window.api.gitCheckout(activeRepo, branch);
   if (r && r.error) {
     $("status").textContent = "";
-    alert(tr("切换失败：") + "\n" + r.error);
+    toast(tr("切换失败：") + "\n" + r.error, "error");
     return;
   }
   $("status").textContent = "";
@@ -888,7 +903,7 @@ async function addAttachment(file) {
     pendingAttachments.push(await saveFileAsAttachment(file));
     renderAttachList();
   } catch (e) {
-    alert(tr("附件保存失败：") + e);
+    toast(tr("附件保存失败：") + e, "error");
   }
 }
 function renderAttachList() {
@@ -1365,7 +1380,7 @@ async function doPack(mode) {
   $("status").textContent = trf("📦 {0} 打包中…", label);
   const r = await window.api.packAll(mode);
   if (r && r.path) $("status").textContent = tr("✅ 已打包到桌面（Finder 已高亮）");
-  else { $("status").textContent = ""; alert(tr("打包失败：") + "\n" + (r?.error || tr("未知"))); }
+  else { $("status").textContent = ""; toast(tr("打包失败：") + "\n" + (r?.error || tr("未知")), "error"); }
   clearStatusLater(5000);
 }
 $("packBtn").onclick = (e) => {
@@ -1419,7 +1434,7 @@ async function openAcctMenu(anchor) {
         _usageThrottle = 0; loadUsage(true);
       } else {
         $("status").textContent = "";
-        alert(tr("切换失败：") + (r?.error || tr("未知")));
+        toast(tr("切换失败：") + (r?.error || tr("未知")), "error");
       }
       clearStatusLater(5000);
     };
@@ -1436,7 +1451,7 @@ async function openAcctMenu(anchor) {
     m.classList.remove("open");
     const r = await window.api.acctSaveCurrent();
     if (r && r.ok) $("status").textContent = trf("✅ 已保存账号 {0}", r.email);
-    else alert(tr("保存失败：") + (r?.error || tr("未知")));
+    else toast(tr("保存失败：") + (r?.error || tr("未知")), "error");
     clearStatusLater(5000);
   };
 }
@@ -1574,7 +1589,7 @@ async function addEvolveFile(file) {
     if (!evolveAttachments.includes(a.path)) evolveAttachments.push(a.path);
     renderAttachments();
   } catch (e) {
-    alert(tr("附件保存失败：") + e);
+    toast(tr("附件保存失败：") + e, "error");
   }
 }
 // 粘贴图片/文档
@@ -2172,7 +2187,7 @@ async function addReqAttachment(file) {
     reqPendingAtts.push(await saveFileAsAttachment(file));
     renderReqAttachList();
   } catch (e) {
-    alert(tr("附件保存失败：") + e);
+    toast(tr("附件保存失败：") + e, "error");
   }
 }
 // 取下一条待处理需求发给右侧对话（仅在对话空闲时发；完成的回调里再推进）

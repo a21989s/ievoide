@@ -511,6 +511,11 @@
       #peForms h4 { margin: 4px 0 10px; }
       #peForms label { display: block; font-size: 12px; color: var(--muted); margin: 8px 0 2px; }
       #peForms input { width: 100%; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; }
+      #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 9999; pointer-events: none; }
+      .toast { max-width: 360px; padding: 10px 14px; border-radius: 6px; font-size: 13px; line-height: 1.4; color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--accent); box-shadow: 0 4px 16px rgba(0,0,0,.4); white-space: pre-wrap; word-break: break-word; opacity: 0; transform: translateY(8px); transition: opacity .2s, transform .2s; pointer-events: auto; }
+      .toast.show { opacity: 1; transform: translateY(0); }
+      .toast.error { border-left-color: #c33; }
+      .toast.success { border-left-color: #3a3; }
     </style>
   </head>
   <body>
@@ -703,6 +708,7 @@
       <div id="pePages"></div>
       <div id="peForms"><h4 data-i18n="表单字段">表单字段</h4><div id="peFormFields"></div><button id="peFormApply" style="margin-top:10px" data-i18n-title="应用到文档" title="应用到文档">✓</button></div>
     </div>
+    <div id="toasts"></div>
     <script src="../node_modules/dompurify/dist/purify.min.js"></script>
     <script src="../node_modules/marked/lib/marked.umd.js"></script>
     <script src="../node_modules/mermaid/dist/mermaid.min.js"></script>
