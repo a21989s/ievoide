@@ -1,0 +1,19 @@
+{
+  "_说明": "把本文件复制为 mcp.json 即可启用。格式同 Claude Code 的 .mcp.json。App 启动后下次发消息生效（无需重启）。",
+  "_提示": "claude.ai 账号集成（如你在 Claude Code 里用的 Atlassian）不经过 SDK，无法在这里桥接；这里配的是 stdio/SSE/HTTP 类 MCP server。",
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/Users/shunzhang/Desktop"]
+    },
+    "sequential-thinking": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"]
+    },
+    "_http_server_示例": {
+      "type": "http",
+      "url": "https://example.com/mcp",
+      "headers": { "Authorization": "Bearer <token>" }
+    }
+  }
+}

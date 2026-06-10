@@ -1,0 +1,602 @@
+<!doctype html>
+<html lang="zh">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>Claude Tools 手机版</title>
+    <style>
+      :root { --bg:#1e1e1e; --panel:#252526; --border:#333; --fg:#d4d4d4; --muted:#888; --accent:#c97c5d; --user:#2d4a63; }
+      * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+      html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:15px/1.55 -apple-system,"Segoe UI",sans-serif; }
+      body { display:flex; flex-direction:column; height:100dvh; overflow:hidden; }
+      #bar { display:flex; align-items:center; gap:8px; padding:10px 12px; background:var(--panel); border-bottom:1px solid var(--border); padding-top:max(10px,env(safe-area-inset-top)); }
+      #bar b { font-size:15px; }
+      #folder { flex:1; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      button { background:var(--accent); color:#fff; border:0; border-radius:8px; padding:9px 14px; font-size:14px; cursor:pointer; }
+      .ghost { background:#3a3a3a; }
+      /* 对话 tab 条 */
+      #tabs { display:flex; overflow-x:auto; background:#1a1a1a; border-bottom:1px solid var(--border); }
+      #tabs::-webkit-scrollbar { display:none; }
+      .tab { flex:none; display:flex; align-items:center; gap:6px; max-width:60vw; padding:9px 12px; font-size:13px; color:var(--muted); border-right:1px solid var(--border); background:#232323; }
+      .tab.active { background:var(--bg); color:var(--fg); box-shadow:inset 0 -2px 0 var(--accent); }
+      .tab .t { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .tab .x { color:#777; padding:0 2px; }
+      .tab .run { color:#3fb950; font-size:9px; }
+      #newTab { flex:none; background:transparent; color:var(--muted); border:0; padding:0 16px; font-size:20px; }
+      #chat { flex:1; overflow:auto; padding:14px; -webkit-overflow-scrolling:touch; }
+      .msg { margin-bottom:14px; max-width:92%; }
+      .msg .role { font-size:11px; color:var(--muted); margin-bottom:3px; }
+      .bubble { padding:10px 13px; border-radius:12px; white-space:pre-wrap; word-break:break-word; }
+      .msg.user { margin-left:auto; }
+      .msg.user .bubble { background:var(--user); }
+      .msg.assistant .bubble { background:var(--panel); border:1px solid var(--border); }
+      .tool { font-size:11px; color:#cdba7a; font-family:ui-monospace,monospace; margin:4px 0; }
+      .meta { font-size:11px; color:var(--muted); margin-top:4px; }
+      .err { color:#e57373; }
+      /* 视图切换 + 源代码管理 */
+      #views { display:flex; background:#1a1a1a; border-bottom:1px solid var(--border); }
+      .vtab { flex:1; text-align:center; padding:9px; font-size:13px; color:var(--muted); border-bottom:2px solid transparent; }
+      .vtab.active { color:var(--fg); border-bottom-color:var(--accent); }
+      #scView { flex:1; overflow:auto; padding:12px; display:none; }
+      body.sc-mode #tabs, body.sc-mode #chat, body.sc-mode #inbar { display:none; }
+      body.sc-mode #scView { display:block; }
+      .sc-top { display:flex; align-items:center; gap:6px; margin-bottom:10px; }
+      #scBranch { flex:1; color:var(--accent); font-weight:600; font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      button.mini { padding:6px 10px; font-size:13px; }
+      .sc-commit { display:flex; gap:8px; margin-bottom:12px; }
+      #scMsg { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:8px; font:inherit; font-size:13px; }
+      .sc-h { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--muted); margin:10px 0 4px; }
+      .sc-h .mini { margin-left:auto; }
+      .scf { display:flex; align-items:center; gap:8px; padding:9px 4px; border-bottom:1px solid #2a2a2a; }
+      .scf .st { width:14px; text-align:center; font-weight:700; font-family:ui-monospace,monospace; flex:none; }
+      .scf .st.M{color:#e2c08d}.scf .st.A,.scf .st.U,.scf .st.R{color:#73c991}.scf .st.D{color:#e57373}
+      .scf .nm { flex:1; font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .scf button { flex:none; }
+      #diffModal { position:fixed; inset:0; background:var(--bg); display:none; flex-direction:column; z-index:20; }
+      #diffModal.open { display:flex; }
+      #diffModal .dhead { display:flex; gap:8px; align-items:center; padding:12px; padding-top:max(12px,env(safe-area-inset-top)); background:var(--panel); border-bottom:1px solid var(--border); }
+      #dTitle { flex:1; font-size:13px; overflow:hidden; text-overflow:ellipsis; }
+      #dBody { flex:1; overflow:auto; margin:0; padding:12px; font-family:ui-monospace,monospace; font-size:12px; white-space:pre; }
+      #dBody .a{color:#73c991}#dBody .d{color:#e57373}#dBody .h{color:#888}#dBody .at{color:#c586c0}
+      /* 提交历史 */
+      .cmt { display:flex; gap:8px; padding:8px 4px; border-bottom:1px solid #2a2a2a; }
+      .cmt .cdot { width:8px; height:8px; border-radius:50%; background:#4a9eff; margin-top:5px; flex:none; }
+      .cmt .cmain { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
+      .cmt .csub { font-size:12px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .cmt .csha { font-size:10px; color:#777; font-family:ui-monospace,monospace; }
+      .cref { display:inline-block; font-size:9px; background:#2d4a63; color:#cfe6ff; border-radius:8px; padding:0 5px; margin-right:3px; }
+      /* 附件 */
+      #attRow { display:flex; flex-wrap:wrap; gap:6px; padding:6px 10px 0; }
+      #attRow:empty { display:none; }
+      .att { display:flex; align-items:center; gap:4px; background:#1b1b1b; border:1px solid var(--border); border-radius:6px; padding:2px 6px; font-size:11px; max-width:46%; }
+      .att img { width:18px; height:18px; object-fit:cover; border-radius:3px; }
+      .att span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+      .att .x { color:#888; }
+      .matt { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
+      .matt img { max-width:140px; max-height:110px; border-radius:8px; }
+      .matt .f { background:#1b1b1b; border-radius:6px; padding:3px 7px; font-size:11px; font-family:ui-monospace,monospace; }
+      /* 需求视图 */
+      #reqView { flex:1; overflow:auto; padding:12px; display:none; flex-direction:column; }
+      body.req-mode #tabs, body.req-mode #chat, body.req-mode #inbar, body.req-mode #attRow { display:none; }
+      body.req-mode #reqView { display:flex; }
+      #reqInputWrap { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+      #reqInp { resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:9px; font:inherit; font-size:14px; }
+      .req-row { display:flex; gap:8px; }
+      .req-row #reqAdd { flex:1; }
+      .reqi { border:1px solid var(--border); border-radius:10px; padding:10px; margin-bottom:10px; background:var(--panel); }
+      .reqi .rhead { display:flex; align-items:flex-start; gap:8px; }
+      .reqi .rtext { flex:1; font-size:14px; white-space:pre-wrap; word-break:break-word; }
+      .reqi.done .rtext { color:var(--muted); }
+      .reqi .rst { font-size:11px; flex:none; padding:1px 7px; border-radius:8px; }
+      .reqi.pending .rst { background:#333; color:#aaa; }
+      .reqi.running .rst { background:#243b53; color:#4a9eff; }
+      .reqi.done .rst { background:#1e3a23; color:#73c991; }
+      .reqi.failed .rst { background:#3a1e1e; color:#e57373; }
+      .reqi .racts { display:flex; gap:8px; margin-top:8px; }
+      .reqi .ro { margin-top:8px; padding:8px; background:#141414; border-radius:6px; font-size:13px; white-space:pre-wrap; word-break:break-word; max-height:280px; overflow:auto; }
+      #inbar { display:flex; gap:8px; padding:10px; border-top:1px solid var(--border); background:var(--panel); padding-bottom:max(10px,env(safe-area-inset-bottom)); }
+      #inp { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font:inherit; max-height:120px; }
+      #toast { position:fixed; left:50%; bottom:84px; transform:translateX(-50%); background:#000a; color:#fff; padding:8px 14px; border-radius:20px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
+      #toast.show { opacity:1; }
+      #modal, #sheet2modal { position:fixed; inset:0; background:rgba(0,0,0,.6); display:none; align-items:flex-end; z-index:10; }
+      #modal.open, #sheet2modal.open { display:flex; }
+      #sheet2 { width:100%; max-height:80%; background:var(--bg); border-radius:14px 14px 0 0; display:flex; flex-direction:column; }
+      #sheet2 .sh-head { padding:12px 14px; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; }
+      #sheet2List { overflow:auto; }
+      #sheet2List .row .meta2 { color:var(--muted); font-size:11px; }
+      #sheet2List .row.cur { color:var(--accent); }
+      #sheet2List .row .x { margin-left:auto; color:#777; padding:0 6px; }
+      #sheet { width:100%; max-height:80%; background:var(--bg); border-radius:14px 14px 0 0; display:flex; flex-direction:column; }
+      #sheet .sh-head { padding:12px 14px; border-bottom:1px solid var(--border); display:flex; gap:8px; align-items:center; }
+      #curPath { flex:1; font-size:12px; color:var(--muted); overflow:hidden; text-overflow:ellipsis; word-break:break-all; }
+      #list { flex:1; overflow:auto; }
+      .row { padding:13px 16px; border-bottom:1px solid #2a2a2a; display:flex; gap:10px; align-items:center; }
+      .row:active { background:#2a2d2e; }
+      .row .ic { width:20px; text-align:center; }
+      .sh-foot { padding:12px 14px; display:flex; gap:8px; border-top:1px solid var(--border); }
+      .sh-foot input { flex:1; background:var(--panel); color:var(--fg); border:1px solid var(--border); border-radius:8px; padding:9px 10px; font:inherit; font-size:13px; }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <b>Claude</b>
+      <span id="folder">未选文件夹</span>
+      <button class="ghost" id="acctBtn">👤</button>
+      <button class="ghost" id="histBtn">🕘</button>
+      <button class="ghost" id="pickBtn">📁</button>
+    </div>
+    <div id="views">
+      <div class="vtab active" data-v="chat">💬 对话</div>
+      <div class="vtab" data-v="req">✓ 需求</div>
+      <div class="vtab" data-v="sc">⎇ 源代码管理</div>
+    </div>
+    <div id="tabs"></div>
+    <div id="chat"></div>
+    <div id="scView">
+      <div class="sc-top">
+        <span id="scBranch">—</span>
+        <button class="ghost mini" id="scPull">↓拉</button>
+        <button class="ghost mini" id="scPush">↑推</button>
+        <button class="ghost mini" id="scRefresh">⟳</button>
+      </div>
+      <div class="sc-commit"><textarea id="scMsg" rows="1" placeholder="提交信息…"></textarea><button id="scCommit">提交</button></div>
+      <div class="sc-h"><span>暂存的更改</span><span id="scStagedN">0</span><button class="ghost mini" id="scUnstageAll">全部取消</button></div>
+      <div id="scStaged"></div>
+      <div class="sc-h"><span>更改</span><span id="scChangesN">0</span><button class="ghost mini" id="scStageAll">全部暂存</button></div>
+      <div id="scChanges"></div>
+      <div class="sc-h"><span>提交历史</span><button class="ghost mini" id="scLogRefresh">⟳</button></div>
+      <div id="scLog"></div>
+    </div>
+    <div id="reqView">
+      <div id="reqInputWrap">
+        <div id="reqAttRow"></div>
+        <textarea id="reqInp" rows="2" placeholder="描述一个需求…（可附带文件）"></textarea>
+        <div class="req-row"><button class="ghost" id="reqAttBtn">📎</button><button id="reqAdd">添加需求</button></div>
+      </div>
+      <div id="reqList"></div>
+      <input type="file" id="reqFileInp" multiple style="display:none" />
+    </div>
+    <div id="diffModal"><div class="dhead"><span id="dTitle"></span><button class="ghost" id="dClose">关闭</button></div><pre id="dBody"></pre></div>
+    <div id="attRow"></div>
+    <div id="inbar">
+      <button class="ghost" id="attBtn">📎</button>
+      <textarea id="inp" rows="1" placeholder="提需求 / 问问题…"></textarea>
+      <button id="send">发送</button>
+    </div>
+    <input type="file" id="fileInp" multiple style="display:none" />
+    <div id="toast"></div>
+
+    <div id="sheet2modal">
+      <div id="sheet2">
+        <div class="sh-head"><span id="sheet2Title" style="flex:1;font-weight:600"></span><button class="ghost" id="sheet2Close">关闭</button></div>
+        <div id="sheet2List"></div>
+      </div>
+    </div>
+
+    <div id="modal">
+      <div id="sheet">
+        <div class="sh-head">
+          <button class="ghost" id="upBtn">⬆︎ 上级</button>
+          <span id="curPath">/</span>
+          <button id="useBtn">选定</button>
+        </div>
+        <div id="list"></div>
+        <div class="sh-foot">
+          <input id="pathInput" placeholder="或直接输入绝对路径…" />
+          <button id="gotoBtn">前往</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      const params = new URLSearchParams(location.search);
+      let token = params.get("token") || localStorage.getItem("ct.token") || "";
+      if (params.get("token")) localStorage.setItem("ct.token", token);
+      if (!token) { token = prompt("输入访问令牌：") || ""; localStorage.setItem("ct.token", token); }
+
+      let cwd = localStorage.getItem("ct.cwd") || "";
+      if (cwd) $("folder").textContent = cwd;
+
+      const chat = $("chat");
+      function toast(t) { const e = $("toast"); e.textContent = t; e.classList.add("show"); setTimeout(() => e.classList.remove("show"), 1600); }
+
+      // ── 多对话 ──────────────────────────────────────────────
+      let convs = [];
+      let activeId = null;
+      let busy = false; // 流式进行中（同一时刻只让一个对话发请求，避免串台）
+      function active() { return convs.find((c) => c.id === activeId); }
+      async function loadConvs() {
+        let d = null;
+        // 优先从服务器加载（与桌面端共用同一份历史）
+        try { d = await fetch("/api/convs?token=" + encodeURIComponent(token)).then((x) => x.json()); } catch {}
+        // 服务器无数据时退回本地缓存（离线/首次）
+        if (!(d && d.list?.length)) { try { d = JSON.parse(localStorage.getItem("ct.convs") || "null"); } catch {} }
+        if (d && d.list?.length) { convs = d.list; activeId = (d.list.some((c) => c.id === d.active) ? d.active : convs[0].id); }
+        if (d && Array.isArray(d.history)) mergeHistory(d.history); // 合并服务器端历史（桌面归档的也能看到）
+        if (!convs.length) { const c = mk(); convs = [c]; activeId = c.id; }
+        convs.forEach(recordHistory); saveHistory(); // 当前对话也入历史，避免面板为空
+      }
+      let pushTimer = null;
+      function pushConvs() {
+        clearTimeout(pushTimer);
+        pushTimer = setTimeout(() => {
+          try {
+            fetch("/api/convs?token=" + encodeURIComponent(token), {
+              method: "POST", headers: { "content-type": "application/json" },
+              body: JSON.stringify({ list: convs, active: activeId, history }),
+            }).catch(() => {});
+          } catch {}
+        }, 800);
+      }
+      function saveConvs() {
+        const a = active(); if (a) a.html = chat.innerHTML;
+        convs.forEach(recordHistory); saveHistory(); // 活动对话也实时入库，关闭 tab 后历史仍在
+        try { localStorage.setItem("ct.convs", JSON.stringify({ list: convs, active: activeId })); } catch {}
+        pushConvs(); // 同步到服务器，桌面端可见
+      }
+      // 回到前台时拉取最新（看到桌面端的新对话），但保持当前所在对话，回复中不打断
+      async function refreshConvs() {
+        if (busy) return;
+        const keep = activeId;
+        await loadConvs();
+        if (convs.some((c) => c.id === keep)) activeId = keep;
+        chat.innerHTML = active().html || ""; renderTabs(); chat.scrollTop = chat.scrollHeight;
+      }
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshConvs(); });
+      function mk() { return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), title: "新对话", sessionId: null, html: "" }; }
+      function renderTabs() {
+        const t = $("tabs"); t.innerHTML = "";
+        for (const c of convs) {
+          const el = document.createElement("div"); el.className = "tab" + (c.id === activeId ? " active" : "");
+          el.innerHTML = `${c.id === activeId && busy ? '<span class="run">●</span>' : ""}<span class="t">${(c.title || "新对话").replace(/</g, "&lt;")}</span><span class="x">×</span>`;
+          el.querySelector(".t").onclick = () => switchTo(c.id);
+          el.querySelector(".x").onclick = (e) => { e.stopPropagation(); delConv(c.id); };
+          t.appendChild(el);
+          if (c.id === activeId) el.scrollIntoView({ inline: "nearest", block: "nearest" });
+        }
+        const add = document.createElement("button"); add.id = "newTab"; add.textContent = "＋"; add.onclick = newConv; t.appendChild(add);
+      }
+      function switchTo(id) {
+        if (busy) return toast("当前对话回复中，请稍候");
+        if (id === activeId) return;
+        saveConvs(); activeId = id; chat.innerHTML = active().html || ""; renderTabs(); chat.scrollTop = chat.scrollHeight; saveConvs();
+      }
+      function newConv() {
+        if (busy) return toast("当前对话回复中，请稍候");
+        saveConvs(); const c = mk(); convs.unshift(c); activeId = c.id; chat.innerHTML = ""; renderTabs(); saveConvs(); $("inp").focus();
+      }
+      function delConv(id) {
+        const i = convs.findIndex((c) => c.id === id); if (i < 0) return;
+        if (convs[i].id === activeId && busy) return toast("回复中，无法关闭");
+        if (convs[i].id === activeId) saveConvs(); // 落地当前 html 再归档
+        archiveConv(convs[i]);
+        convs.splice(i, 1);
+        if (id === activeId) { if (!convs.length) convs = [mk()]; activeId = convs[0].id; chat.innerHTML = active().html || ""; }
+        renderTabs(); saveConvs();
+      }
+
+      function addMsg(role, text) {
+        const w = document.createElement("div"); w.className = "msg " + role;
+        w.innerHTML = `<div class="role">${role === "user" ? "你" : "Claude"}</div>`;
+        const b = document.createElement("div"); b.className = "bubble"; if (text) b.textContent = text;
+        w.appendChild(b); chat.appendChild(w); chat.scrollTop = chat.scrollHeight; return b;
+      }
+
+      async function send() {
+        const text = $("inp").value.trim();
+        const atts = pendingAtts.slice();
+        if ((!text && !atts.length) || busy) return;
+        const conv = active();
+        const titleSrc = text || (atts[0] && atts[0].name) || "附件";
+        if (!conv.title || conv.title === "新对话") { conv.title = titleSrc.length > 16 ? titleSrc.slice(0, 16) + "…" : titleSrc; }
+        const ub = addMsg("user", text || "(附件)");
+        if (atts.length) { const w = document.createElement("div"); w.className = "matt"; atts.forEach((a) => { if (a.dataUrl) { const im = document.createElement("img"); im.src = a.dataUrl; w.appendChild(im); } else { const s = document.createElement("span"); s.className = "f"; s.textContent = "📎 " + a.name; w.appendChild(s); } }); ub.appendChild(w); }
+        $("inp").value = ""; $("inp").style.height = "auto"; pendingAtts = []; renderAtts();
+        const bubble = addMsg("assistant", "");
+        busy = true; $("send").textContent = "…"; renderTabs();
+        try {
+          const resp = await fetch("/api/chat?token=" + encodeURIComponent(token), {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ prompt: text + attNote(atts), cwd, resume: conv.sessionId }),
+          });
+          const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+          while (true) {
+            const { value, done } = await reader.read(); if (done) break;
+            buf += dec.decode(value, { stream: true });
+            const parts = buf.split("\n\n"); buf = parts.pop();
+            for (const p of parts) {
+              const ev = (p.match(/event: (.*)/) || [])[1];
+              const dl = (p.match(/data: (.*)/s) || [])[1];
+              if (!ev || !dl) continue;
+              const d = JSON.parse(dl);
+              if (ev === "chunk") { bubble.textContent += d.text; chat.scrollTop = chat.scrollHeight; }
+              else if (ev === "tool") { const t = document.createElement("div"); t.className = "tool"; t.textContent = "🔧 " + d.name; bubble.parentElement.appendChild(t); chat.scrollTop = chat.scrollHeight; }
+              else if (ev === "done") { if (d.session) conv.sessionId = d.session; if (d.ms != null) { const m = document.createElement("div"); m.className = "meta"; m.textContent = `用时 ${d.ms}ms`; bubble.parentElement.appendChild(m); } }
+              else if (ev === "error") { bubble.classList.add("err"); bubble.textContent += "\n出错了：" + d.message; }
+            }
+          }
+        } catch (e) { bubble.classList.add("err"); bubble.textContent = "请求失败：" + e; }
+        busy = false; $("send").textContent = "发送"; saveConvs(); renderTabs();
+      }
+      $("send").onclick = send;
+      $("inp").addEventListener("input", function () { this.style.height = "auto"; this.style.height = Math.min(120, this.scrollHeight) + "px"; });
+
+      // ── 文件夹选择 ───────────────────────────────────────────
+      async function browse(dir) {
+        const r = await fetch(`/api/list?token=${encodeURIComponent(token)}&path=${encodeURIComponent(dir || "")}`).then((x) => x.json());
+        $("curPath").textContent = r.dir || dir; $("curPath").dataset.dir = r.dir; $("upBtn").dataset.parent = r.parent;
+        const list = $("list"); list.innerHTML = "";
+        (r.items || []).filter((it) => it.isDir).forEach((it) => {
+          const row = document.createElement("div"); row.className = "row";
+          row.innerHTML = `<span class="ic">📁</span><span>${it.name}</span>`;
+          row.onclick = () => browse(it.path); list.appendChild(row);
+        });
+        if (!list.children.length) { const e = document.createElement("div"); e.className = "row"; e.style.color = "#777"; e.textContent = "（无子目录，可直接选定此处）"; list.appendChild(e); }
+      }
+      $("pickBtn").onclick = () => { $("modal").classList.add("open"); browse(cwd || ""); };
+      $("upBtn").onclick = () => browse($("upBtn").dataset.parent);
+      $("gotoBtn").onclick = () => browse($("pathInput").value.trim());
+      $("useBtn").onclick = () => { cwd = $("curPath").dataset.dir || $("curPath").textContent; localStorage.setItem("ct.cwd", cwd); $("folder").textContent = cwd; $("modal").classList.remove("open"); };
+      $("modal").onclick = (e) => { if (e.target.id === "modal") $("modal").classList.remove("open"); };
+
+      // ── 视图切换 + 源代码管理 ────────────────────────────────
+      document.querySelectorAll("#views .vtab").forEach((t) => {
+        t.onclick = () => {
+          document.querySelectorAll("#views .vtab").forEach((x) => x.classList.toggle("active", x === t));
+          const v = t.dataset.v;
+          document.body.classList.toggle("sc-mode", v === "sc");
+          document.body.classList.toggle("req-mode", v === "req");
+          if (v === "sc") loadSC();
+          if (v === "req") renderReqs();
+        };
+      });
+      const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+      const gitGet = (p) => fetch(p + (p.includes("?") ? "&" : "?") + "token=" + encodeURIComponent(token)).then((r) => r.json());
+      const gitPost = (b) => fetch("/api/git?token=" + encodeURIComponent(token), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...b, path: cwd }) }).then((r) => r.json());
+      async function loadSC() {
+        if (!cwd) { $("scBranch").textContent = "先点 📁 选文件夹"; $("scStaged").innerHTML = ""; $("scChanges").innerHTML = ""; return; }
+        const r = await gitGet("/api/git/status?path=" + encodeURIComponent(cwd));
+        if (r.error) { $("scBranch").textContent = "非 Git 仓库"; $("scStaged").innerHTML = ""; $("scChanges").innerHTML = ""; return; }
+        $("scBranch").textContent = "⎇ " + r.branch + (r.ahead ? ` ↑${r.ahead}` : "") + (r.behind ? ` ↓${r.behind}` : "");
+        $("scStagedN").textContent = r.staged.length; $("scChangesN").textContent = r.changes.length;
+        renderFiles($("scStaged"), r.staged, true); renderFiles($("scChanges"), r.changes, false);
+        loadLog();
+      }
+      function renderFiles(el, files, staged) {
+        el.innerHTML = "";
+        files.forEach((f) => {
+          const cls = f.untracked ? "U" : f.code;
+          const row = document.createElement("div"); row.className = "scf";
+          row.innerHTML = `<span class="st ${cls}">${cls}</span><span class="nm">${esc2(f.path)}</span>`;
+          const btn = document.createElement("button"); btn.className = "ghost"; btn.textContent = staged ? "−" : "＋";
+          btn.onclick = async (e) => { e.stopPropagation(); await gitPost({ action: staged ? "unstage" : "stage", file: f.path }); loadSC(); };
+          row.querySelector(".nm").onclick = () => openDiff(f.path, staged);
+          row.appendChild(btn); el.appendChild(row);
+        });
+        if (!files.length) { el.innerHTML = `<div style="color:#777;font-size:12px;padding:6px 4px">（无）</div>`; }
+      }
+      function colorDiff(diff) {
+        return diff.split("\n").map((l) => {
+          const c = l[0] === "+" && !l.startsWith("+++") ? "a" : l[0] === "-" && !l.startsWith("---") ? "d" : l.startsWith("@@") ? "at" : (l.startsWith("diff ") || l.startsWith("index ") || l.startsWith("+++") || l.startsWith("---")) ? "h" : "";
+          return c ? `<span class="${c}">${esc2(l)}</span>` : esc2(l);
+        }).join("\n");
+      }
+      async function openDiff(file, staged) {
+        const r = await gitGet(`/api/git/diff?path=${encodeURIComponent(cwd)}&file=${encodeURIComponent(file)}&staged=${staged ? 1 : 0}`);
+        $("dTitle").textContent = file; $("dBody").style.whiteSpace = "pre";
+        $("dBody").innerHTML = colorDiff(r.diff || r.error || "(无差异)");
+        $("diffModal").classList.add("open");
+      }
+      // 提交历史
+      async function loadLog() {
+        if (!cwd) { $("scLog").innerHTML = ""; return; }
+        const r = await gitGet("/api/git/log?path=" + encodeURIComponent(cwd));
+        const el = $("scLog"); el.innerHTML = "";
+        (r.commits || []).forEach((c) => {
+          const refs = (c.refs || "").split(",").map((s) => s.trim()).filter(Boolean).slice(0, 2)
+            .map((s) => `<span class="cref">${esc2(s.replace("HEAD -> ", ""))}</span>`).join("");
+          const row = document.createElement("div"); row.className = "cmt";
+          row.innerHTML = `<span class="cdot"></span><div class="cmain"><div>${refs}<span class="csub">${esc2(c.subject)}</span></div><span class="csha">${c.short}</span></div>`;
+          row.onclick = () => openCommit(c.full, c.short + "  " + c.subject);
+          el.appendChild(row);
+        });
+        if (!(r.commits || []).length) el.innerHTML = `<div style="color:#777;font-size:12px;padding:6px 4px">（无提交或非 Git 仓库）</div>`;
+      }
+      async function openCommit(sha, title) {
+        $("dTitle").textContent = title; $("dBody").style.whiteSpace = "normal";
+        const r = await gitGet(`/api/git/commitfiles?path=${encodeURIComponent(cwd)}&sha=${sha}`);
+        const files = r.files || [];
+        $("dBody").innerHTML = `<div style="color:#888;margin-bottom:8px">${files.length} 个文件改动</div>`;
+        files.forEach((f) => {
+          const cls = ["A", "M", "D", "R"].includes(f.code) ? f.code : "M";
+          const d = document.createElement("div"); d.className = "scf";
+          d.innerHTML = `<span class="st ${cls}">${f.code}</span><span class="nm">${esc2(f.path)}</span>`;
+          d.onclick = () => openCommitDiff(sha, f.path, title);
+          $("dBody").appendChild(d);
+        });
+        $("diffModal").classList.add("open");
+      }
+      async function openCommitDiff(sha, file, title) {
+        const r = await gitGet(`/api/git/commitdiff?path=${encodeURIComponent(cwd)}&sha=${sha}&file=${encodeURIComponent(file)}`);
+        $("dTitle").textContent = file; $("dBody").style.whiteSpace = "pre";
+        $("dBody").innerHTML = `<div style="color:#6fb3ff;margin-bottom:8px" id="dBack">← 文件列表</div>` + colorDiff(r.diff || r.error || "(无差异)");
+        document.getElementById("dBack").onclick = () => openCommit(sha, title);
+      }
+      $("scLogRefresh").onclick = loadLog;
+
+      // 附件：手机选文件 → 上传到本机 → 路径带进 prompt
+      let pendingAtts = [];
+      const fileB64 = (f) => new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(",")[1]); r.onerror = rej; r.readAsDataURL(f); });
+      async function uploadFile(f) {
+        const b64 = await fileB64(f);
+        const r = await fetch("/api/upload?token=" + encodeURIComponent(token), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: f.name || "img-" + Date.now() + ".png", base64: b64 }) }).then((x) => x.json());
+        if (r.error) { toast("上传失败"); return null; }
+        return { name: r.name, path: r.path, dataUrl: (f.type || "").startsWith("image/") ? `data:${f.type};base64,${b64}` : null };
+      }
+      async function addAtt(f) { const a = await uploadFile(f).catch(() => null); if (a) { pendingAtts.push(a); renderAtts(); } }
+      function renderAtts() {
+        const el = $("attRow"); el.innerHTML = "";
+        pendingAtts.forEach((a, i) => {
+          const c = document.createElement("div"); c.className = "att";
+          c.innerHTML = (a.dataUrl ? `<img src="${a.dataUrl}">` : "📎") + `<span>${esc2(a.name)}</span><span class="x">×</span>`;
+          c.querySelector(".x").onclick = () => { pendingAtts.splice(i, 1); renderAtts(); };
+          el.appendChild(c);
+        });
+      }
+      function attNote(list) { return list.length ? "\n\n[用户附带以下文件，请用 Read 看图片/PDF，或用 Bash 提取 Word 等再据内容回答]\n" + list.map((a) => "- " + a.path).join("\n") : ""; }
+      $("attBtn").onclick = () => $("fileInp").click();
+      $("fileInp").onchange = async (e) => { for (const f of [...e.target.files]) await addAtt(f); e.target.value = ""; };
+      $("dClose").onclick = () => $("diffModal").classList.remove("open");
+      $("scStageAll").onclick = async () => { await gitPost({ action: "stageAll" }); loadSC(); };
+      $("scUnstageAll").onclick = async () => { await gitPost({ action: "unstageAll" }); loadSC(); };
+      $("scRefresh").onclick = loadSC;
+      $("scPull").onclick = async () => { toast("拉取中…"); const r = await gitPost({ action: "pull" }); toast(r.error ? "失败:" + r.error.slice(0, 40) : "已拉取"); loadSC(); };
+      $("scPush").onclick = async () => { toast("推送中…"); const r = await gitPost({ action: "push" }); toast(r.error ? "失败:" + r.error.slice(0, 40) : "已推送"); loadSC(); };
+      $("scCommit").onclick = async () => { const m = $("scMsg").value.trim(); if (!m) return; const r = await gitPost({ action: "commit", message: m }); if (r.error) toast("失败:" + r.error.slice(0, 40)); else { $("scMsg").value = ""; toast("已提交"); loadSC(); } };
+
+      // ── 需求视图 ─────────────────────────────────────────────
+      let reqs = [];
+      let pendingReqAtts = [];
+      let reqBusy = false;
+      try { reqs = JSON.parse(localStorage.getItem("ct.reqs") || "[]"); } catch {}
+      const saveReqs = () => { try { localStorage.setItem("ct.reqs", JSON.stringify(reqs)); } catch {} };
+      $("reqAttBtn").onclick = () => $("reqFileInp").click();
+      $("reqFileInp").onchange = async (e) => { for (const f of [...e.target.files]) { const a = await uploadFile(f).catch(() => null); if (a) pendingReqAtts.push(a); } e.target.value = ""; renderReqAtts(); };
+      function renderReqAtts() {
+        const el = $("reqAttRow"); el.innerHTML = "";
+        pendingReqAtts.forEach((a, i) => { const c = document.createElement("div"); c.className = "att"; c.innerHTML = (a.dataUrl ? `<img src="${a.dataUrl}">` : "📎") + `<span>${esc2(a.name)}</span><span class="x">×</span>`; c.querySelector(".x").onclick = () => { pendingReqAtts.splice(i, 1); renderReqAtts(); }; el.appendChild(c); });
+      }
+      $("reqAdd").onclick = () => {
+        const t = $("reqInp").value.trim();
+        if (!t && !pendingReqAtts.length) return;
+        reqs.unshift({ id: Date.now().toString(36), text: t, atts: pendingReqAtts.slice(), status: "pending", output: "" });
+        $("reqInp").value = ""; pendingReqAtts = []; renderReqAtts(); saveReqs(); renderReqs();
+      };
+      function renderReqs() {
+        const el = $("reqList"); el.innerHTML = "";
+        reqs.forEach((rq) => {
+          const it = document.createElement("div"); it.className = "reqi " + rq.status;
+          const st = { pending: "待执行", running: "执行中", done: "完成", failed: "失败" }[rq.status];
+          const attHtml = rq.atts && rq.atts.length ? `<div class="matt">` + rq.atts.map((a) => a.dataUrl ? `<img src="${a.dataUrl}">` : `<span class="f">📎 ${esc2(a.name)}</span>`).join("") + `</div>` : "";
+          const out = (rq.output || rq.status === "running") ? `<div class="ro">${esc2(rq.output || "…")}</div>` : "";
+          it.innerHTML = `<div class="rhead"><div class="rtext">${esc2(rq.text || "(附件需求)")}</div><span class="rst">${st}</span></div>${attHtml}<div class="racts"></div>${out}`;
+          const acts = it.querySelector(".racts");
+          if (rq.status !== "running") { const run = document.createElement("button"); run.textContent = rq.status === "done" ? "重新执行" : "▶ 执行"; run.onclick = () => runReq(rq); acts.appendChild(run); }
+          const del = document.createElement("button"); del.className = "ghost"; del.textContent = "🗑"; del.onclick = () => { reqs = reqs.filter((x) => x !== rq); saveReqs(); renderReqs(); }; acts.appendChild(del);
+          el.appendChild(it);
+        });
+        if (!reqs.length) el.innerHTML = `<div style="color:#777;font-size:13px;padding:10px">还没有需求，上面添加一个（可附带文件）。</div>`;
+      }
+      async function runReq(rq) {
+        if (reqBusy) return toast("有需求执行中，请稍候");
+        if (!cwd) return toast("先点 📁 选文件夹");
+        reqBusy = true; rq.status = "running"; rq.output = ""; renderReqs();
+        try {
+          const resp = await fetch("/api/chat?token=" + encodeURIComponent(token), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: (rq.text || "") + attNote(rq.atts || []), cwd }) });
+          const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+          while (true) {
+            const { value, done } = await reader.read(); if (done) break;
+            buf += dec.decode(value, { stream: true }); const parts = buf.split("\n\n"); buf = parts.pop();
+            for (const p of parts) {
+              const ev = (p.match(/event: (.*)/) || [])[1]; const dl = (p.match(/data: (.*)/s) || [])[1]; if (!ev || !dl) continue;
+              const d = JSON.parse(dl);
+              if (ev === "chunk") { rq.output += d.text; const ro = document.querySelector(".reqi.running .ro"); if (ro) ro.textContent = rq.output; else renderReqs(); }
+              else if (ev === "error") { rq.output += "\n出错了：" + d.message; }
+            }
+          }
+          rq.status = "done";
+        } catch (e) { rq.status = "failed"; rq.output += "\n请求失败：" + e; }
+        reqBusy = false; saveReqs(); renderReqs();
+      }
+
+      // ── 账号切换 ─────────────────────────────────────────────
+      function openSheet2(title) { $("sheet2Title").textContent = title; $("sheet2modal").classList.add("open"); }
+      $("sheet2Close").onclick = () => $("sheet2modal").classList.remove("open");
+      $("sheet2modal").onclick = (e) => { if (e.target.id === "sheet2modal") $("sheet2modal").classList.remove("open"); };
+      async function openAccounts() {
+        openSheet2("Claude 账号"); const list = $("sheet2List");
+        list.innerHTML = `<div class="row" style="color:#777">加载中…</div>`;
+        let r; try { r = await fetch("/api/accounts?token=" + encodeURIComponent(token)).then((x) => x.json()); } catch (e) { r = { error: String(e) }; }
+        if (r.error) { list.innerHTML = `<div class="row" style="color:#e5534b">${esc2(r.error)}</div>`; return; }
+        list.innerHTML = "";
+        if (!(r.accounts || []).length) { list.innerHTML = `<div class="row" style="color:#777">暂无存档账号，请在桌面端「保存当前登录为账号」</div>`; }
+        (r.accounts || []).forEach((a) => {
+          const cur = a.email === r.current;
+          const row = document.createElement("div"); row.className = "row" + (cur ? " cur" : "");
+          row.innerHTML = `<span class="ic">${cur ? "✓" : "👤"}</span><div><div>${esc2(a.name || a.email)}</div><div class="meta2">${esc2(a.email)}</div></div>`;
+          if (!cur) row.onclick = async () => {
+            row.style.opacity = ".5";
+            const rr = await fetch("/api/account/switch?token=" + encodeURIComponent(token), { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: a.email }) }).then((x) => x.json()).catch((e) => ({ error: String(e) }));
+            if (rr.error) { toast("切换失败:" + rr.error.slice(0, 40)); row.style.opacity = "1"; }
+            else { toast("已切换到 " + (a.name || a.email)); openAccounts(); }
+          };
+          list.appendChild(row);
+        });
+      }
+      $("acctBtn").onclick = openAccounts;
+
+      // ── 历史记录（关闭的对话归档于此，可重新打开续聊）─────────
+      let history = [];
+      try { history = JSON.parse(localStorage.getItem("ct.history") || "[]"); } catch {}
+      const saveHistory = () => { try { localStorage.setItem("ct.history", JSON.stringify(history.slice(0, 100))); } catch {} };
+      // 合并服务器端历史与本地历史（按 id 去重，archivedAt 新者胜），与桌面端共享归档
+      function mergeHistory(serverHist) {
+        const map = new Map();
+        for (const h of [...(serverHist || []), ...history]) {
+          if (!h || !h.id) continue;
+          const ex = map.get(h.id);
+          if (!ex || (h.archivedAt || 0) > (ex.archivedAt || 0)) map.set(h.id, h);
+        }
+        history = [...map.values()].sort((a, b) => (b.archivedAt || 0) - (a.archivedAt || 0)).slice(0, 100);
+        saveHistory();
+      }
+      // 入库/更新（按 id 去重，最新置顶）；空对话不记录
+      function recordHistory(c) {
+        if (!c || (!c.html && (!c.title || c.title === "新对话"))) return;
+        const i = history.findIndex((h) => h.id === c.id);
+        if (i >= 0) history.splice(i, 1);
+        history.unshift({ id: c.id, title: c.title || "新对话", sessionId: c.sessionId || null, html: c.html || "", archivedAt: Date.now() });
+      }
+      const archiveConv = (c) => { recordHistory(c); saveHistory(); };
+      let histFilter = "";
+      function openHistory() {
+        openSheet2("历史记录"); const list = $("sheet2List");
+        list.innerHTML = `<div style="padding:4px 2px 8px"><input id="histSearch" placeholder="🔍 搜索标题或内容…" style="width:100%;box-sizing:border-box;background:#222;border:1px solid #333;color:#eee;border-radius:8px;padding:8px"></div><div id="histItems"></div>`;
+        const s = $("histSearch"); s.value = histFilter; s.oninput = () => { histFilter = s.value; renderHistItems(); };
+        renderHistItems();
+      }
+      function renderHistItems() {
+        const box = $("histItems"); if (!box) return; box.innerHTML = "";
+        const kw = histFilter.trim().toLowerCase();
+        const items = history.filter((h) => !kw || (h.title || "").toLowerCase().includes(kw) || (h.html || "").toLowerCase().includes(kw));
+        if (!items.length) { box.innerHTML = `<div class="row" style="color:#777">${history.length ? "没有匹配的历史" : "暂无历史。对话会自动保存到这里。"}</div>`; return; }
+        items.forEach((h) => {
+          const row = document.createElement("div"); row.className = "row";
+          const open = convs.some((c) => c.id === h.id);
+          const when = new Date(h.archivedAt || Date.now()).toLocaleString();
+          row.innerHTML = `<span class="ic">🕘</span><div style="flex:1;min-width:0"><div class="t" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc2(h.title || "对话")}</div><div class="meta2">${esc2(when)}${open ? " · 进行中" : h.sessionId ? " · 可续聊" : ""}</div></div><span class="x">×</span>`;
+          row.onclick = () => restoreHistory(h.id);
+          row.querySelector(".x").onclick = (e) => { e.stopPropagation(); const i = history.findIndex((x) => x.id === h.id); if (i >= 0) history.splice(i, 1); saveHistory(); renderHistItems(); };
+          box.appendChild(row);
+        });
+      }
+      function restoreHistory(id) {
+        if (busy) return toast("当前对话回复中，请稍候");
+        const h = history.find((x) => x.id === id); if (!h) return;
+        saveConvs();
+        const existing = convs.find((c) => c.id === id); // 已在标签里则直接切过去，不重复打开
+        if (existing) { activeId = existing.id; }
+        else { convs.unshift({ id: h.id, title: h.title, sessionId: h.sessionId, html: h.html }); activeId = h.id; }
+        chat.innerHTML = active().html || "";
+        $("sheet2modal").classList.remove("open"); renderTabs(); chat.scrollTop = chat.scrollHeight; saveConvs();
+        toast(existing ? "已切到该对话" : "已恢复对话" + (h.sessionId ? "，可继续聊" : ""));
+      }
+      $("histBtn").onclick = openHistory;
+
+      // 启动
+      (async () => { await loadConvs(); chat.innerHTML = active().html || ""; renderTabs(); chat.scrollTop = chat.scrollHeight; })();
+    </script>
+  </body>
+</html>
