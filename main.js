@@ -375,8 +375,17 @@ async function listWorkdirFiles() {
     return fileCache.list;
   }
   const all = [];
+  const visited = new Set(); // 已访问目录的真实路径，防符号链接自指/环路重复遍历
   async function walk(dir) {
     if (all.length >= FILE_CACHE_MAX) return;
+    let real;
+    try {
+      real = await fs.realpath(dir);
+    } catch {
+      return;
+    }
+    if (visited.has(real)) return;
+    visited.add(real);
     let entries;
     try {
       entries = await fs.readdir(dir, { withFileTypes: true });
