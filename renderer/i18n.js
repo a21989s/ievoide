@@ -235,6 +235,11 @@
     "删页": "Delete page",
     "表单": "Form",
     "保存": "Save",
+    "复制": "Copy",
+    "已复制": "Copied",
+    "复制失败：": "Copy failed: ",
+    "复制回复": "Copy reply",
+    "复制整条回复": "Copy entire reply",
   };
 
   let lang = "zh";

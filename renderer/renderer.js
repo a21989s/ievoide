@@ -438,6 +438,7 @@ function highlightCode(code, lang) {
 function hlBlocks(root) {
   if (!root) return;
   root.querySelectorAll("pre code").forEach((code) => {
+    addCopyBtn(code); // 每个代码块右上角悬浮「复制」按钮（含未着色/未知语言的）
     if (code.dataset.hl) return;
     const cls = [...code.classList].find((c) => c.startsWith("language-"));
     const lang = hlLang(cls ? cls.slice(9) : "");
@@ -445,6 +446,60 @@ function hlBlocks(root) {
     code.innerHTML = highlightCode(code.textContent, lang);
     code.dataset.hl = "1";
   });
+}
+
+// 给 pre 代码块加一个悬浮「复制」按钮（mermaid 块跳过，由图形渲染接管）
+function addCopyBtn(code) {
+  const pre = code.closest("pre");
+  if (!pre || pre.querySelector(".copy-btn") || code.classList.contains("language-mermaid")) return;
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "copy-btn";
+  btn.textContent = tr("复制");
+  pre.appendChild(btn);
+}
+
+// 复制文本到剪贴板，并在按钮上短暂回显「已复制」+ 复用 toast 提示
+async function copyToClipboard(text, btn) {
+  try {
+    await navigator.clipboard.writeText(text || "");
+    if (btn) {
+      const old = btn.dataset.label || btn.textContent;
+      btn.dataset.label = old;
+      btn.textContent = tr("已复制");
+      btn.classList.add("copied");
+      setTimeout(() => { btn.textContent = old; btn.classList.remove("copied"); }, 1200);
+    }
+    toast(tr("已复制"), "success");
+  } catch (e) {
+    toast(tr("复制失败：") + e, "error");
+  }
+}
+
+// 事件委托：复制按钮在对话被归档/还原（innerHTML 重建）后仍可用，无需重绑事件
+chat.addEventListener("click", (e) => {
+  const codeBtn = e.target.closest(".copy-btn");
+  if (codeBtn) {
+    const code = codeBtn.closest("pre")?.querySelector("code");
+    return copyToClipboard(code ? code.textContent : "", codeBtn);
+  }
+  const replyBtn = e.target.closest(".reply-copy");
+  if (replyBtn) {
+    const wrap = replyBtn.closest(".msg.assistant");
+    return copyToClipboard(wrap ? bubbleText(wrap) : "", replyBtn);
+  }
+});
+
+// 汇总一条 Claude 回复里所有文字气泡的纯文本（剔除复制按钮自身的文案）
+function bubbleText(wrap) {
+  return [...wrap.querySelectorAll(".bubble")]
+    .map((b) => {
+      const c = b.cloneNode(true);
+      c.querySelectorAll(".copy-btn").forEach((x) => x.remove());
+      return c.textContent.trim();
+    })
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 // 解析 %D 装饰串为彩色胶囊：HEAD -> x / origin/x / tag: x / 本地分支
@@ -1217,7 +1272,7 @@ function startTurn(conv, text) {
   conv.toolCards = {};
   const wrap = document.createElement("div");
   wrap.className = "msg assistant";
-  wrap.innerHTML = `<div class="role">Claude</div>`;
+  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}">${tr("复制回复")}</button></div>`;
   conv.pane.appendChild(wrap);
   conv.currentBubble = wrap;
   conv.busy = true;

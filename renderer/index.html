@@ -329,7 +329,16 @@
       .bubble.md > :first-child { margin-top: 0; }
       .bubble.md > :last-child { margin-bottom: 0; }
       .bubble.md p { margin: 6px 0; }
-      .bubble.md pre { background: #1b1b1b; padding: 8px 10px; border-radius: 6px; overflow: auto; margin: 6px 0; }
+      .bubble.md pre { position: relative; background: #1b1b1b; padding: 8px 10px; border-radius: 6px; overflow: auto; margin: 6px 0; }
+      .copy-btn { position: absolute; top: 5px; right: 5px; padding: 2px 8px; font-size: 11px; line-height: 1.5; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s; z-index: 1; }
+      .bubble.md pre:hover .copy-btn { opacity: 1; }
+      .copy-btn:hover { color: var(--fg); border-color: var(--accent); }
+      .copy-btn.copied { color: #3a3; border-color: #3a3; opacity: 1; }
+      .msg.assistant .role { display: flex; align-items: center; gap: 8px; }
+      .reply-copy { padding: 1px 7px; font-size: 11px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s; }
+      .msg.assistant:hover .reply-copy { opacity: 1; }
+      .reply-copy:hover { color: var(--fg); border-color: var(--accent); }
+      .reply-copy.copied { color: #3a3; border-color: #3a3; opacity: 1; }
       .bubble.md code { background: #1b1b1b; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; }
       .bubble.md pre code { background: transparent; padding: 0; }
       .bubble.md ul, .bubble.md ol { margin: 4px 0; padding-left: 20px; }
