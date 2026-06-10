@@ -525,7 +525,10 @@ let activeConv = null;
 
 const getConv = (id) => conversations.find((c) => c.id === id);
 function scrollIfActive(conv) {
-  if (conv === activeConv) chat.scrollTop = chat.scrollHeight;
+  if (conv !== activeConv) return;
+  // 仅当用户已接近底部时才自动滚到底，向上翻看历史时不强制跳转
+  const nearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 40;
+  if (nearBottom) chat.scrollTop = chat.scrollHeight;
 }
 function ensurePane(conv) {
   if (conv.pane) return conv.pane;
