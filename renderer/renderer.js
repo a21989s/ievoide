@@ -125,6 +125,69 @@ function showViewer(title) {
   const v = $("viewer");
   v.style.display = "flex";
   v.classList.add("open");
+  resetMdEdit(); // 每次打开新内容先关掉上一份的 md 编辑态/按钮
+}
+
+// ── md 内联编辑：左编辑 / 右实时预览，⌘/Ctrl+S 原子写回原文件 ──
+let curMdPath = null, curMdRaw = "", mdEditing = false, mdPrevTimer = 0;
+function resetMdEdit() {
+  curMdPath = null; mdEditing = false;
+  clearTimeout(mdPrevTimer);
+  vbody.classList.remove("editing");
+  const e = $("vedit"), s = $("vsave");
+  if (e) { e.style.display = "none"; e.textContent = "✎"; }
+  if (s) s.style.display = "none";
+}
+// 把 markdown 渲染进任意容器，并把 ```mermaid 代码块转成图
+function renderMdInto(el, content) {
+  el.innerHTML = safeMd(content);
+  const nodes = [];
+  el.querySelectorAll("code.language-mermaid").forEach((code) => {
+    const div = document.createElement("div");
+    div.className = "mermaid";
+    div.textContent = code.textContent;
+    (code.closest("pre") || code).replaceWith(div);
+    nodes.push(div);
+  });
+  return renderMermaidNodes(nodes);
+}
+function toggleMdEdit() {
+  mdEditing ? exitMdEdit() : enterMdEdit();
+}
+function enterMdEdit() {
+  mdEditing = true;
+  useBody("md");
+  vbody.classList.add("editing");
+  const split = document.createElement("div"); split.className = "md-edit-split";
+  const ta = document.createElement("textarea"); ta.className = "md-edit-area"; ta.value = curMdRaw; ta.spellcheck = false;
+  const prev = document.createElement("div"); prev.className = "md-edit-prev md";
+  split.append(ta, prev);
+  vbody.innerHTML = ""; vbody.appendChild(split);
+  renderMdInto(prev, curMdRaw);
+  ta.addEventListener("input", () => {
+    curMdRaw = ta.value;
+    clearTimeout(mdPrevTimer);
+    mdPrevTimer = setTimeout(() => renderMdInto(prev, curMdRaw), 150);
+  });
+  ta.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); saveMd(); }
+  });
+  ta.focus();
+  $("vedit").textContent = "👁"; $("vsave").style.display = "";
+}
+function exitMdEdit() {
+  mdEditing = false;
+  clearTimeout(mdPrevTimer);
+  vbody.classList.remove("editing");
+  useBody("md");
+  renderMdInto(vbody, curMdRaw);
+  $("vedit").textContent = "✎"; $("vsave").style.display = "none";
+}
+async function saveMd() {
+  if (!curMdPath) return;
+  const r = await window.api.writeFile(curMdPath, curMdRaw);
+  if (r && r.ok) toast(tr("已保存"), "success");
+  else toast(tr("保存失败：") + ((r && r.error) || ""), "error");
 }
 // 无法内联预览（Word/Excel/超大文件）时，给出「用系统默认程序打开」兜底
 function showFallback(path, msg) {
@@ -184,20 +247,10 @@ async function openFile(path, name) {
   if (content === "(二进制文件，无法以文本预览)") { showFallback(path, tr("此文件无法以文本预览。")); return; }
 
   if (ext === "md" || ext === "markdown") {
+    curMdPath = path; curMdRaw = content;
+    $("vedit").style.display = ""; // 仅 md 文件可切换编辑
     useBody("md");
-    vbody.innerHTML = safeMd(content);
-    // 把 ```mermaid 代码块转成图
-    const blocks = vbody.querySelectorAll("code.language-mermaid");
-    const nodes = [];
-    blocks.forEach((code) => {
-      const div = document.createElement("div");
-      div.className = "mermaid";
-      div.textContent = code.textContent;
-      const pre = code.closest("pre");
-      (pre || code).replaceWith(div);
-      nodes.push(div);
-    });
-    await renderMermaidNodes(nodes);
+    await renderMdInto(vbody, content);
     return;
   }
 
@@ -222,7 +275,10 @@ $("vclose").onclick = () => {
   v.style.display = "none";
   v.classList.remove("open");
   vframe.removeAttribute("src"); // 卸载 PDF，释放资源
+  resetMdEdit();
 };
+$("vedit").onclick = toggleMdEdit;
+$("vsave").onclick = saveMd;
 // 停靠到中间（仿 VS Code）↔ 浮窗显示：占据真实布局而非覆盖
 $("vdock").onclick = () => {
   const docked = $("viewer").classList.toggle("docked");

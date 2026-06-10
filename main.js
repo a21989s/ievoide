@@ -520,6 +520,18 @@ ipcMain.handle("readFile", async (_e, filePath) => {
   }
 });
 
+// ── 文本写回（md 编辑器用）：写临时文件后原子重命名，避免中途崩溃损坏原文件 ──
+ipcMain.handle("writeFile", async (_e, filePath, content) => {
+  try {
+    const tmp = `${filePath}.${process.pid}.tmp`;
+    await fs.writeFile(tmp, content, "utf8");
+    await fs.rename(tmp, filePath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+
 // ── 二进制读取（PDF 编辑器用），返回 base64 ────────────────────
 ipcMain.handle("readFileBuffer", async (_e, filePath) => {
   try {

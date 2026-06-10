@@ -9,6 +9,7 @@ contextBridge.exposeInMainWorld("api", {
   listDir: (p) => ipcRenderer.invoke("listDir", p),
   searchFiles: (q) => ipcRenderer.invoke("searchFiles", q),
   readFile: (p) => ipcRenderer.invoke("readFile", p),
+  writeFile: (p, content) => ipcRenderer.invoke("writeFile", p, content),
   readFileBuffer: (p) => ipcRenderer.invoke("readFileBuffer", p),
   saveAttachment: (payload) => ipcRenderer.invoke("saveAttachment", payload),
   savePdf: (payload) => ipcRenderer.invoke("savePdf", payload),

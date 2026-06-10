@@ -392,6 +392,11 @@
       #vbody.md blockquote { border-left: 3px solid var(--accent); margin: 0; padding-left: 12px; color: var(--muted); }
       #vbody.md a { color: #6fb3ff; }
       #vbody .mermaid { background: #fff; border-radius: 6px; padding: 10px; margin: 10px 0; text-align: center; }
+      /* ── md 编辑模式：左编辑 / 右实时预览 ── */
+      #vbody.editing { padding: 0; }
+      #vbody .md-edit-split { display: flex; height: 100%; gap: 0; }
+      #vbody .md-edit-area { flex: 1; min-width: 0; border: 0; border-right: 1px solid var(--border); resize: none; padding: 16px 20px; background: var(--bg); color: var(--fg); font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.55; outline: none; }
+      #vbody .md-edit-prev { flex: 1; min-width: 0; overflow: auto; padding: 16px 20px; }
       /* ── 自进化面板 ── */
       #mobileModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 45; }
       #mobileModal.open { display: flex; }
@@ -608,7 +613,7 @@
       <div id="sidebarResizer" class="resizer-v" title="拖动调整宽度"></div>
       <div id="viewer">
         <div class="box">
-          <div class="vhead"><span id="vtitle"></span><span class="vhead-btns"><button id="vdock" data-i18n-title="停靠到中间 / 浮窗显示" title="停靠到中间 / 浮窗显示">⇥</button><button id="vclose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
+          <div class="vhead"><span id="vtitle"></span><span class="vhead-btns"><button id="vsave" style="display:none" data-i18n-title="保存（⌘/Ctrl+S）" title="保存（⌘/Ctrl+S）">💾</button><button id="vedit" style="display:none" data-i18n-title="编辑 / 预览" title="编辑 / 预览">✎</button><button id="vdock" data-i18n-title="停靠到中间 / 浮窗显示" title="停靠到中间 / 浮窗显示">⇥</button><button id="vclose" data-i18n-title="关闭" title="关闭">✕</button></span></div>
           <div id="vbody"></div>
           <iframe id="vframe" style="display:none"></iframe>
         </div>
