@@ -51,6 +51,35 @@
       .usage { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; white-space: nowrap; }
       .usage:hover { color: var(--fg); border-color: var(--accent); }
       #main { flex: 1; display: flex; min-height: 0; }
+      /* VSCode 式活动栏：最左侧纯图标竖列，承载视图切换与全局操作 */
+      #activitybar {
+        flex: none;
+        width: 48px;
+        background: #2c2c2c;
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 6px 0;
+      }
+      #activitybar .act-spacer { flex: 1; }
+      .act-btn {
+        -webkit-app-region: no-drag;
+        width: 48px;
+        height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 19px;
+        color: #9a9a9a;
+        cursor: pointer;
+        border-left: 2px solid transparent;
+        position: relative;
+        user-select: none;
+      }
+      .act-btn:hover { color: var(--fg); }
+      .act-btn.active { color: #fff; border-left-color: var(--accent); }
+      #langBtn.act-btn { font-size: 13px; font-weight: 600; }
       #sidebar {
         width: 280px;
         border-right: 1px solid var(--border);
@@ -402,20 +431,21 @@
       <button id="newsession" data-i18n="🗑 新建会话" data-i18n-title="清空对话并开启新会话" title="清空对话并开启新会话">🗑 新建会话</button>
       <span class="folder" id="folder" data-i18n="未选择目录">未选择目录</span>
       <span class="meta" id="status"></span>
-      <span class="usage" id="langBtn" data-i18n-title="切换语言 / Switch language" title="切换语言 / Switch language">EN</span>
-      <span class="usage" id="acctBtn" data-i18n-title="切换 Claude 账号" title="切换 Claude 账号">👤 账号</span>
       <span class="usage" id="usage" data-i18n-title="点击刷新用量" title="点击刷新用量">用量…</span>
-      <span class="usage" id="mobileBtn" data-i18n="📱 手机" data-i18n-title="用手机浏览器连本机（同一 Wi-Fi 遥控）" title="用手机浏览器连本机（同一 Wi-Fi 遥控）">📱 手机</span>
-      <span class="usage" id="historyBtn" data-i18n="🕘 历史" data-i18n-title="查看已关闭的对话历史，可重新打开续聊" title="查看已关闭的对话历史，可重新打开续聊">🕘 历史</span>
-      <span class="usage" id="evolveBtn" data-i18n="🧬 进化" data-i18n-title="自进化：让 App 改自己的源码（自动回滚保护）" title="自进化：让 App 改自己的源码（自动回滚保护）">🧬 进化</span>
-      <span class="usage" id="packBtn" data-i18n="📦 打包" data-i18n-title="全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装" title="全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装">📦 打包</span>
     </div>
     <div id="main">
+      <div id="activitybar">
+        <div class="act-btn active" data-view="sc" data-i18n-title="源代码管理" title="源代码管理">⎇</div>
+        <div class="act-btn" data-view="req" data-i18n-title="需求开发：逐条录入需求，右侧自动分析并修改代码" title="需求开发：逐条录入需求，右侧自动分析并修改代码">✓</div>
+        <div class="act-btn" id="historyBtn" data-i18n-title="查看已关闭的对话历史，可重新打开续聊" title="查看已关闭的对话历史，可重新打开续聊">🕘</div>
+        <div class="act-btn" id="evolveBtn" data-i18n-title="自进化：让 App 改自己的源码（自动回滚保护）" title="自进化：让 App 改自己的源码（自动回滚保护）">🧬</div>
+        <div class="act-btn" id="packBtn" data-i18n-title="全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装" title="全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装">📦</div>
+        <div class="act-btn" id="mobileBtn" data-i18n-title="用手机浏览器连本机（同一 Wi-Fi 遥控）" title="用手机浏览器连本机（同一 Wi-Fi 遥控）">📱</div>
+        <div class="act-spacer"></div>
+        <div class="act-btn" id="acctBtn" data-i18n-title="切换 Claude 账号" title="切换 Claude 账号">👤</div>
+        <div class="act-btn" id="langBtn" data-i18n-title="切换语言 / Switch language" title="切换语言 / Switch language">EN</div>
+      </div>
       <div id="sidebar">
-        <div id="sideSwitch">
-          <span class="side-tab active" data-view="sc" data-i18n="⎇ 源代码管理" data-i18n-title="源代码管理" title="源代码管理">⎇ 源代码管理</span>
-          <span class="side-tab" data-view="req" data-i18n="✓ 需求开发" data-i18n-title="需求开发：逐条录入需求，右侧自动分析并修改代码" title="需求开发：逐条录入需求，右侧自动分析并修改代码">✓ 需求开发</span>
-        </div>
         <div id="scView">
         <div id="branchpanel">
           <div class="sc-title">

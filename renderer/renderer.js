@@ -1147,6 +1147,12 @@ function fmtTime(t) {
   try { return new Date(t).toLocaleString(getLang() === "en" ? "en-US" : "zh-CN", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" }); }
   catch { return t; }
 }
+// 仅显示时:分（用于 5 小时窗到期时间，通常为当天）
+function fmtTimeShort(t) {
+  if (!t) return "—";
+  try { return new Date(t).toLocaleTimeString(getLang() === "en" ? "en-US" : "zh-CN", { hour: "2-digit", minute: "2-digit" }); }
+  catch { return t; }
+}
 async function loadUsage() {
   const el = $("usage");
   el.textContent = tr("用量…");
@@ -1161,7 +1167,7 @@ async function loadUsage() {
   const sd = u.rate_limits.seven_day;
   const parts = [];
   if (sub) parts.push(sub);
-  if (fh && fh.utilization != null) parts.push(`5h ${Math.round(fh.utilization)}%`);
+  if (fh && fh.utilization != null) parts.push(`⏰${fmtTimeShort(fh.resets_at)} ${Math.round(fh.utilization)}%`);
   if (sd && sd.utilization != null) parts.push(`7d ${Math.round(sd.utilization)}%`);
   el.textContent = parts.join(" · ") || tr("用量");
   el.title =
@@ -1524,11 +1530,17 @@ loadEvolveHistory();
 
 // ── 需求驱动开发：左侧「需求」视图，逐条让右侧分析并修改代码 ──
 // 视图切换（VSCode 式：源代码管理 / 需求，二者在侧栏中互相覆盖）
-document.querySelectorAll("#sideSwitch .side-tab").forEach((tab) => {
+document.querySelectorAll("#activitybar .act-btn[data-view]").forEach((tab) => {
   tab.onclick = () => {
+    // 再次点击当前视图图标 → 折叠/展开侧栏（VSCode 行为）
+    if (tab.classList.contains("active")) {
+      $("sidebar").classList.toggle("collapsed");
+      return;
+    }
     document
-      .querySelectorAll("#sideSwitch .side-tab")
+      .querySelectorAll("#activitybar .act-btn[data-view]")
       .forEach((x) => x.classList.toggle("active", x === tab));
+    $("sidebar").classList.remove("collapsed");
     $("sidebar").classList.toggle("req-mode", tab.dataset.view === "req");
   };
 });
