@@ -23,6 +23,9 @@
     "⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token":
       "⚠ Context is large: send /compact to compress history, or start a new chat to save tokens",
     " · ⚠ 上下文 {0}，建议 /compact 或新开对话": " · ⚠ context {0} — consider /compact or a new chat",
+    "🧹 上下文已达 {0}，自动发送 /compact 压缩后继续…":
+      "🧹 Context reached {0} — auto-sending /compact, then your message will follow…",
+    "🔄 持续进化：巡检无产出，30 分钟后再试": "🔄 Continuous evolve: audit produced nothing, retrying in 30 min",
     "快捷键速查（按 ? 打开）": "Keyboard shortcuts (press ?)",
     "⌨️ 快捷键速查": "⌨️ Keyboard Shortcuts",
     "全局": "Global",

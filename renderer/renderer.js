@@ -1180,6 +1180,9 @@ function fmtTokens(n) {
 }
 // 上下文超过该规模就提示压缩/新开对话——再往后每轮重发的历史越来越贵
 const CTX_WARN = 100000;
+// 超过该规模后，用户下次发消息时先自动 /compact 再发（与 Claude Code 自动压缩同思路，
+// 但提前到更省钱的时点：不等到逼近模型上限才压）
+const CTX_AUTOCOMPACT = 130000;
 // 在输入区底部显示当前会话累计 token 与费用，让成本一目了然。
 // 计费等效口径：缓存读≈0.1×、缓存写≈1.25×（与 API 定价比例一致）；
 // 旧的四项全价累加会把便宜的缓存读也按全价算，数字虚高一个量级。
@@ -1408,13 +1411,24 @@ function send() {
     scrollIfActive(conv);
     return;
   }
+  // 上下文过大且空闲 => 先自动压缩，再把本条消息经队列自动发出。
+  // 压缩放在「用户继续聊」时才做：被搁置的对话不白白花一次压缩费
+  if (conv.ctx >= CTX_AUTOCOMPACT && !conv._compacting) {
+    conv._compacting = true;
+    conv.queue.push(promptToSend);
+    addMsg(conv, "assistant", trf("🧹 上下文已达 {0}，自动发送 /compact 压缩后继续…", fmtTokens(conv.ctx)));
+    startTurn(conv, "/compact");
+    return;
+  }
   startTurn(conv, promptToSend);
 }
 
 function attachNote(list) {
   if (!list.length) return "";
+  // 模板尽量短：附件说明会进入对话历史、之后每轮重发。工具用法模型自己知道，
+  // 只需点明「这是要读的文件」即可
   return (
-    "\n\n[用户附带了以下文件，请用 Read 工具查看图片/PDF，或用 Bash 配合系统可用的工具（如 unzip 解 .docx 的 word/document.xml、macOS 的 textutil 等）提取 Word/其他格式文本，然后据其内容回答]\n" +
+    "\n\n[附件，请用工具按需读取（图片/PDF 用 Read；docx 可解包 word/document.xml）]\n" +
     list.map((a) => "- " + a.path).join("\n")
   );
 }
@@ -3464,6 +3478,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint 
         (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
     }
     if (typeof ctx === "number" && ctx > 0) conv.ctx = ctx;
+    conv._compacting = false; // 自动压缩轮结束（或普通轮结束），解除标记
   }
   finishTurn(conv,
     `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}` +
@@ -3483,13 +3498,13 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint 
 });
 window.api.on("chat:stopped", ({ convId }) => {
   const conv = getConv(convId);
-  if (conv) conv.queue = []; // 用户主动停止 => 清空排队
+  if (conv) { conv.queue = []; conv._compacting = false; } // 用户主动停止 => 清空排队
   finishTurn(conv, tr("⏹ 已停止"));
   reqOnTurnEnd(conv, false);
 });
 window.api.on("chat:error", ({ convId, message }) => {
   const conv = getConv(convId);
-  if (conv) conv.queue = []; // 出错 => 不再继续排队
+  if (conv) { conv.queue = []; conv._compacting = false; } // 出错 => 不再继续排队
   finishTurn(getConv(convId), null, tr("出错了：") + "\n" + message);
   notifyBgTurnEnd(conv, false, 0);
   reqOnTurnEnd(conv, false);
