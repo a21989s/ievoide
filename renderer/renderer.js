@@ -922,7 +922,28 @@ async function selectRepo(repoPath) {
     .forEach((el) => el.classList.toggle("active", el.dataset.path === repoPath));
   await loadGraph(repoPath);
   await loadStatus(repoPath);
+  window.api.gitWatch(repoPath); // 切换仓库 → 主进程监听该仓库的文件变化
 }
+
+// ── Source Control 自动刷新：文件监听即时刷新 + 低频轮询兜底 ──────
+let scRefreshing = false; // 正在刷新（避免并发/与 doGit 叠加）
+async function scAutoRefresh() {
+  if (scRefreshing || !activeRepo) return;
+  if (document.hidden) return; // 后台不刷
+  scRefreshing = true;
+  try {
+    await loadStatus(activeRepo);
+    await loadGraph(activeRepo);
+  } catch {}
+  scRefreshing = false;
+}
+// 主进程文件监听：工作区变化时即时刷新（不依赖轮询）
+window.api.on("git:changed", (repo) => { if (repo === activeRepo) scAutoRefresh(); });
+// 低频轮询兜底（监听漏报 / 远端 ahead-behind 变化）
+setInterval(scAutoRefresh, 10000);
+// 窗口重新获得焦点 / 标签页变可见时立即刷新（切回应用马上同步）
+window.addEventListener("focus", scAutoRefresh);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) scAutoRefresh(); });
 
 // ── Source Control：工作区状态（暂存/改动） ─────────────────
 function fileRow(f, staged) {
@@ -949,18 +970,26 @@ function fileRow(f, staged) {
   return el;
 }
 
+let lastStatusSig = null; // 上次状态签名：内容不变则跳过重建，避免闪烁
 async function loadStatus(repoPath) {
   const stagedEl = $("scStaged");
   const changesEl = $("scChanges");
-  stagedEl.innerHTML = "";
-  changesEl.innerHTML = "";
   const r = await window.api.gitStatus(repoPath);
   if (!r || r.error) {
+    lastStatusSig = null;
+    stagedEl.innerHTML = "";
+    changesEl.innerHTML = "";
     $("scStagedN").textContent = "0";
     $("scChangesN").textContent = "0";
     renderStatusbar(null);
     return;
   }
+  // 内容签名：与上次一致则不动 DOM
+  const sig = repoPath + "|" + JSON.stringify(r.staged) + "|" + JSON.stringify(r.changes) + "|" + r.ahead + "|" + r.behind;
+  if (sig === lastStatusSig) return;
+  lastStatusSig = sig;
+  stagedEl.innerHTML = "";
+  changesEl.innerHTML = "";
   $("scStagedN").textContent = r.staged.length;
   $("scChangesN").textContent = r.changes.length;
   r.staged.forEach((f) => stagedEl.appendChild(fileRow(f, true)));
@@ -996,20 +1025,25 @@ $("sbCmdk").onclick = () => openCmdk();
 
 // 执行 git 操作后刷新状态+图
 async function doGit(fn, okMsg) {
+  scRefreshing = true; // 占用刷新锁，避免与自动轮询并发
   $("status").textContent = tr("执行中…");
-  const r = await fn();
-  $("status").textContent = "";
-  if (r && r.error) {
-    toast(tr("Git 操作失败：") + "\n" + r.error, "error");
-    return false;
+  try {
+    const r = await fn();
+    $("status").textContent = "";
+    if (r && r.error) {
+      toast(tr("Git 操作失败：") + "\n" + r.error, "error");
+      return false;
+    }
+    if (okMsg) {
+      $("status").textContent = okMsg;
+      clearStatusLater(1800);
+    }
+    await loadStatus(activeRepo);
+    await loadGraph(activeRepo);
+    return true;
+  } finally {
+    scRefreshing = false; // 释放刷新锁，避免操作后自动轮询被永久卡住
   }
-  if (okMsg) {
-    $("status").textContent = okMsg;
-    clearStatusLater(1800);
-  }
-  await loadStatus(activeRepo);
-  await loadGraph(activeRepo);
-  return true;
 }
 
 // 显示 diff（复用查看器浮层）；未跟踪文件显示为全新增，目录给提示
@@ -1206,21 +1240,29 @@ function commitMenu(c, x, y) {
   ]);
 }
 
+let lastGraphSig = null; // 上次提交图签名：内容不变则跳过重建，避免闪烁
 async function loadGraph(repoPath) {
   const graph = $("gitgraph");
   const dd = $("branchDropdown");
-  graph.innerHTML = "";
-  dd.innerHTML = "";
-  dd.classList.remove("open");
 
   const r = await window.api.gitGraph(repoPath);
   if (!r || r.error) {
+    lastGraphSig = null;
+    dd.innerHTML = "";
+    dd.classList.remove("open");
     graph.innerHTML = `<div style="color:#c77;font-size:12px;padding:4px 6px">${esc(r?.error || tr("读取失败"))}</div>`;
     return;
   }
 
   // 分支下拉（切换图里没出现的分支）
   const b = await window.api.gitBranches(repoPath);
+  // 内容签名：提交图 + 当前分支 + 分支列表，一致则不动 DOM
+  const sig = repoPath + "|" + r.current + "|" + JSON.stringify(r.commits) + "|" + JSON.stringify(b?.branches || []);
+  if (sig === lastGraphSig) return;
+  lastGraphSig = sig;
+  graph.innerHTML = "";
+  dd.innerHTML = "";
+  dd.classList.remove("open");
   if (b && b.branches) {
     for (const name of b.branches) {
       const el = document.createElement("div");
@@ -2720,6 +2762,16 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) load
   };
 })();
 
+// ── 模型切换：下拉选中即写回 config.json，下一轮对话生效（省 token：日常选 Sonnet）──
+(async () => {
+  const sel = $("modelSel");
+  if (!sel) return;
+  try { sel.value = (await window.api.getModel()) || ""; } catch {}
+  sel.onchange = async () => {
+    try { await window.api.setModel(sel.value); } catch {}
+  };
+})();
+
 // ── 打包：点 📦 弹三选一（完整备份 / 全量 / 给别人）→ 桌面 zip ──
 async function doPack(mode, withCreds) {
   const label = { full: tr("全量(含依赖,零安装)"), backup: tr("完整备份(含历史)"), dist: tr("给别人(不含私有数据)") }[mode];
@@ -2831,15 +2883,21 @@ $("acctMenu").addEventListener("click", (e) => e.stopPropagation());
 // ── 手机连接面板 ───────────────────────────────────────────
 function renderMobile(info) {
   const running = info && info.running;
+  const external = !!(running && info.external); // 引擎由计划任务常驻，App 内无需启停
   const mt = $("mobToggle");
   mt.textContent = running ? "⏹" : "▶";
-  mt.title = running ? tr("停止服务") : tr("启动服务");
+  mt.disabled = external;
+  mt.title = external
+    ? tr("常驻服务由系统计划任务托管，无需在此启停")
+    : (running ? tr("停止服务") : tr("启动服务"));
   $("mobState").textContent = running
-    ? (info.url ? tr("运行中") : tr("运行中 · 未找到局域网 IP，请确认电脑已连 Wi-Fi 后手动填手机浏览器地址"))
+    ? (external ? tr("运行中（常驻服务）") : tr("运行中"))
     : tr("未启动");
   $("mobConn").style.display = running && info.url ? "block" : "none";
   if (running && info.url) {
     $("mobUrl").textContent = info.url;
+    $("mobLan").textContent = info.lanUrl ? tr("同一 Wi-Fi 可直连：") + info.lanUrl : "";
+    // 本地 canvas 生成二维码：URL 含全权限令牌，绝不外发给第三方二维码服务
     const canvas = $("mobQr");
     canvas.width = canvas.height = 200;
     try { window.QRCanvas.draw(info.url, canvas); } catch (e) { console.error("QR draw:", e); }
@@ -2886,8 +2944,7 @@ $("histSearch").oninput = (e) => renderHistory(e.target.value);
 $("mobToggle").onclick = async () => {
   const cur = await window.api.mobileStatus();
   $("mobToggle").disabled = true;
-  renderMobile(cur.running ? await window.api.mobileStop() : await window.api.mobileStart());
-  $("mobToggle").disabled = false;
+  renderMobile(cur.running ? await window.api.mobileStop() : await window.api.mobileStart()); // disabled 状态由 renderMobile 决定
 };
 $("mobCopy").onclick = () => navigator.clipboard?.writeText($("mobUrl").textContent || "");
 $("mobOpen").onclick = () => { const u = $("mobUrl").textContent; if (u) window.api.openExternal(u); };

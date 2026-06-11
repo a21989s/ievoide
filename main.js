@@ -4,6 +4,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import fsSync from "node:fs";
 import os from "node:os";
+import net from "node:net";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
 import { query } from "@anthropic-ai/claude-agent-sdk";
@@ -65,10 +66,24 @@ const DEFAULT_CONFIG = {
     "始终用简体中文回答，除非用户明确要求使用其他语言。代码、命令、标识符等保持原样。" +
     "回答务必简洁：先给结论和必要的代码/命令，不复述问题、不做未被要求的展开，长解释仅在被要求时给出。",
   permissionMode: "bypassPermissions",
+  // 省 token 旋钮（均可在 tools/config.json 编辑）：
+  //  model: 留空走订阅默认（多为 Opus）。日常用 "claude-sonnet-4-6" 可显著降低用量。
+  //  fallbackModel: 主模型过载时自动降级到的更省模型。
+  //  effort: 思考/输出深度 "low"|"medium"|"high"|"xhigh"|"max"，不设=high。
+  //          日常问答用 "medium" 或 "low" 可明显省 token；难题再调高。
+  //  maxThinkingTokens: 已废弃（SDK deprecated），仅旧配置兼容；请改用 effort。
+  //  allowedTools / disallowedTools: 工具白/黑名单，裁掉用不到的工具可减少每轮请求体。
   model: null,
+  // 主模型过载时自动降级到的更省模型。null=不降级。
+  fallbackModel: null,
+  // 思考/输出深度 "low"|"medium"|"high"|"xhigh"|"max"。null=用 SDK 默认。
+  effort: null,
   // 思考预算上限（token）。null=用模型默认；设小（如 4096）可显著降低输出 token 消耗，
   // 对话/进化/巡检/手机端统一生效
   maxThinkingTokens: null,
+  // 工具白/黑名单，裁掉用不到的工具可减少每轮请求体。null=不限制。
+  allowedTools: null,
+  disallowedTools: null,
   // 进化/巡检专用模型。null=跟随 model。持续进化是个无人值守的循环、token 大户，
   // 配个便宜模型（如 claude-sonnet-4-6）可大幅降低消耗，对话仍用主力模型
   evolveModel: null,
@@ -79,6 +94,17 @@ const DEFAULT_CONFIG = {
   // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
   evolveAutoRestart: false,
 };
+const EFFORT_LEVELS = ["low", "medium", "high", "xhigh", "max"];
+// 把可选的省 token 配置拼进 SDK options（仅在配置了有效值时才下发）
+function tokenOpts(c) {
+  const o = {};
+  if (c.fallbackModel) o.fallbackModel = c.fallbackModel;
+  if (EFFORT_LEVELS.includes(c.effort)) o.effort = c.effort;
+  else if (Number.isFinite(c.maxThinkingTokens)) o.maxThinkingTokens = c.maxThinkingTokens; // 旧配置兼容
+  if (Array.isArray(c.allowedTools) && c.allowedTools.length) o.allowedTools = c.allowedTools;
+  if (Array.isArray(c.disallowedTools) && c.disallowedTools.length) o.disallowedTools = c.disallowedTools;
+  return o;
+}
 function loadConfig() {
   const file = path.join(TOOLS_DIR, "config.json");
   try {
@@ -315,6 +341,18 @@ ipcMain.handle("openPath", async (_e, p) => {
 // ── 手机/远程端：在 App 内启动 server.mjs（同一 Wi-Fi 用手机浏览器遥控）──
 let mobileProc = null;
 const MOBILE_PORT = Number(process.env.PORT) || 8787;
+// 公网访问地址（Cloudflare Tunnel，见 REMOTE-ACCESS.md），二维码默认用它
+const PUBLIC_URL = (process.env.CT_PUBLIC_URL || "https://dev.feioz.com").replace(/\/+$/, "");
+// 引擎可能由计划任务 ClaudeEngine 常驻运行（不归 mobileProc 管），以端口是否监听为准
+function portListening(port) {
+  return new Promise((resolve) => {
+    const s = net.connect({ port, host: "127.0.0.1" });
+    const done = (v) => { try { s.destroy(); } catch {} resolve(v); };
+    s.once("connect", () => done(true));
+    s.once("error", () => done(false));
+    s.setTimeout(800, () => done(false));
+  });
+}
 function lanIP() {
   // 只认常见局域网网段（手机同一 Wi-Fi 才连得上），并过滤 VPN/虚拟网卡
   const isPrivate = (a) =>
@@ -343,16 +381,19 @@ function mobileToken() {
     return "";
   }
 }
-function mobileInfo() {
+async function mobileInfo() {
   const ip = lanIP();
   const token = mobileToken();
-  const running = !!mobileProc;
-  const url = running && ip ? `http://${ip}:${MOBILE_PORT}/?token=${token}` : "";
-  return { running, ip, port: MOBILE_PORT, token, url };
+  const listening = await portListening(MOBILE_PORT);
+  const running = !!mobileProc || listening;
+  const external = listening && !mobileProc; // 由计划任务等外部方式常驻运行
+  const url = running ? `${PUBLIC_URL}/?token=${token}` : "";
+  const lanUrl = running ? `http://${ip}:${MOBILE_PORT}/?token=${token}` : "";
+  return { running, external, ip, port: MOBILE_PORT, token, url, lanUrl };
 }
 ipcMain.handle("mobileStatus", async () => mobileInfo());
 ipcMain.handle("mobileStart", async () => {
-  if (mobileProc) return mobileInfo();
+  if (mobileProc || (await portListening(MOBILE_PORT))) return mobileInfo();
   try {
     const serverPath = path.join(TOOLS_DIR, "server.mjs");
     mobileProc = execFile(
@@ -386,6 +427,22 @@ ipcMain.handle("setWorkdir", async (_e, p) => {
     return p;
   } catch {
     return null; // 路径不存在（如已删除）=> 不恢复
+  }
+});
+
+// ── 努力程度切换：读/写 config.json 的 effort 字段（省 token 的主旋钮，下一轮对话即生效）──
+ipcMain.handle("getEffort", () => appConfig.effort || "");
+ipcMain.handle("setEffort", async (_e, effort) => {
+  appConfig.effort = EFFORT_LEVELS.includes(effort) ? effort : null;
+  try {
+    const file = path.join(TOOLS_DIR, "config.json");
+    let saved = {};
+    try { saved = JSON.parse(await fs.readFile(file, "utf8")); } catch {}
+    saved.effort = appConfig.effort;
+    await fs.writeFile(file, JSON.stringify(saved, null, 2));
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
   }
 });
 
@@ -890,7 +947,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
         },
         // plan 轮只读规划，可用 planModel 降档省钱；执行轮（plan=false）仍用主力模型
         ...(((plan && appConfig.planModel) || appConfig.model) ? { model: (plan && appConfig.planModel) || appConfig.model } : {}),
-        ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
+        ...tokenOpts(appConfig),
         ...(mcpServers ? { mcpServers } : {}),
         abortController: abort,
         ...(resumeId ? { resume: resumeId } : {}),
@@ -1747,6 +1804,41 @@ ipcMain.handle("gitRepos", async () => {
   for (const r of repos) r.current = await currentBranch(r.path);
   return repos;
 });
+
+// ── 仓库文件监听：工作区变化时主动通知渲染层刷新（替代频繁轮询）──
+let repoWatcher = null;
+let repoWatchPath = null;
+let watchDebounce = null;
+function stopRepoWatch() {
+  if (repoWatcher) { try { repoWatcher.close(); } catch {} }
+  repoWatcher = null;
+  repoWatchPath = null;
+  if (watchDebounce) { clearTimeout(watchDebounce); watchDebounce = null; }
+}
+ipcMain.handle("gitWatch", (_e, repo) => {
+  if (repo && repo === repoWatchPath) return true; // 已在监听同一仓库
+  stopRepoWatch();
+  if (!repo) return false;
+  try {
+    repoWatcher = fsSync.watch(repo, { recursive: true }, (_evt, file) => {
+      const f = (file || "").replace(/\\/g, "/");
+      // 忽略噪音：node_modules、.git 内部对象/日志（保留 index/HEAD/refs 等关键变化）
+      if (/(^|\/)node_modules(\/|$)/.test(f)) return;
+      if (/(^|\/)\.git\/(objects|lfs|logs|hooks)(\/|$)/.test(f)) return;
+      if (watchDebounce) clearTimeout(watchDebounce);
+      watchDebounce = setTimeout(() => {
+        watchDebounce = null;
+        if (win && !win.isDestroyed()) win.webContents.send("git:changed", repo);
+      }, 400);
+    });
+    repoWatchPath = repo;
+    return true;
+  } catch (e) {
+    crashLog("gitWatch", String(e));
+    return false;
+  }
+});
+app.on("before-quit", stopRepoWatch);
 
 ipcMain.handle("gitBranches", async (_e, repo) => {
   try {

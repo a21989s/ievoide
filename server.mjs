@@ -24,6 +24,23 @@ const cfg = (() => {
 })();
 const sysAppend = cfg.systemPromptAppend || "始终用简体中文回答，除非用户明确要求其他语言。";
 const permissionMode = cfg.permissionMode || "bypassPermissions";
+// 省 token 旋钮，详见 main.js DEFAULT_CONFIG 注释；与桌面端共用同一份 config.json。
+const tokenOpts = (() => {
+  const o = {};
+  if (cfg.fallbackModel) o.fallbackModel = cfg.fallbackModel;
+  if (["low", "medium", "high", "xhigh", "max"].includes(cfg.effort)) o.effort = cfg.effort;
+  else if (Number.isFinite(cfg.maxThinkingTokens)) o.maxThinkingTokens = cfg.maxThinkingTokens; // 旧配置兼容
+  if (Array.isArray(cfg.allowedTools) && cfg.allowedTools.length) o.allowedTools = cfg.allowedTools;
+  if (Array.isArray(cfg.disallowedTools) && cfg.disallowedTools.length) o.disallowedTools = cfg.disallowedTools;
+  return o;
+})();
+
+// 未选目录时的中性工作目录（保证 SDK 有合法 cwd，但无项目文件上下文）
+function scratchDir() {
+  const d = path.join(__dirname, "data", "scratch");
+  try { fs.mkdirSync(d, { recursive: true }); } catch {}
+  return d;
+}
 
 async function readMcp() {
   try {
@@ -274,30 +291,79 @@ const server = http.createServer(async (req, res) => {
       res.on("close", () => abort.abort());
       try {
         const mcpServers = await readMcp();
-        const r = query({
-          prompt,
-          options: {
-            cwd: cwd || os.homedir(),
-            permissionMode,
-            includePartialMessages: true,
-            systemPrompt: { type: "preset", preset: "claude_code", append: sysAppend },
-            ...(cfg.model ? { model: cfg.model } : {}),
-            ...(cfg.maxThinkingTokens > 0 ? { maxThinkingTokens: cfg.maxThinkingTokens } : {}),
-            ...(mcpServers ? { mcpServers } : {}),
-            abortController: abort,
-            ...(resume ? { resume } : {}),
-          },
-        });
-        for await (const msg of r) {
-          if (msg.type === "stream_event") {
-            const e = msg.event;
-            if (e?.type === "content_block_delta" && e.delta?.type === "text_delta")
-              send("chunk", { text: e.delta.text });
-          } else if (msg.type === "assistant") {
-            for (const b of msg.message.content)
-              if (b.type === "tool_use") send("tool", { name: b.name });
-          } else if (msg.type === "result") {
-            send("done", { session: msg.session_id, cost: msg.total_cost_usd, ms: msg.duration_ms });
+        // 公共参数；每次调用新建子进程，子进程启动时 Claude Code CLI 会重新读取/刷新
+        // ~/.claude/.credentials.json 里的订阅 OAuth token。
+        const baseOpts = {
+          // 未选目录时用中性 scratch 目录当 cwd（与桌面端一致）：
+          // 避免以 homedir 为项目目录——会把家目录的 CLAUDE.md/git 状态等无关上下文喂给模型，白耗 token
+          cwd: cwd || scratchDir(),
+          permissionMode,
+          includePartialMessages: true,
+          systemPrompt: { type: "preset", preset: "claude_code", append: sysAppend },
+          ...(cfg.model ? { model: cfg.model } : {}),
+          ...tokenOpts,
+          ...(mcpServers ? { mcpServers } : {}),
+          abortController: abort,
+        };
+
+        // 跑一次完整的流式会话；任一异常向上抛给重试逻辑处理。
+        const runOnce = async (opts) => {
+          const r = query({ prompt, options: opts });
+          for await (const msg of r) {
+            if (msg.type === "stream_event") {
+              const e = msg.event;
+              if (e?.type === "content_block_delta" && e.delta?.type === "text_delta")
+                send("chunk", { text: e.delta.text });
+            } else if (msg.type === "assistant") {
+              for (const b of msg.message.content)
+                if (b.type === "tool_use") send("tool", { name: b.name });
+            } else if (msg.type === "result") {
+              const u = msg.usage || {};
+              send("done", {
+                session: msg.session_id,
+                cost: msg.total_cost_usd,
+                ms: msg.duration_ms,
+                usage: {
+                  input: u.input_tokens ?? 0,
+                  output: u.output_tokens ?? 0,
+                  cacheRead: u.cache_read_input_tokens ?? 0,
+                  cacheWrite: u.cache_creation_input_tokens ?? 0,
+                },
+              });
+            }
+          }
+        };
+
+        // 认证失效（Pro 订阅 OAuth token 过期/失效）的特征。
+        const isAuthErr = (m) => /\b401\b|invalid authentication|failed to authenticate|unauthorized/i.test(m);
+
+        try {
+          await runOnce({ ...baseOpts, ...(resume ? { resume } : {}) });
+        } catch (err) {
+          const m = String(err?.stack || err);
+          if (abort.signal.aborted && resume && /No conversation found|session id/i.test(m)) {
+            // 续接失败：起新会话重试一次
+            try { await runOnce(baseOpts); }
+            catch (e2) { send("error", { message: String(e2?.stack || e2) }); }
+          } else if (isAuthErr(m) && !abort.signal.aborted) {
+            // 401：订阅 token 过期。重试时新起子进程会触发 CLI 自动刷新凭证，
+            // 稍等片刻再试，给后台刷新留出时间，最多重试 3 次。
+            send("info", { message: "登录凭证已过期，正在刷新并重试…" });
+            let recovered = false;
+            for (let i = 0; i < 3 && !recovered && !abort.signal.aborted; i++) {
+              await new Promise((r) => setTimeout(r, 1500));
+              try {
+                await runOnce({ ...baseOpts, ...(resume ? { resume } : {}) });
+                recovered = true;
+              } catch (e3) {
+                const m3 = String(e3?.stack || e3);
+                if (!isAuthErr(m3)) { send("error", { message: m3 }); recovered = true; }
+              }
+            }
+            if (!recovered && !abort.signal.aborted)
+              send("error", { message: "认证刷新失败：请在终端运行 `claude` 重新 /login 后再试。" });
+          } else {
+            send("error", { message: m });
           }
         }
       } catch (err) {
@@ -328,10 +394,11 @@ server.listen(PORT, () => {
   const ip =
     Object.values(os.networkInterfaces()).flat().find((i) => i && i.family === "IPv4" && !i.internal)?.address ||
     "localhost";
+  const publicUrl = (process.env.CT_PUBLIC_URL || "https://dev.feioz.com").replace(/\/+$/, "");
   console.log("\n=== Claude Tools 手机/远程端已启动 ===");
   console.log(`  本机访问 : http://localhost:${PORT}/?token=${TOKEN}`);
-  console.log(`  手机访问 : http://${ip}:${PORT}/?token=${TOKEN}   (手机与本机同一 Wi-Fi)`);
+  console.log(`  公网访问 : ${publicUrl}/?token=${TOKEN}   (任意网络，经 Cloudflare Tunnel，见 REMOTE-ACCESS.md)`);
+  console.log(`  局域网   : http://${ip}:${PORT}/?token=${TOKEN}   (手机与本机同一 Wi-Fi)`);
   console.log(`  访问令牌 : ${TOKEN}`);
-  console.log("  远程(非同网)：用 Tailscale / ngrok 暴露此端口。");
   console.log("  ⚠️ 该服务以全权限运行 Claude，请勿暴露到公网且妥善保管令牌。\n");
 });

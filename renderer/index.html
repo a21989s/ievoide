@@ -844,9 +844,9 @@
     <div id="acctMenu"></div>
     <div id="mobileModal">
       <div class="box">
-        <div class="vhead"><span data-i18n="📱 手机连接（同一 Wi-Fi）">📱 手机连接（同一 Wi-Fi）</span><button id="mobClose" data-i18n-title="关闭" title="关闭">✕</button></div>
+        <div class="vhead"><span data-i18n="📱 手机连接">📱 手机连接</span><button id="mobClose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <div id="mobBody">
-          <p class="mob-tip" data-i18n="手机与本机连同一个 Wi-Fi，扫码或在手机浏览器打开下方地址即可遥控。⚠️ 该服务以全权限运行，勿暴露公网、妥善保管令牌。">手机与本机连同一个 Wi-Fi，扫码或在手机浏览器打开下方地址即可遥控。⚠️ 该服务以全权限运行，勿暴露公网、妥善保管令牌。</p>
+          <p class="mob-tip" data-i18n="手机扫码或在浏览器打开下方地址即可遥控，任意网络（4G/5G/Wi-Fi）可用。⚠️ 链接含全权限令牌，请勿外传。">手机扫码或在浏览器打开下方地址即可遥控，任意网络（4G/5G/Wi-Fi）可用。⚠️ 链接含全权限令牌，请勿外传。</p>
           <div class="mob-row">
             <button id="mobToggle" data-i18n-title="启动服务" title="启动服务">▶</button>
             <span id="mobState" class="meta"></span>
@@ -854,6 +854,7 @@
           <div id="mobConn" style="display:none">
             <canvas id="mobQr" width="200" height="200"></canvas>
             <div class="mob-url"><code id="mobUrl"></code></div>
+            <div class="mob-url" style="opacity:.6"><code id="mobLan"></code></div>
             <div class="mob-row">
               <button id="mobCopy" data-i18n-title="复制地址" title="复制地址">📋</button>
               <button id="mobOpen" data-i18n-title="本机浏览器打开" title="本机浏览器打开">🌐</button>
