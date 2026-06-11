@@ -264,6 +264,10 @@
     "✅ 按计划执行": "✅ Run the plan",
     "✋ 继续调整": "✋ Keep refining",
     "请按上述计划执行": "Please execute the plan above",
+    "读取": "Read",
+    "匹配": "Glob",
+    "搜索": "Search",
+    "抓取": "Fetch",
   };
 
   let lang = "zh";

@@ -1605,13 +1605,50 @@ function appendTool(conv, id, name, inputObj) {
   }
   const el = document.createElement("div");
   el.className = "toolcall";
-  let arg = "";
-  try { arg = JSON.stringify(inputObj); } catch { arg = String(inputObj); }
-  if (arg.length > 300) arg = arg.slice(0, 300) + "…";
-  el.textContent = `🔧 ${name}  ${arg}`;
+  // Bash/Read/Grep/Glob/WebSearch/WebFetch 等高频常规工具 → 一行式人类可读摘要，替代截断的原始 JSON
+  const sum = toolSummary(name, inputObj);
+  if (sum) {
+    let t = String(sum.text).replace(/\s*\n\s*/g, " ⏎ "); // 多行命令压成一行
+    if (t.length > 200) t = t.slice(0, 200) + "…";
+    el.textContent = t;
+    if (sum.title) el.title = sum.title;
+  } else {
+    let arg = "";
+    try { arg = JSON.stringify(inputObj); } catch { arg = String(inputObj); }
+    if (arg.length > 300) arg = arg.slice(0, 300) + "…";
+    el.textContent = `🔧 ${name}  ${arg}`;
+  }
   conv.currentBubble.appendChild(el);
   if (id) conv.toolCards[id] = el;
   scrollIfActive(conv);
+}
+
+// 把绝对路径缩成相对当前文件夹的短路径（不在文件夹内则原样返回）
+function shortPath(p) {
+  let s = String(p || "");
+  const root = currentFolder ? currentFolder.replace(/\/+$/, "") + "/" : null;
+  if (root && s.startsWith(root)) s = s.slice(root.length);
+  return s;
+}
+
+// 高频常规工具调用 → 一行式人类可读摘要（{text, title?}）；不认识/缺关键字段则返回 null 走原始 JSON 展示
+function toolSummary(name, input) {
+  if (!input || typeof input !== "object") return null;
+  switch (name) {
+    case "Bash":
+      return input.command ? { text: `$ ${input.command}`, title: input.description || "" } : null;
+    case "Read":
+      return input.file_path ? { text: `📖 ${tr("读取")} ${shortPath(input.file_path)}${input.offset ? `:${input.offset}` : ""}` } : null;
+    case "Glob":
+      return input.pattern ? { text: `📁 ${tr("匹配")} ${input.pattern}${input.path ? ` · ${shortPath(input.path)}` : ""}` } : null;
+    case "Grep":
+      return input.pattern ? { text: `🔎 ${tr("搜索")} ${input.pattern}${input.path ? ` · ${shortPath(input.path)}` : ""}` } : null;
+    case "WebSearch":
+      return input.query ? { text: `🌐 ${tr("搜索")} ${input.query}` } : null;
+    case "WebFetch":
+      return input.url ? { text: `🌐 ${tr("抓取")} ${input.url}` } : null;
+  }
+  return null;
 }
 
 // 把 TodoWrite 的 todos 渲染成 checklist 卡片（✅完成 / ▶进行中 / ○待办）；
