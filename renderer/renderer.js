@@ -1102,11 +1102,20 @@ function buildConvState() {
   };
 }
 function persistConvs() {
-  // localStorage 即时（快速缓存）+ 磁盘文件（耐久，防丢，debounce 写）
-  try { localStorage.setItem("claudeTools.convs", JSON.stringify(buildConvState())); } catch {}
+  // 唯一持久层：磁盘文件（原子写、无配额限制）；debounce 合并高频写，只在落盘时序列化一次
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(() => window.api.saveConvs(buildConvState()), 400);
+  _saveTimer = setTimeout(() => {
+    _saveTimer = null;
+    window.api.saveConvs(buildConvState());
+  }, 400);
 }
+// 关闭/刷新前立即落盘，补上 debounce 窗口内可能丢失的最后改动
+window.addEventListener("pagehide", () => {
+  if (!_saveTimer) return; // 没有待写改动
+  clearTimeout(_saveTimer);
+  _saveTimer = null;
+  window.api.saveConvs(buildConvState());
+});
 
 function newConversation() {
   const c = makeConv();
@@ -1329,13 +1338,14 @@ async function exportActiveConv(includeTools) {
 }
 $("exportConv").onclick = (e) => exportActiveConv(e.shiftKey);
 
-// 启动：优先从磁盘恢复对话历史，回退 localStorage（迁移旧数据）
+// 启动：从磁盘恢复对话历史（旧版 localStorage 全量缓存一次性迁移后清除，磁盘是唯一持久层）
 (async function initConvs() {
   let d = null;
   try { d = await window.api.loadConvs(); } catch {}
   if (!d || !Array.isArray(d.list) || !d.list.length) {
     try { d = JSON.parse(localStorage.getItem("claudeTools.convs") || "null"); } catch {}
   }
+  try { localStorage.removeItem("claudeTools.convs"); } catch {}
   if (d && Array.isArray(d.list) && d.list.length) {
     conversations = d.list.map(makeConv);
     activeConv = getConv(d.active) || conversations[0];
