@@ -250,6 +250,11 @@
     "复制失败：": "Copy failed: ",
     "复制回复": "Copy reply",
     "复制整条回复": "Copy entire reply",
+    "有新结果，点击查看": "New result, click to view",
+    "✅ 「{0}」已完成 · 用时 {1}ms": "✅ \"{0}\" finished · {1}ms",
+    "❌ 「{0}」出错了": "❌ \"{0}\" failed",
+    "点击切回查看结果": "Click to view the result",
+    "点击切回查看错误详情": "Click to view the error details",
   };
 
   let lang = "zh";

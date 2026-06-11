@@ -986,6 +986,7 @@ function ensurePane(conv) {
   return p;
 }
 function showActive() {
+  activeConv.unread = false; // 切回即视为已读
   ensurePane(activeConv);
   chat.replaceChildren(activeConv.pane); // 仅切换显示，不打断后台对话
   chat.scrollTop = chat.scrollHeight;
@@ -1024,6 +1025,7 @@ function makeConv(seed) {
     currentBubble: null,
     toolCards: {},
     busy: false,
+    unread: false, // 非活跃时轮次完成/出错 => true，tab 上显示未读圆点，切回即清除
     queue: [], // 当前轮进行中时，后续追问排队，依次自动发送
     askTimers: [], // AskUserQuestion 卡片的自动倒计时 setInterval，删除/重载时统一清理
     costUsd: seed?.costUsd || 0, // 本会话累计费用（SDK 按当前模型单价结算的 total_cost_usd 累加）
@@ -1214,7 +1216,9 @@ function renderConvList() {
     el.innerHTML =
       (c.busy
         ? `<span class="conv-run" title="${tr("进行中") + (c.queue.length ? trf("，排队 {0}", c.queue.length) : "")}">●${c.queue.length ? c.queue.length : ""}</span>`
-        : "") +
+        : c.unread
+          ? `<span class="conv-unread" title="${tr("有新结果，点击查看")}">●</span>`
+          : "") +
       `<span class="conv-title">${esc(dispTitle)}</span>` +
       `<span class="conv-del" title="${tr("关闭")}">×</span>`;
     el.onclick = (e) => {
@@ -1544,22 +1548,41 @@ function appendTodoCard(conv, id, todos) {
   scrollIfActive(conv);
 }
 
+// 弹一条系统通知（自动处理权限申请）；onclick 用于点击通知后切回对应对话
+function sysNotify(title, body, onclick) {
+  try {
+    if (typeof Notification === "undefined") return;
+    const show = () => {
+      try {
+        const n = new Notification(title, { body });
+        if (onclick) n.onclick = onclick;
+      } catch {}
+    };
+    if (Notification.permission === "granted") show();
+    else if (Notification.permission !== "denied") Notification.requestPermission().then((p) => { if (p === "granted") show(); });
+  } catch {}
+}
+
 // 弹一条系统通知 + 状态栏提示，告诉用户「需要做选择」，避免被后台对话刷屏滚过
 function notifyDecision(text, urgent) {
   try {
     const s = $("status");
     if (s) s.textContent = (urgent ? "⚠ " : "🔔 ") + text;
   } catch {}
-  try {
-    if (typeof Notification === "undefined") return;
-    const show = () => {
-      try {
-        new Notification(urgent ? tr("Claude 需要你的决定") : tr("Claude 等待你选择"), { body: text });
-      } catch {}
-    };
-    if (Notification.permission === "granted") show();
-    else if (Notification.permission !== "denied") Notification.requestPermission().then((p) => { if (p === "granted") show(); });
-  } catch {}
+  sysNotify(urgent ? tr("Claude 需要你的决定") : tr("Claude 等待你选择"), text);
+}
+
+// 非活跃对话的轮次结束/出错：tab 加未读圆点 + 系统通知，免得用户切走后反复手动切回查看
+function notifyBgTurnEnd(conv, ok, ms) {
+  if (!conv || conv === activeConv) return;
+  conv.unread = true;
+  renderConvList();
+  const title = !conv.title || conv.title === "新对话" ? tr("新对话") : conv.title;
+  sysNotify(
+    ok ? trf("✅ 「{0}」已完成 · 用时 {1}ms", title, ms) : trf("❌ 「{0}」出错了", title),
+    ok ? tr("点击切回查看结果") : tr("点击切回查看错误详情"),
+    () => switchConv(conv.id)
+  );
 }
 
 // 把 AskUserQuestion 渲染成交互卡片：每题可点选项（单选/多选），点提交后把选择作为追问发回模型。
@@ -3407,7 +3430,10 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint 
   // 合并而非逐条跑：每轮请求都会全量重发对话上下文，N 条排队逐条跑就是 N 次全量重发，
   // 合并后只重发一次（与 Claude Code 对排队消息的处理一致）。
   if (conv && conv.queue.length) startTurn(conv, conv.queue.splice(0).join("\n\n"));
-  else reqOnTurnEnd(conv, true);
+  else {
+    notifyBgTurnEnd(conv, true, ms); // 后台对话真正闲下来才提醒，排队续跑时不打扰
+    reqOnTurnEnd(conv, true);
+  }
 });
 window.api.on("chat:stopped", ({ convId }) => {
   const conv = getConv(convId);
@@ -3419,5 +3445,6 @@ window.api.on("chat:error", ({ convId, message }) => {
   const conv = getConv(convId);
   if (conv) conv.queue = []; // 出错 => 不再继续排队
   finishTurn(getConv(convId), null, tr("出错了：") + "\n" + message);
+  notifyBgTurnEnd(conv, false, 0);
   reqOnTurnEnd(conv, false);
 });
