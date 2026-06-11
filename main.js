@@ -736,6 +736,9 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
   } catch {}
 
   // 跑一轮查询；resumeId 为要续接的 session（null=新会话）
+  // lastCtx：本轮最后一次 API 请求的输入侧 token（输入+缓存读写）≈ 当前会话上下文规模。
+  // result.usage 是整轮累加值（含工具循环的多次请求），用它估上下文会虚高，故单独取最后一次。
+  let lastCtx = 0;
   const run = async (resumeId) => {
     const response = query({
       prompt,
@@ -773,6 +776,10 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
         if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta")
           send("chat:chunk", { text: ev.delta.text });
       } else if (msg.type === "assistant") {
+        const u = msg.message.usage;
+        if (u)
+          lastCtx =
+            (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
         for (const block of msg.message.content) {
           if (block.type === "tool_use")
             send("chat:tool", { id: block.id, name: block.name, input: block.input });
@@ -804,6 +811,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
           ms: msg.duration_ms,
           session: msg.session_id,
           usage: msg.usage || null, // {input_tokens, output_tokens, cache_*}，供渲染层累计本会话用量
+          ctx: lastCtx, // 当前上下文规模（最后一次请求的输入侧 token），供渲染层提示压缩/新开对话
           checkpoint,
         });
       }
@@ -1221,7 +1229,7 @@ ipcMain.handle("evolveAudit", async () => {
       '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求（联网项末尾附来源 URL）","severity":"high|medium|low"}。';
     const response = query({
       prompt,
-      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND } },
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND }, ...(appConfig.model ? { model: appConfig.model } : {}) },
     });
     let text = "";
     for await (const msg of response) {
@@ -1330,6 +1338,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
         cwd: TOOLS_DIR,
         permissionMode: "bypassPermissions",
         systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND },
+        ...(appConfig.model ? { model: appConfig.model } : {}),
         abortController: abort,
       },
     });

@@ -14,6 +14,15 @@
     "无匹配": "No matches",
     "用量…": "Usage…",
     "点击刷新用量": "Click to refresh usage",
+    "上下文 {0} · ": "Context {0} · ",
+    "当前上下文：约 {0} tokens（每轮都会随请求整体重发，是消耗的主因）":
+      "Current context: ~{0} tokens (resent with every turn — the main driver of token spend)",
+    "累计分项：输入 {0} · 输出 {1} · 缓存写 {2} · 缓存读 {3}":
+      "Cumulative: input {0} · output {1} · cache write {2} · cache read {3}",
+    "计费等效 ≈ {0} tokens · 估算 ${1}": "Billing-equivalent ≈ {0} tokens · est. ${1}",
+    "⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token":
+      "⚠ Context is large: send /compact to compress history, or start a new chat to save tokens",
+    " · ⚠ 上下文 {0}，建议 /compact 或新开对话": " · ⚠ context {0} — consider /compact or a new chat",
     "快捷键速查（按 ? 打开）": "Keyboard shortcuts (press ?)",
     "⌨️ 快捷键速查": "⌨️ Keyboard Shortcuts",
     "全局": "Global",

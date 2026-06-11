@@ -1007,7 +1007,9 @@ function makeConv(seed) {
     queue: [], // 当前轮进行中时，后续追问排队，依次自动发送
     askTimers: [], // AskUserQuestion 卡片的自动倒计时 setInterval，删除/重载时统一清理
     costUsd: seed?.costUsd || 0, // 本会话累计费用（SDK 按当前模型单价结算的 total_cost_usd 累加）
-    tokens: seed?.tokens || 0, // 本会话累计 token（输入+输出+缓存）
+    tokens: seed?.tokens || 0, // 本会话累计 token（输入+输出+缓存，全价口径，兼容旧存档）
+    usage: seed?.usage || { in: 0, out: 0, cw: 0, cr: 0 }, // 分项累计：输入/输出/缓存写/缓存读，用于按真实计费比例折算
+    ctx: seed?.ctx || 0, // 当前上下文规模（最近一轮最后一次请求的输入侧 token），超阈值时提示压缩
   };
 }
 // 清掉某对话所有未结束的 AskUserQuestion 倒计时，避免 timer 在 conv 卸载后仍跑到超时
@@ -1027,6 +1029,8 @@ function buildConvState() {
       inited: c.inited,
       costUsd: c.costUsd,
       tokens: c.tokens,
+      usage: c.usage,
+      ctx: c.ctx,
       html: c.pane ? c.pane.innerHTML : c._html || "",
     })),
     active: activeConv?.id || null,
@@ -1152,14 +1156,31 @@ function fmtTokens(n) {
   if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
   return String(n);
 }
-// 在输入区底部显示当前会话累计 token 与费用，让成本一目了然
+// 上下文超过该规模就提示压缩/新开对话——再往后每轮重发的历史越来越贵
+const CTX_WARN = 100000;
+// 在输入区底部显示当前会话累计 token 与费用，让成本一目了然。
+// 计费等效口径：缓存读≈0.1×、缓存写≈1.25×（与 API 定价比例一致）；
+// 旧的四项全价累加会把便宜的缓存读也按全价算，数字虚高一个量级。
 function renderCostReadout() {
   const el = $("costReadout");
   if (!el) return;
   const c = activeConv;
-  if (!c || !c.tokens) { el.textContent = ""; el.title = ""; return; }
-  el.textContent = `${fmtTokens(c.tokens)} tok · $${c.costUsd.toFixed(4)}`;
-  el.title = trf("本会话累计：{0} tokens · 估算 ${1}", c.tokens.toLocaleString(), c.costUsd.toFixed(4));
+  if (!c || (!c.tokens && !c.ctx)) { el.textContent = ""; el.title = ""; return; }
+  const u = c.usage || { in: 0, out: 0, cw: 0, cr: 0 };
+  const billed = Math.round(u.in + u.out + u.cw * 1.25 + u.cr * 0.1) || c.tokens;
+  const big = c.ctx >= CTX_WARN;
+  el.textContent =
+    (big ? "⚠ " : "") +
+    (c.ctx ? trf("上下文 {0} · ", fmtTokens(c.ctx)) : "") +
+    `${fmtTokens(billed)} tok · $${c.costUsd.toFixed(4)}`;
+  el.title =
+    trf("当前上下文：约 {0} tokens（每轮都会随请求整体重发，是消耗的主因）", (c.ctx || 0).toLocaleString()) +
+    "\n" +
+    trf("累计分项：输入 {0} · 输出 {1} · 缓存写 {2} · 缓存读 {3}",
+      u.in.toLocaleString(), u.out.toLocaleString(), u.cw.toLocaleString(), u.cr.toLocaleString()) +
+    "\n" +
+    trf("计费等效 ≈ {0} tokens · 估算 ${1}", billed.toLocaleString(), c.costUsd.toFixed(4)) +
+    (big ? "\n" + tr("⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token") : "");
 }
 // 渲染顶部 tab 标签条（tab 名=首条输入）
 function renderConvList() {
@@ -3303,18 +3324,28 @@ window.api.on("chat:tool", ({ convId, id, name, input }) =>
 window.api.on("chat:toolresult", ({ convId, id, isError, text }) =>
   appendToolResult(getConv(convId), id, isError, text)
 );
-window.api.on("chat:done", ({ convId, cost, ms, session, usage, checkpoint }) => {
+window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint }) => {
   const conv = getConv(convId);
   const turnWrap = conv?.currentBubble; // 捕获本轮容器，finishTurn 会清空引用
   if (conv && session) conv.sessionId = session; // 记住本对话 session
   if (conv) {
-    // 累计本会话费用与 token（usage 含输入/输出/缓存读写各项）
+    // 累计本会话费用与 token（usage 含输入/输出/缓存读写各项，分项记录便于按计费比例折算）
     if (typeof cost === "number") conv.costUsd += cost;
-    if (usage) conv.tokens +=
-      (usage.input_tokens || 0) + (usage.output_tokens || 0) +
-      (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+    if (usage) {
+      const u = conv.usage || (conv.usage = { in: 0, out: 0, cw: 0, cr: 0 });
+      u.in += usage.input_tokens || 0;
+      u.out += usage.output_tokens || 0;
+      u.cw += usage.cache_creation_input_tokens || 0;
+      u.cr += usage.cache_read_input_tokens || 0;
+      conv.tokens +=
+        (usage.input_tokens || 0) + (usage.output_tokens || 0) +
+        (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0);
+    }
+    if (typeof ctx === "number" && ctx > 0) conv.ctx = ctx;
   }
-  finishTurn(conv, `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}`);
+  finishTurn(conv,
+    `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}` +
+    (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
