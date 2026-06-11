@@ -171,6 +171,9 @@
     "任务进度 {0}/{1}": "Tasks {0}/{1}",
     " …（点击展开）": " …(click to expand)",
     "\n…（已截断）": "\n…(truncated)",
+    "…（已截断）": "…(truncated)",
+    "修改": "Edit",
+    "写入": "Write",
     // —— 动态：用量 ——
     "用量 N/A": "Usage N/A",
     "用量不可用：": "Usage unavailable: ",

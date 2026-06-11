@@ -1513,6 +1513,10 @@ function appendTool(conv, id, name, inputObj) {
   if (name === "TodoWrite" && inputObj && Array.isArray(inputObj.todos)) {
     return appendTodoCard(conv, id, inputObj.todos);
   }
+  // Edit/Write/MultiEdit：渲染成红删绿增的紧凑 diff 卡片（默认折叠），改动可在对话里直接审查
+  if ((name === "Edit" || name === "Write" || name === "MultiEdit") && inputObj && inputObj.file_path) {
+    return appendEditCard(conv, id, name, inputObj);
+  }
   const el = document.createElement("div");
   el.className = "toolcall";
   let arg = "";
@@ -1545,6 +1549,48 @@ function appendTodoCard(conv, id, todos) {
   });
   card.innerHTML = html;
   if (id) conv.toolCards[id] = card;
+  scrollIfActive(conv);
+}
+
+// 把 old/new 文本拼成 -/+ 前缀的伪 diff 行（复用 git 面板 diffToHtml 上色）
+function editLines(oldStr, newStr) {
+  const out = [];
+  if (oldStr) String(oldStr).split("\n").forEach((l) => out.push("-" + l));
+  if (newStr) String(newStr).split("\n").forEach((l) => out.push("+" + l));
+  return out;
+}
+
+// Edit/Write/MultiEdit 工具调用 → diff 卡片：标题行显示相对路径与 +增/−删 行数，点击展开红删绿增详情
+function appendEditCard(conv, id, name, input) {
+  const root = currentFolder ? currentFolder.replace(/\/+$/, "") + "/" : null;
+  let rel = String(input.file_path);
+  if (root && rel.startsWith(root)) rel = rel.slice(root.length);
+  let lines = [];
+  if (name === "MultiEdit" && Array.isArray(input.edits)) {
+    input.edits.forEach((e, i) => {
+      if (i) lines.push(`@@ #${i + 1} @@`); // 多处编辑之间的分隔线（@@ 走 at 紫色样式）
+      lines.push(...editLines(e.old_string, e.new_string));
+    });
+  } else if (name === "Write") {
+    lines = editLines("", input.content); // 整份新内容按全新增展示
+  } else {
+    lines = editLines(input.old_string, input.new_string);
+  }
+  const adds = lines.filter((l) => l[0] === "+").length;
+  const dels = lines.filter((l) => l[0] === "-").length;
+  if (lines.length > 400) lines = lines.slice(0, 400).concat(tr("…（已截断）"));
+  const el = document.createElement("details");
+  el.className = "editcard";
+  el._skipResult = true; // 成功结果只是「已更新」样板话；出错时仍会追加 toolresult 行
+  const label = name === "Write" ? tr("写入") : tr("修改");
+  el.innerHTML =
+    `<summary>📝 ${label} <span class="path">${esc(rel)}</span>` +
+    `<span class="stat"><span class="add">+${adds}</span> <span class="del">−${dels}</span></span></summary>`;
+  const pre = document.createElement("pre");
+  pre.innerHTML = diffToHtml(lines.join("\n"));
+  el.appendChild(pre);
+  conv.currentBubble.appendChild(el);
+  if (id) conv.toolCards[id] = el;
   scrollIfActive(conv);
 }
 
