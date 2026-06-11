@@ -104,11 +104,12 @@ const modalConfirm = (msg) => modalDialog(msg, null);
 try { window.api.evolveAlive(); } catch {}
 
 // ── 文件树 ────────────────────────────────────────────────
-async function renderChildren(container, dirPath, depth) {
+async function renderChildren(container, dirPath, depth, expandSet) {
   const items = await window.api.listDir(dirPath);
   for (const it of items) {
     const node = document.createElement("div");
     node.className = "node " + (it.isDir ? "dir" : "file");
+    node.dataset.path = it.path; // 供重建文件树时恢复展开层级与选中态
     node.style.paddingLeft = 8 + depth * 14 + "px";
     // 文件名来自任意目录，必须转义——否则含 < & 或 <img onerror> 的文件名会破坏渲染/注入标记
     node.innerHTML = `<span class="twist">${it.isDir ? "▸" : ""}</span>${it.isDir ? "📁" : "📄"} ${esc(it.name)}`;
@@ -117,22 +118,25 @@ async function renderChildren(container, dirPath, depth) {
     if (it.isDir) {
       let expanded = false;
       let childWrap = null;
+      const expand = async () => {
+        childWrap = document.createElement("div");
+        node.after(childWrap);
+        await renderChildren(childWrap, it.path, depth + 1, expandSet);
+        expanded = true;
+        node.querySelector(".twist").textContent = "▾";
+      };
       node.onclick = async (e) => {
         e.stopPropagation();
-        const twist = node.querySelector(".twist");
         if (expanded) {
           childWrap.remove();
           childWrap = null;
           expanded = false;
-          twist.textContent = "▸";
+          node.querySelector(".twist").textContent = "▸";
         } else {
-          childWrap = document.createElement("div");
-          node.after(childWrap);
-          await renderChildren(childWrap, it.path, depth + 1);
-          expanded = true;
-          twist.textContent = "▾";
+          await expand();
         }
       };
+      if (expandSet && expandSet.has(it.path)) await expand(); // 重建时恢复原来已展开的目录
     } else {
       node.onclick = (e) => {
         e.stopPropagation();
@@ -143,6 +147,22 @@ async function renderChildren(container, dirPath, depth) {
       };
     }
   }
+}
+
+// AI 改动文件 / 撤销改动后重建文件树：保留已展开的目录层级与选中文件
+async function refreshFileTree() {
+  if (!currentFolder) return;
+  const tree = $("tree");
+  const expandSet = new Set(
+    [...tree.querySelectorAll(".node.dir")]
+      .filter((n) => n.querySelector(".twist")?.textContent === "▾")
+      .map((n) => n.dataset.path)
+  );
+  const activePath = tree.querySelector(".node.active")?.dataset.path;
+  tree.innerHTML = "";
+  await renderChildren(tree, currentFolder, 0, expandSet);
+  if (activePath)
+    tree.querySelector(`.node.file[data-path="${CSS.escape(activePath)}"]`)?.classList.add("active");
 }
 
 let currentFolder = null; // 当前打开的工作目录（用于语言无关地判断是否已选目录）
@@ -3245,6 +3265,7 @@ function addRewindBtn(wrap, cpId) {
       btn.textContent = tr("✓ 已撤销");
       btn.classList.add("copied");
       toast(tr("已恢复到本轮开始前"), "success");
+      refreshFileTree(); // 文件已还原 => 同步重建文件树
       if (activeRepo) { loadStatus(activeRepo); loadGraph(activeRepo); } // git 面板若开着则刷新
     } else {
       btn.disabled = false;
@@ -3347,6 +3368,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint 
     `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}` +
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
+  if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 自动发下一条（续接同一 session）；否则推进需求清单

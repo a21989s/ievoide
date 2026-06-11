@@ -802,8 +802,10 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
         if (cp) {
           try {
             const now = await worktreeTree(cp.root);
-            if (now !== cp.tree) checkpoint = { id: cpId };
-            else { checkpoints.delete(cpId); cp = null; } // 无改动：丢弃检查点
+            if (now !== cp.tree) {
+              checkpoint = { id: cpId };
+              fileCache = { dir: null, list: null, time: 0 }; // 本轮改动了文件：失效缓存，@ 补全/全文搜索立即可见新文件
+            } else { checkpoints.delete(cpId); cp = null; } // 无改动：丢弃检查点
           } catch {}
         }
         send("chat:done", {
@@ -846,6 +848,7 @@ ipcMain.handle("chatRewind", async (_e, id) => {
   if (!cp) return { error: "检查点已失效（可能已重启或被清理）" };
   try {
     await restoreCheckpoint(cp);
+    fileCache = { dir: null, list: null, time: 0 }; // 文件已还原：失效缓存，@ 补全/全文搜索立即同步
     return { ok: true };
   } catch (err) {
     return { error: String(err?.stderr || err?.message || err) };
