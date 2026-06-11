@@ -282,6 +282,7 @@ const server = http.createServer(async (req, res) => {
             includePartialMessages: true,
             systemPrompt: { type: "preset", preset: "claude_code", append: sysAppend },
             ...(cfg.model ? { model: cfg.model } : {}),
+            ...(cfg.maxThinkingTokens > 0 ? { maxThinkingTokens: cfg.maxThinkingTokens } : {}),
             ...(mcpServers ? { mcpServers } : {}),
             abortController: abort,
             ...(resume ? { resume } : {}),

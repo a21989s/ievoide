@@ -64,6 +64,9 @@ const DEFAULT_CONFIG = {
     "始终用简体中文回答，除非用户明确要求使用其他语言。代码、命令、标识符等保持原样。",
   permissionMode: "bypassPermissions",
   model: null,
+  // 思考预算上限（token）。null=用模型默认；设小（如 4096）可显著降低输出 token 消耗，
+  // 对话/进化/巡检/手机端统一生效
+  maxThinkingTokens: null,
   // 进化改完后是否立即重启/重载来生效。默认 false：不打断进化循环——主进程改动
   // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
   evolveAutoRestart: false,
@@ -753,6 +756,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
           append: appConfig.systemPromptAppend || "",
         },
         ...(appConfig.model ? { model: appConfig.model } : {}),
+        ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
         ...(mcpServers ? { mcpServers } : {}),
         abortController: abort,
         ...(resumeId ? { resume: resumeId } : {}),
@@ -931,12 +935,15 @@ ipcMain.handle("getConfig", () => ({
   systemPromptAppend: appConfig.systemPromptAppend || "",
   permissionMode: appConfig.permissionMode || "bypassPermissions",
   evolveAutoRestart: !!appConfig.evolveAutoRestart,
+  maxThinkingTokens: appConfig.maxThinkingTokens || null,
 }));
 ipcMain.handle("setConfig", (_e, patch) => {
   patch = patch || {};
   if (typeof patch.systemPromptAppend === "string") appConfig.systemPromptAppend = patch.systemPromptAppend;
   if (typeof patch.permissionMode === "string") appConfig.permissionMode = patch.permissionMode;
   if (typeof patch.evolveAutoRestart === "boolean") appConfig.evolveAutoRestart = patch.evolveAutoRestart;
+  if (patch.maxThinkingTokens === null || typeof patch.maxThinkingTokens === "number")
+    appConfig.maxThinkingTokens = patch.maxThinkingTokens > 0 ? Math.floor(patch.maxThinkingTokens) : null;
   try {
     const file = path.join(TOOLS_DIR, "config.json");
     let cur = {};
@@ -946,6 +953,7 @@ ipcMain.handle("setConfig", (_e, patch) => {
       systemPromptAppend: appConfig.systemPromptAppend,
       permissionMode: appConfig.permissionMode,
       evolveAutoRestart: appConfig.evolveAutoRestart,
+      maxThinkingTokens: appConfig.maxThinkingTokens,
     }, null, 2));
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
   return { ok: true };
@@ -1211,7 +1219,8 @@ ipcMain.handle("evolveAudit", async () => {
   const send = (ch, p) => { if (win && !win.isDestroyed()) win.webContents.send(ch, p); };
   const abort = new AbortController();
   evolveAuditAbort = abort;
-  const timer = setTimeout(() => abort.abort(), 240000);
+  // 超时设 10 分钟：联网调研的巡检常超 4 分钟，中途 abort 会把整轮已消耗的 token 全部作废
+  const timer = setTimeout(() => abort.abort(), 600000);
   try {
     send("evolve:log", "🔎 巡检源码 + 联网采集需求，寻找优化点…");
     const recent = readEvolveHistory().slice(0, 12).map((h) => "- " + (h.requirement || "").split("\n")[0]).join("\n");
@@ -1232,7 +1241,7 @@ ipcMain.handle("evolveAudit", async () => {
       '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求（联网项末尾附来源 URL）","severity":"high|medium|low"}。';
     const response = query({
       prompt,
-      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND }, ...(appConfig.model ? { model: appConfig.model } : {}) },
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND }, ...(appConfig.model ? { model: appConfig.model } : {}), ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}) },
     });
     let text = "";
     for await (const msg of response) {
@@ -1342,6 +1351,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
         permissionMode: "bypassPermissions",
         systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND },
         ...(appConfig.model ? { model: appConfig.model } : {}),
+        ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
         abortController: abort,
       },
     });

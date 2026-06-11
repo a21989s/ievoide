@@ -1438,6 +1438,7 @@ function renderMsgAttachments(bubble, atts) {
 function startTurn(conv, text) {
   clearAskTimers(conv); // 上一轮遗留的 AskUserQuestion 卡片即将作废，先清掉其倒计时
   conv.toolCards = {};
+  conv.todoCard = null; // 新一轮重新建卡，避免跨轮原位覆盖旧清单
   const wrap = document.createElement("div");
   wrap.className = "msg assistant";
   wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}">${tr("复制回复")}</button></div>`;
@@ -1504,6 +1505,10 @@ function appendTool(conv, id, name, inputObj) {
   if (name === "AskUserQuestion" && inputObj && Array.isArray(inputObj.questions)) {
     return appendAskQuestion(conv, id, inputObj.questions);
   }
+  // TodoWrite：渲染成带状态标记的任务清单卡片，而非一行截断 JSON
+  if (name === "TodoWrite" && inputObj && Array.isArray(inputObj.todos)) {
+    return appendTodoCard(conv, id, inputObj.todos);
+  }
   const el = document.createElement("div");
   el.className = "toolcall";
   let arg = "";
@@ -1512,6 +1517,30 @@ function appendTool(conv, id, name, inputObj) {
   el.textContent = `🔧 ${name}  ${arg}`;
   conv.currentBubble.appendChild(el);
   if (id) conv.toolCards[id] = el;
+  scrollIfActive(conv);
+}
+
+// 把 TodoWrite 的 todos 渲染成 checklist 卡片（✅完成 / ▶进行中 / ○待办）；
+// 同一轮内后续 TodoWrite 调用原位更新同一张卡片，多步任务进度一目了然
+function appendTodoCard(conv, id, todos) {
+  let card = conv.todoCard;
+  if (!card || card.parentElement !== conv.currentBubble) {
+    card = document.createElement("div");
+    card.className = "todocard";
+    card._skipResult = true; // 结果只是「已更新」样板话，无需再追加 toolresult 行
+    conv.currentBubble.appendChild(card);
+    conv.todoCard = card;
+  }
+  const done = todos.filter((t) => t.status === "completed").length;
+  let html = `<div class="head">📋 ${trf("任务进度 {0}/{1}", done, todos.length)}</div>`;
+  todos.forEach((t) => {
+    const st = t.status === "completed" ? "done" : t.status === "in_progress" ? "doing" : "todo";
+    const mark = st === "done" ? "✅" : st === "doing" ? "▶" : "○";
+    const text = (st === "doing" && t.activeForm) || t.content || "";
+    html += `<div class="item ${st}"><span class="mark">${mark}</span>${esc(text)}</div>`;
+  });
+  card.innerHTML = html;
+  if (id) conv.toolCards[id] = card;
   scrollIfActive(conv);
 }
 
@@ -1646,6 +1675,7 @@ function answerAskQuestion(conv, text) {
 function appendToolResult(conv, id, isError, text) {
   if (!conv) return;
   const card = id && conv.toolCards[id];
+  if (card && card._skipResult && !isError) return; // 卡片自身已展示状态（如 TodoWrite）
   const details = document.createElement("details");
   details.className = "toolresult" + (isError ? " err" : "");
   const t = (text || "").trim() || tr("(无输出)");
@@ -2500,8 +2530,10 @@ async function continuousTick(gen) {
     list = (await window.api.getEvolveBacklog()) || [];
     if (gen !== _continuousGen) return;
     next = pickNextBacklog(list);
-    if (!next) { // 巡检也没产出，过一阵再试，避免空转
-      if ($("evContinuous").checked) _continuousTimer = setTimeout(() => continuousTick(gen), 60000);
+    if (!next) { // 巡检也没产出 => 长间隔回退再试。一次巡检是整个 agent 会话（含联网调研），
+      // 短间隔重试等于每分钟全价重跑一遍；半小时后源码/外部信息才可能有新变化
+      evLog(tr("🔄 持续进化：巡检无产出，30 分钟后再试"));
+      if ($("evContinuous").checked) _continuousTimer = setTimeout(() => continuousTick(gen), 1800000);
       return;
     }
   }
@@ -3371,8 +3403,10 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint 
   if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
-  // 队列里还有追问 => 自动发下一条（续接同一 session）；否则推进需求清单
-  if (conv && conv.queue.length) startTurn(conv, conv.queue.shift());
+  // 队列里还有追问 => 合并成一轮发出（续接同一 session）；否则推进需求清单。
+  // 合并而非逐条跑：每轮请求都会全量重发对话上下文，N 条排队逐条跑就是 N 次全量重发，
+  // 合并后只重发一次（与 Claude Code 对排队消息的处理一致）。
+  if (conv && conv.queue.length) startTurn(conv, conv.queue.splice(0).join("\n\n"));
   else reqOnTurnEnd(conv, true);
 });
 window.api.on("chat:stopped", ({ convId }) => {
