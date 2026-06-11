@@ -687,7 +687,8 @@ async function scratchDir() {
   return d;
 }
 
-// 计划模式前缀：要求模型先只读分析、给出分步方案待用户确认，不直接改动文件或执行有副作用的命令
+// 计划模式前缀：作为说明文案告知模型先只读分析、给出分步方案待用户确认；
+// 实际只读约束由 SDK 的 permissionMode:"plan" 在框架层强制（见下方 chat IPC）
 const PLAN_PREAMBLE =
   "【计划模式】在本次回复中，请先不要修改任何文件、也不要执行有副作用的命令（仅允许只读地阅读/检索代码）。" +
   "请先分析下面的需求，然后给出一个清晰的分步实施方案（涉及哪些文件、关键改动点、潜在风险），等我确认后再执行。\n\n--- 用户需求 ---\n";
@@ -747,7 +748,9 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
       prompt,
       options: {
         cwd,
-        permissionMode: appConfig.permissionMode || "bypassPermissions", // 全权限（含 Bash）
+        // 计划模式走 SDK 框架级只读约束（plan）兜底，模型不守约也无法改文件/执行命令；
+        // 普通模式沿用配置的权限（默认全权限含 Bash）
+        permissionMode: plan ? "plan" : appConfig.permissionMode || "bypassPermissions",
         includePartialMessages: true, // 逐字流式
         // 系统提示词的追加内容来自 tools/config.json，可直接编辑
         systemPrompt: {
