@@ -78,6 +78,12 @@
       .cmdk-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .cmdk-hint { flex: none; font-size: 11px; opacity: .6; }
       .cmdk-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+      /* VSCode 式底部状态栏：分支/同步/改动一目了然，点击直达对应操作 */
+      #statusbar { display: flex; align-items: center; height: 24px; padding: 0 4px; background: var(--panel); border-top: 1px solid var(--border); font-size: 11px; color: #9a9a9a; flex: none; user-select: none; }
+      #statusbar .sb-item { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 100%; cursor: pointer; white-space: nowrap; }
+      #statusbar .sb-item:hover { background: #2a2d2e; color: var(--fg); }
+      #statusbar .sb-item:empty { display: none; }
+      #statusbar .sb-spacer { flex: 1; }
       #main { flex: 1; display: flex; min-height: 0; }
       /* VSCode 式活动栏：最左侧纯图标竖列，承载视图切换与全局操作 */
       #activitybar {
@@ -796,6 +802,13 @@
           <button id="send" data-i18n-title="发送（Ctrl/⌘+Enter）" title="发送（Ctrl/⌘+Enter）">↑</button>
         </div>
       </div>
+    </div>
+    <div id="statusbar">
+      <span class="sb-item" id="sbBranch" data-i18n-title="当前分支 · 点击查看源代码管理" title="当前分支 · 点击查看源代码管理"></span>
+      <span class="sb-item" id="sbSync" data-i18n-title="同步：先拉取再推送（↓落后 ↑领先）" title="同步：先拉取再推送（↓落后 ↑领先）"></span>
+      <span class="sb-item" id="sbChanges" data-i18n-title="工作区改动 · 点击查看" title="工作区改动 · 点击查看"></span>
+      <span class="sb-spacer"></span>
+      <span class="sb-item" id="sbCmdk" data-i18n-title="命令面板（⌘/Ctrl+K · 文件用 ⌘/Ctrl+P）" title="命令面板（⌘/Ctrl+K · 文件用 ⌘/Ctrl+P）">⌘K</span>
     </div>
     <div id="ctxMenu"></div>
     <div id="acctMenu"></div>

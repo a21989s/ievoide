@@ -673,6 +673,7 @@ async function loadRepos() {
   repoList = (await window.api.gitRepos()) || [];
   if (!repoList.length) {
     activeRepo = null;
+    renderStatusbar(null);
     listEl.innerHTML =
       `<div style="color:#777;font-size:12px;padding:4px 6px">` +
       (!currentFolder ? tr("未选择目录") : tr("未发现 Git 仓库")) +
@@ -740,6 +741,7 @@ async function loadStatus(repoPath) {
   if (!r || r.error) {
     $("scStagedN").textContent = "0";
     $("scChangesN").textContent = "0";
+    renderStatusbar(null);
     return;
   }
   $("scStagedN").textContent = r.staged.length;
@@ -749,7 +751,31 @@ async function loadStatus(repoPath) {
   // ahead/behind 标在 push/pull 上
   $("scPush").textContent = r.ahead ? `↑${r.ahead}` : "↑";
   $("scPull").textContent = r.behind ? `↓${r.behind}` : "↓";
+  renderStatusbar(r);
 }
+
+// ── VSCode 式底部状态栏：分支 / 同步 / 改动计数，点击直达 ──────
+function renderStatusbar(r) {
+  if (!r) {
+    $("sbBranch").textContent = "";
+    $("sbSync").textContent = "";
+    $("sbChanges").textContent = "";
+    return;
+  }
+  $("sbBranch").textContent = "⎇ " + (r.branch || "—");
+  $("sbSync").textContent = r.ahead || r.behind ? `↓${r.behind || 0} ↑${r.ahead || 0}` : "";
+  const n = r.staged.length + r.changes.length;
+  $("sbChanges").textContent = n ? `✎ ${n}` : "";
+}
+$("sbBranch").onclick = () => cmdkSwitchView("sc");
+$("sbChanges").onclick = () => cmdkSwitchView("sc");
+$("sbSync").onclick = async () => {
+  if (!activeRepo) return;
+  // 仿 VSCode 同步：先 pull 再 push
+  if (await doGit(() => window.api.gitPull(activeRepo), tr("已拉取")))
+    await doGit(() => window.api.gitPush(activeRepo), tr("已同步"));
+};
+$("sbCmdk").onclick = () => openCmdk();
 
 // 执行 git 操作后刷新状态+图
 async function doGit(fn, okMsg) {
@@ -1978,9 +2004,17 @@ document.addEventListener("keydown", (e) => {
     if (!typing) { e.preventDefault(); toggleKbdHelp(); return; }
   }
   // Ctrl/Cmd+K：唤起命令面板（集中入口，全局可用，含输入框内）
-  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "k") {
+  // Ctrl/Cmd+P：同一面板（VSCode 肌肉记忆：输入即检索文件名快速打开）
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "p")) {
     e.preventDefault();
     openCmdk();
+    return;
+  }
+  // Ctrl/Cmd+Shift+F：直达侧栏全文搜索（VSCode 肌肉记忆）
+  if ((e.metaKey || e.ctrlKey) && e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    cmdkSwitchView("sc");
+    $("csInput").focus();
     return;
   }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
@@ -2010,6 +2044,8 @@ const KBD_SHORTCUTS = [
   ["全局", [
     [["?"], "打开本速查面板"],
     [[KBD_MOD, "K"], "打开命令面板（搜索动作 / 文件 / 快捷技能）"],
+    [[KBD_MOD, "P"], "快速打开文件（命令面板）"],
+    [[KBD_MOD, "Shift", "F"], "全文搜索文件内容"],
     [[KBD_MOD, "B"], "折叠 / 展开左侧栏"],
     [["Esc"], "关闭当前弹层（查看器 / 历史 / 菜单等）"],
   ]],
