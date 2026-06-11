@@ -809,7 +809,7 @@
             <span id="mobState" class="meta"></span>
           </div>
           <div id="mobConn" style="display:none">
-            <img id="mobQr" alt="QR" />
+            <canvas id="mobQr" width="200" height="200"></canvas>
             <div class="mob-url"><code id="mobUrl"></code></div>
             <div class="mob-row">
               <button id="mobCopy" data-i18n-title="复制地址" title="复制地址">📋</button>
@@ -934,6 +934,7 @@
     <script src="../node_modules/marked/lib/marked.umd.js"></script>
     <script src="../node_modules/mermaid/dist/mermaid.min.js"></script>
     <script src="../node_modules/pdf-lib/dist/pdf-lib.min.js"></script>
+    <script src="qr.js"></script>
     <script src="i18n.js"></script>
     <script src="renderer.js"></script>
     <script type="module" src="pdfeditor.js"></script>

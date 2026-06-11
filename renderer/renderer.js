@@ -2175,6 +2175,7 @@ function loadUsageThrottled() {
 }
 $("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
+setInterval(() => loadUsage(), 30000); // 每 30 秒自动刷新
 
 // ── 模型切换：顶栏下拉，写回 config 后下一轮 chat 即生效，与用量/费用联动控成本 ──
 (async () => {
@@ -2295,8 +2296,9 @@ function renderMobile(info) {
   $("mobConn").style.display = running && info.url ? "block" : "none";
   if (running && info.url) {
     $("mobUrl").textContent = info.url;
-    $("mobQr").src =
-      "https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=" + encodeURIComponent(info.url);
+    const canvas = $("mobQr");
+    canvas.width = canvas.height = 200;
+    try { window.QRCanvas.draw(info.url, canvas); } catch (e) { console.error("QR draw:", e); }
   }
 }
 $("mobileBtn").onclick = async () => {
