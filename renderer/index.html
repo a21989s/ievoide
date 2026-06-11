@@ -441,6 +441,9 @@
       #vbody { flex: 1; margin: 0; overflow: auto; padding: 16px 20px; font-size: 13px; }
       #vbody.raw { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
       #vbody.raw pre.hl { margin: 0; white-space: pre; overflow: auto; }
+      /* 搜索直达定位：目标行背景闪烁 */
+      #vbody .cl.line-flash { animation: line-flash 1.6s ease-out; border-radius: 3px; }
+      @keyframes line-flash { 0%, 45% { background: rgba(86, 156, 214, 0.35); } 100% { background: transparent; } }
       /* 轻量语法高亮 token 配色（预览面板与对话气泡共用） */
       .tok-k { color: #569cd6; }
       .tok-s { color: #ce9178; }

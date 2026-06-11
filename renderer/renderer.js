@@ -289,7 +289,7 @@ async function runContentSearch() {
     el.className = "cs-hit";
     el.title = `${h.rel}:${h.line}`;
     el.innerHTML = `<span class="loc">${esc(h.rel)}:${h.line}</span><span class="txt">${esc(h.text)}</span>`;
-    el.onclick = () => openFile(h.path, h.name);
+    el.onclick = () => openFile(h.path, h.name, h.line);
     box.appendChild(el);
   });
 }
@@ -318,9 +318,9 @@ function showViewer(title) {
 }
 
 // ── md 内联编辑：左编辑 / 右实时预览，⌘/Ctrl+S 原子写回原文件 ──
-let curMdPath = null, curMdRaw = "", mdEditing = false, mdPrevTimer = 0;
+let curMdPath = null, curMdRaw = "", mdEditing = false, mdPrevTimer = 0, mdPendingLine = 0;
 function resetMdEdit() {
-  curMdPath = null; mdEditing = false;
+  curMdPath = null; mdEditing = false; mdPendingLine = 0;
   clearTimeout(mdPrevTimer);
   vbody.classList.remove("editing");
   const e = $("vedit"), s = $("vsave");
@@ -363,7 +363,18 @@ function enterMdEdit() {
     if ((e.metaKey || e.ctrlKey) && e.key === "s") { e.preventDefault(); saveMd(); }
   });
   ta.focus();
+  if (mdPendingLine) { seekTextareaLine(ta, mdPendingLine); mdPendingLine = 0; } // 从搜索进入：光标直达该行
   $("vedit").textContent = "👁"; $("vsave").style.display = "";
+}
+// 把 textarea 光标定位并滚动到指定行（选中整行便于辨认）
+function seekTextareaLine(ta, line) {
+  const lines = ta.value.split("\n");
+  const ln = Math.min(Math.max(1, line), lines.length);
+  let pos = 0;
+  for (let i = 0; i < ln - 1; i++) pos += lines[i].length + 1;
+  ta.setSelectionRange(pos, pos + lines[ln - 1].length);
+  const lh = parseFloat(getComputedStyle(ta).lineHeight) || 18;
+  ta.scrollTop = Math.max(0, (ln - 1) * lh - ta.clientHeight / 2);
 }
 function exitMdEdit() {
   mdEditing = false;
@@ -413,7 +424,27 @@ async function renderMermaidNodes(nodes) {
   }
 }
 
-async function openFile(path, name) {
+// ── 搜索直达定位：按行包裹渲染结果，滚动到目标行并闪烁高亮 ──
+// highlightCode 输出是扁平 <span> 序列；跨行 span 在行边界闭合、下一行重开后即可安全按行切分
+function htmlToLines(html) {
+  let open = null;
+  return html.split("\n").map((s) => {
+    if (open) s = open + s;
+    const re = /<span class="[^"]*">|<\/span>/g;
+    let depth = 0, last = null, m;
+    while ((m = re.exec(s))) { if (m[0] === "</span>") depth--; else { depth++; last = m[0]; } }
+    if (depth > 0) { s += "</span>"; open = last; } else open = null;
+    return s;
+  });
+}
+function flashLine(el) {
+  if (!el) return;
+  el.scrollIntoView({ block: "center" });
+  el.classList.add("line-flash");
+  setTimeout(() => el.classList.remove("line-flash"), 1600);
+}
+
+async function openFile(path, name, line) {
   const ext = name.split(".").pop().toLowerCase();
 
   if (ext === "pdf") {
@@ -441,6 +472,11 @@ async function openFile(path, name) {
     $("vedit").style.display = ""; // 仅 md 文件可切换编辑
     useBody("md");
     await renderMdInto(vbody, content);
+    if (line) {
+      mdPendingLine = line; // 切到编辑态时光标直达该行
+      // 渲染态按原文行号比例近似滚动定位
+      vbody.scrollTop = ((line - 1) / Math.max(1, content.split("\n").length - 1)) * Math.max(0, vbody.scrollHeight - vbody.clientHeight);
+    }
     return;
   }
 
@@ -458,7 +494,13 @@ async function openFile(path, name) {
   // 其它：纯文本（源码按扩展名做轻量语法高亮，其余保持纯文本）
   useBody("raw");
   const lang = hlLang(ext);
-  if (lang) {
+  if (line) {
+    // 从搜索结果进入：逐行包裹以便滚动定位并闪烁目标行
+    const rows = htmlToLines(lang ? highlightCode(content, lang) : esc(content))
+      .map((s) => `<span class="cl">${s}\n</span>`).join("");
+    vbody.innerHTML = lang ? `<pre class="hl"><code>${rows}</code></pre>` : rows;
+    flashLine(vbody.querySelectorAll(".cl")[line - 1]);
+  } else if (lang) {
     vbody.innerHTML = '<pre class="hl"><code>' + highlightCode(content, lang) + "</code></pre>";
   } else {
     vbody.textContent = content;
