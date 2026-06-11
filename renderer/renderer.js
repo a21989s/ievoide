@@ -1494,8 +1494,8 @@ function renderMsgAttachments(bubble, atts) {
   bubble.appendChild(wrap);
 }
 
-// 在某对话里开始新一轮（立即发送或从队列取出后调用）
-function startTurn(conv, text) {
+// 在某对话里开始新一轮（立即发送或从队列取出后调用）；opts.plan 可覆盖全局计划开关
+function startTurn(conv, text, opts) {
   clearAskTimers(conv); // 上一轮遗留的 AskUserQuestion 卡片即将作废，先清掉其倒计时
   conv.toolCards = {};
   conv.todoCard = null; // 新一轮重新建卡，避免跨轮原位覆盖旧清单
@@ -1508,8 +1508,37 @@ function startTurn(conv, text) {
   if (conv === activeConv) refreshSendBtn();
   renderConvList();
   scrollIfActive(conv);
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan: planMode });
+  const plan = opts && "plan" in opts ? opts.plan : planMode;
+  conv._planTurn = plan; // 记录本轮是否计划模式：chat:done 时据此渲染「按计划执行」操作条
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan });
   persistConvs();
+}
+
+// 计划模式轮次结束 => 在回复尾部给出操作条：一键以 plan=false 续接同一 session 执行（Plan→Act），
+// 免去「手动关计划开关再敲一句执行」的断裂流程
+function addPlanActions(conv, wrap) {
+  const bar = document.createElement("div");
+  bar.className = "plan-actions";
+  const run = document.createElement("button");
+  run.type = "button";
+  run.textContent = tr("✅ 按计划执行");
+  run.onclick = () => {
+    bar.remove();
+    if (conv.busy) return; // 用户已抢先发了新消息 => 以新消息为准
+    planMode = false; // 进入执行阶段：同步关掉计划开关，后续追问默认直接动手
+    try { localStorage.setItem("claudeTools.planMode", "0"); } catch {}
+    refreshPlanToggle();
+    const text = tr("请按上述计划执行");
+    addMsg(conv, "user", text);
+    startTurn(conv, text, { plan: false });
+  };
+  const tweak = document.createElement("button");
+  tweak.type = "button";
+  tweak.textContent = tr("✋ 继续调整");
+  tweak.onclick = () => { bar.remove(); $("input").focus(); }; // 留在计划模式，继续打字改方案
+  bar.append(run, tweak);
+  wrap.appendChild(bar);
+  scrollIfActive(conv);
 }
 
 function appendText(conv, t) {
@@ -3527,6 +3556,8 @@ window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint 
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
   if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
+  // 计划模式轮 & 没有排队消息 => 渲染「按计划执行 / 继续调整」操作条
+  if (conv && conv._planTurn && turnWrap && !conv.queue.length) addPlanActions(conv, turnWrap);
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 合并成一轮发出（续接同一 session）；否则推进需求清单。

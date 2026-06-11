@@ -261,6 +261,9 @@
     "❌ 「{0}」出错了": "❌ \"{0}\" failed",
     "点击切回查看结果": "Click to view the result",
     "点击切回查看错误详情": "Click to view the error details",
+    "✅ 按计划执行": "✅ Run the plan",
+    "✋ 继续调整": "✋ Keep refining",
+    "请按上述计划执行": "Please execute the plan above",
   };
 
   let lang = "zh";
