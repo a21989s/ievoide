@@ -434,7 +434,10 @@ const FILE_CACHE_TTL = 5000; // ms
 const FILE_CACHE_MAX = 5000; // 缓存条目上限，避免超大仓库吃内存
 // 与文件树同生命周期的内容缓存：grepFiles 逐键检索时，同一 TTL 窗口内
 // 复用已读过的文本内容（path -> 行数组，跳过的文件存 null），免去逐键全量读盘。
+// 累计字节预算：超出后新文件只检索不缓存，避免大量大文本文件吃掉数 GB 内存。
+const CONTENT_CACHE_BUDGET = 64 * 1024 * 1024; // 64MB
 let contentCache = new Map();
+let contentCacheBytes = 0;
 
 async function listWorkdirFiles() {
   const now = Date.now();
@@ -443,6 +446,7 @@ async function listWorkdirFiles() {
   }
   fileCache.dirs = null;
   contentCache = new Map(); // 文件树重建时一并失效内容缓存
+  contentCacheBytes = 0;
   const all = [];
   const dirs = []; // 目录条目，供 @ 补全把整个目录纳入上下文
   const visited = new Set(); // 已访问目录的真实路径，防符号链接自指/环路重复遍历
@@ -535,7 +539,11 @@ ipcMain.handle("grepFiles", async (_e, query) => {
       try { buf = await fs.readFile(f.path); } catch { contentCache.set(f.path, null); continue; }
       if (looksBinary(buf)) { contentCache.set(f.path, null); continue; }
       lines = buf.toString("utf8").split("\n");
-      contentCache.set(f.path, lines);
+      // 超出累计预算后只检索不缓存，本次仍正常匹配（null 跳过标记不占预算）
+      if (contentCacheBytes + buf.length <= CONTENT_CACHE_BUDGET) {
+        contentCache.set(f.path, lines);
+        contentCacheBytes += buf.length;
+      }
     }
     let hits = 0;
     for (let i = 0; i < lines.length && hits < MAX_PER_FILE && out.length < MAX_RESULTS; i++) {
