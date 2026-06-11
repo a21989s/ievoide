@@ -408,6 +408,9 @@
       .plan-actions button { padding: 4px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
       .plan-actions button:first-child { background: var(--accent); border-color: var(--accent); color: #fff; }
       .plan-actions button:hover { filter: brightness(1.12); }
+      .retry-btn { display: inline-block; margin-top: 6px; padding: 3px 10px; font-size: 12px; border: 1px solid #c0392b; border-radius: 6px; background: transparent; color: #e57373; cursor: pointer; }
+      .retry-btn:hover:not(:disabled) { background: rgba(229,115,115,.15); }
+      .retry-btn:disabled { opacity: .45; cursor: not-allowed; }
       /* 常用 skill 快捷按钮：点一下即把对应指令发给模型 */
       #quickbar { display: flex; flex-wrap: wrap; gap: 6px; }
       #quickbar:empty { display: none; }

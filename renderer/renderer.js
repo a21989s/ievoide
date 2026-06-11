@@ -1497,6 +1497,7 @@ function renderMsgAttachments(bubble, atts) {
 // 在某对话里开始新一轮（立即发送或从队列取出后调用）；opts.plan 可覆盖全局计划开关
 function startTurn(conv, text, opts) {
   clearAskTimers(conv); // 上一轮遗留的 AskUserQuestion 卡片即将作废，先清掉其倒计时
+  conv.lastPrompt = text; // 暂存本轮 prompt，供出错后「↻ 重试」复用
   conv.toolCards = {};
   conv.todoCard = null; // 新一轮重新建卡，避免跨轮原位覆盖旧清单
   const wrap = document.createElement("div");
@@ -3578,7 +3579,25 @@ window.api.on("chat:stopped", ({ convId }) => {
 window.api.on("chat:error", ({ convId, message }) => {
   const conv = getConv(convId);
   if (conv) { conv.queue = []; conv._compacting = false; } // 出错 => 不再继续排队
-  finishTurn(getConv(convId), null, tr("出错了：") + "\n" + message);
+  const turnWrap = conv?.currentBubble; // finishTurn 会清空引用，先捕获
+  finishTurn(conv, null, tr("出错了：") + "\n" + message);
+  // 在错误气泡下方追加「↻ 重试」按钮，点击后复用同一 session 重发上一条 prompt
+  if (conv && conv.lastPrompt) {
+    const container = turnWrap || conv.pane?.lastElementChild;
+    const errDiv = container?.querySelector(".bubble.err:last-of-type") || container;
+    if (errDiv) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "retry-btn";
+      btn.textContent = tr("↻ 重试");
+      btn.onclick = () => {
+        if (conv.busy) return;
+        btn.disabled = true;
+        startTurn(conv, conv.lastPrompt);
+      };
+      errDiv.appendChild(btn);
+    }
+  }
   notifyBgTurnEnd(conv, false, 0);
   reqOnTurnEnd(conv, false);
 });
