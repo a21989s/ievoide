@@ -2960,7 +2960,13 @@ async function runEvolve(requirement) {
   syncEvDock();
   setEvolveBusy(true);
   const attachments = evolveAttachments.slice();
-  evLog("──────────\n▶ " + requirement + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
+  // 每个问题都是独立的：开跑即清空上一个问题的日志与附件残留（收口到这里，
+  // 覆盖手动/清单/持续进化/定期自检/自动修错所有入口）。模型侧本就是每次全新
+  // 会话（query 不带 resume），这里把界面「会话」也对齐成一题一清。
+  $("evLog").textContent = "";
+  evolveAttachments = [];
+  renderAttachments();
+  evLog("▶ " + requirement + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
   const r = await window.api.evolve({ requirement, attachments });
   // evolve:done 事件通常会兜底设状态；但无改动等分支不发该事件，这里据返回值兜底，
   // 避免忙状态卡死（也让持续进化能据返回值推进下一条）。relaunch 会重启，无需处理。
