@@ -1446,6 +1446,7 @@ function renderConvList() {
           : "") +
       `<span class="conv-title">${esc(dispTitle)}</span>` +
       `<span class="conv-del" title="${tr("关闭")}">×</span>`;
+    el.dataset.cid = c.id;
     el.onclick = (e) => {
       if (e.target.classList.contains("conv-del")) {
         e.stopPropagation();
@@ -1454,9 +1455,48 @@ function renderConvList() {
         switchConv(c.id);
       }
     };
+    // 双击标题内联重命名；单击可能已触发 switchConv 重渲染，按 id 重查当前 tab 元素
+    el.ondblclick = (e) => {
+      if (e.target.classList.contains("conv-del")) return;
+      const cur = [...$("convTabs").children].find((t) => t.dataset.cid === c.id) || el;
+      startRenameConv(c, cur);
+    };
     tabs.appendChild(el);
     if (c.id === activeConv?.id) el.scrollIntoView({ inline: "nearest", block: "nearest" });
   }
+}
+
+// 把 tab 的标题 span 换成输入框：Enter 确认 / Esc 取消 / 失焦保存，写回 conv.title 并持久化
+function startRenameConv(conv, tabEl) {
+  const span = tabEl.querySelector(".conv-title");
+  if (!span || tabEl.querySelector(".conv-rename")) return;
+  const input = document.createElement("input");
+  input.className = "conv-rename";
+  input.value = !conv.title || conv.title === "新对话" ? "" : conv.title;
+  input.placeholder = tr("新对话");
+  input.maxLength = 60;
+  input.onclick = (e) => e.stopPropagation();
+  input.ondblclick = (e) => e.stopPropagation();
+  let done = false;
+  const finish = (save) => {
+    if (done) return;
+    done = true;
+    const t = input.value.trim();
+    if (save && t && t !== conv.title) {
+      conv.title = t;
+      persistConvs();
+    }
+    renderConvList(); // 恢复正常 tab 显示（取消时也要还原）
+  };
+  input.onkeydown = (e) => {
+    e.stopPropagation(); // 别触发全局快捷键
+    if (e.key === "Enter") finish(true);
+    else if (e.key === "Escape") finish(false);
+  };
+  input.onblur = () => finish(true);
+  span.replaceWith(input);
+  input.focus();
+  input.select();
 }
 
 $("newconv").onclick = newConversation;
