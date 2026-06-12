@@ -582,47 +582,63 @@ async function openFile(path, name, line) {
 // ── 代码地图：单轮只读分析当前 workdir，产出 mermaid 模块/依赖图并在查看器渲染 ──
 // 入口：命令面板 / 快捷技能「🗺 生成代码地图」；可一键保存为 docs/codemap.md 衔接文档维护
 let codemapBusy = false;
-async function genCodemap() {
+let codemapCache = null; // { folder, markdown }：缓存上次结果，误关查看器/重复点击不再重新付费生成
+async function genCodemap(force) {
   if (!currentFolder) { toast(tr("请先选择文件夹"), "error"); return; }
   if (codemapBusy) { toast(tr("代码地图生成中…"), "info"); return; }
-  codemapBusy = true;
   showViewer(tr("代码地图"));
   useBody("md");
+  if (!force && codemapCache && codemapCache.folder === currentFolder) {
+    await showCodemap(codemapCache.markdown); // 直接复用缓存，省一次查询
+    return;
+  }
+  codemapBusy = true;
   vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">🗺</div><div>${esc(tr("正在分析代码结构，生成代码地图…（约 1-3 分钟）"))}</div></div>`;
   try {
     const r = await window.api.codemap();
-    // 等待期间用户可能已打开别的文件/关掉查看器，不再覆盖
+    if (r && r.ok) codemapCache = { folder: currentFolder, markdown: r.markdown };
+    // 等待期间用户可能已打开别的文件/关掉查看器，不再覆盖；结果已缓存，再点入口即可看到
     if ($("vtitle").textContent !== tr("代码地图")) {
       if (r && r.error) toast(tr("代码地图生成失败：") + r.error, "error");
+      else toast(tr("代码地图已生成，点「生成代码地图」即可查看"), "success");
       return;
     }
     if (!r || r.error) {
       vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">⚠️</div><div>${esc(tr("代码地图生成失败：") + ((r && r.error) || ""))}</div></div>`;
       return;
     }
-    vbody.innerHTML = "";
-    const bar = document.createElement("div");
-    bar.style.cssText = "margin:0 0 8px;text-align:right";
-    const save = document.createElement("button");
-    save.className = "vf-open";
-    save.textContent = tr("💾 保存为 docs/codemap.md");
-    save.onclick = async () => {
-      const root = currentFolder.replace(/\/+$/, "");
-      await window.api.mkdir(root + "/docs");
-      const w = await window.api.writeFile(root + "/docs/codemap.md", r.markdown);
-      if (w && w.ok) {
-        toast(tr("已保存 docs/codemap.md"), "success");
-        $("tree").innerHTML = "";
-        await renderChildren($("tree"), currentFolder, 0); // 刷新文件树立即可见
-      } else toast(tr("保存失败：") + ((w && w.error) || ""), "error");
-    };
-    bar.appendChild(save);
-    const body = document.createElement("div");
-    vbody.append(bar, body);
-    await renderMdInto(body, r.markdown);
+    await showCodemap(r.markdown);
   } finally {
     codemapBusy = false;
   }
+}
+// 渲染代码地图 + 操作栏（重新生成 / 保存为 docs/codemap.md）
+async function showCodemap(markdown) {
+  vbody.innerHTML = "";
+  const bar = document.createElement("div");
+  bar.style.cssText = "margin:0 0 8px;text-align:right";
+  const regen = document.createElement("button");
+  regen.className = "vf-open";
+  regen.textContent = tr("🔄 重新生成");
+  regen.onclick = () => genCodemap(true);
+  const save = document.createElement("button");
+  save.className = "vf-open";
+  save.style.marginLeft = "8px";
+  save.textContent = tr("💾 保存为 docs/codemap.md");
+  save.onclick = async () => {
+    const root = currentFolder.replace(/\/+$/, "");
+    await window.api.mkdir(root + "/docs");
+    const w = await window.api.writeFile(root + "/docs/codemap.md", markdown);
+    if (w && w.ok) {
+      toast(tr("已保存 docs/codemap.md"), "success");
+      $("tree").innerHTML = "";
+      await renderChildren($("tree"), currentFolder, 0); // 刷新文件树立即可见
+    } else toast(tr("保存失败：") + ((w && w.error) || ""), "error");
+  };
+  bar.append(regen, save);
+  const body = document.createElement("div");
+  vbody.append(bar, body);
+  await renderMdInto(body, markdown);
 }
 
 $("vclose").onclick = () => {

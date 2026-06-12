@@ -301,6 +301,8 @@
     "代码地图生成失败：": "Codemap failed: ",
     "💾 保存为 docs/codemap.md": "💾 Save as docs/codemap.md",
     "已保存 docs/codemap.md": "Saved docs/codemap.md",
+    "🔄 重新生成": "🔄 Regenerate",
+    "代码地图已生成，点「生成代码地图」即可查看": "Codemap is ready — click \"Generate Codemap\" to view it",
     "读取": "Read",
     "匹配": "Glob",
     "搜索": "Search",
