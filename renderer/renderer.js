@@ -593,9 +593,18 @@ async function genCodemap(force) {
     return;
   }
   codemapBusy = true;
-  vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">🗺</div><div>${esc(tr("正在分析代码结构，生成代码地图…（约 1-3 分钟）"))}</div></div>`;
+  // 等待占位带「✕ 取消」：误触后可立即中止后台查询，止住 token 消耗
+  vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">🗺</div><div>${esc(tr("正在分析代码结构，生成代码地图…（约 1-3 分钟）"))}</div><button class="vf-open" id="cmCancel" style="margin-top:10px">${esc(tr("✕ 取消"))}</button></div>`;
+  const cmCancel = document.getElementById("cmCancel");
+  if (cmCancel) cmCancel.onclick = () => { cmCancel.disabled = true; window.api.codemapStop(); };
   try {
     const r = await window.api.codemap();
+    if (r && r.canceled) { // 主动取消：不写缓存、不报错
+      toast(tr("已取消代码地图生成"), "info");
+      if ($("vtitle").textContent === tr("代码地图"))
+        vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">🚫</div><div>${esc(tr("已取消"))}</div></div>`;
+      return;
+    }
     if (r && r.ok) codemapCache = { folder: currentFolder, markdown: r.markdown };
     // 等待期间用户可能已打开别的文件/关掉查看器，不再覆盖；结果已缓存，再点入口即可看到
     if ($("vtitle").textContent !== tr("代码地图")) {

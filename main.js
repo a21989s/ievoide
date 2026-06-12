@@ -730,11 +730,13 @@ ipcMain.handle("saveTextFile", async (_e, { defaultName, content }) => {
 // ── 代码地图：对当前 workdir 做一次只读分析，产出模块/依赖关系的 mermaid 图 ──
 // 省钱设计：限只读工具 + maxTurns 上限 + 复用 evolveModel（便宜模型够用），单轮查询不留会话
 let codemapping = false;
+let codemapAbort = null; // 进行中查询的 AbortController，供 codemapStop 主动取消止损
 ipcMain.handle("codemap", async () => {
   if (codemapping) return { error: "已有代码地图生成中" };
   if (!workdir) return { error: "请先选择文件夹" };
   codemapping = true;
   const abort = new AbortController();
+  codemapAbort = abort;
   const timer = setTimeout(() => abort.abort(), 300000); // 5 分钟兜底超时
   try {
     const prompt =
@@ -771,18 +773,29 @@ ipcMain.handle("codemap", async () => {
         if (msg.subtype === "success") final = msg.result || "";
       }
     }
+    if (abort.signal.aborted) return abort.userCanceled ? { canceled: true } : { error: "已超时或中止" };
     const markdown = /```mermaid/.test(final) ? final : text;
     if (!/```mermaid/.test(markdown)) return { error: "未生成出 mermaid 图，请重试" };
     // 只截取最终文档（模型偶尔会在文档前带过程性文字）
     const start = markdown.indexOf("# 代码地图");
     return { ok: true, markdown: start >= 0 ? markdown.slice(start) : markdown };
   } catch (err) {
-    if (abort.signal.aborted) return { error: "已超时或中止" };
+    if (abort.signal.aborted) return abort.userCanceled ? { canceled: true } : { error: "已超时或中止" };
     return { error: String(err?.message || err) };
   } finally {
     clearTimeout(timer);
     codemapping = false;
+    codemapAbort = null;
   }
+});
+
+// 用户主动取消代码地图：立即中止 SDK 查询并复位状态，止住误触后的 token 消耗
+ipcMain.handle("codemapStop", () => {
+  if (codemapAbort) {
+    codemapAbort.userCanceled = true; // 区分主动取消与兜底超时
+    codemapAbort.abort();
+  }
+  return { ok: true };
 });
 
 // ── 对话：支持多个并发查询，按 convId 隔离；事件都带上 convId ───
