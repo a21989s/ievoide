@@ -267,9 +267,7 @@ async function createEntry(isDir) {
     const r = await window.api.writeFile(full, "");
     if (!r.ok) { toast(tr("创建失败：") + (r.error || ""), "error"); return; }
   }
-  // 刷新文件树
-  $("tree").innerHTML = "";
-  await renderChildren($("tree"), currentFolder, 0);
+  await refreshFileTree(); // 刷新文件树（保留展开层级与选中态）
   // 新建的 .md 文件自动打开并进入内联编辑
   if (!isDir && /\.(md|markdown)$/i.test(rel)) {
     await openFile(full, rel.split("/").pop());
@@ -311,8 +309,7 @@ async function openProjectRules() {
     const full = root + "/AGENTS.md";
     const r = await window.api.writeFile(full, AGENTS_MD_TEMPLATE);
     if (!r.ok) { toast(tr("创建失败：") + (r.error || ""), "error"); return; }
-    $("tree").innerHTML = "";
-    await renderChildren($("tree"), root, 0);
+    await refreshFileTree(); // 保留展开层级与选中态
     target = { path: full, name: "AGENTS.md" };
     created = true;
   }
@@ -640,8 +637,7 @@ async function showCodemap(markdown) {
     const w = await window.api.writeFile(root + "/docs/codemap.md", markdown);
     if (w && w.ok) {
       toast(tr("已保存 docs/codemap.md"), "success");
-      $("tree").innerHTML = "";
-      await renderChildren($("tree"), currentFolder, 0); // 刷新文件树立即可见
+      await refreshFileTree(); // 刷新文件树立即可见（保留展开层级与选中态）
     } else toast(tr("保存失败：") + ((w && w.error) || ""), "error");
   };
   bar.append(regen, save);
