@@ -33,7 +33,7 @@ contextBridge.exposeInMainWorld("api", {
   acctSaveCurrent: () => ipcRenderer.invoke("acctSaveCurrent"),
   acctSwitch: (email) => ipcRenderer.invoke("acctSwitch", email),
   acctDelete: (email) => ipcRenderer.invoke("acctDelete", email),
-  packAll: (mode) => ipcRenderer.invoke("packAll", mode),
+  packAll: (mode, opts) => ipcRenderer.invoke("packAll", mode, opts),
   evolve: (payload) => ipcRenderer.invoke("evolve", payload),
   evolveStop: () => ipcRenderer.send("evolveStop"),
   evolveSteer: (text) => ipcRenderer.send("evolveSteer", text),

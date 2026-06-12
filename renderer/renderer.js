@@ -2275,10 +2275,10 @@ setInterval(() => loadUsage(), 30000); // 每 30 秒自动刷新
 })();
 
 // ── 打包：点 📦 弹三选一（完整备份 / 全量 / 给别人）→ 桌面 zip ──
-async function doPack(mode) {
+async function doPack(mode, withCreds) {
   const label = { full: tr("全量(含依赖,零安装)"), backup: tr("完整备份(含历史)"), dist: tr("给别人(不含私有数据)") }[mode];
   $("status").textContent = trf("📦 {0} 打包中…", label);
-  const r = await window.api.packAll(mode);
+  const r = await window.api.packAll(mode, { withCreds: !!withCreds });
   if (r && r.path) $("status").textContent = tr("✅ 已打包到桌面（Finder 已高亮）");
   else { $("status").textContent = ""; toast(tr("打包失败：") + "\n" + (r?.error || tr("未知")), "error"); }
   clearStatusLater(5000);
@@ -2286,11 +2286,26 @@ async function doPack(mode) {
 $("packBtn").onclick = (e) => {
   e.stopPropagation();
   const b = e.target.getBoundingClientRect();
-  showMenu(b.left, b.bottom, [
-    { label: tr("📦 完整备份（配置+历史+git，无依赖）"), run: () => doPack("backup") },
-    { label: tr("💼 全量（含 node_modules，解压零安装）"), run: () => doPack("full") },
-    { label: tr("🎁 给别人（不含你的私有数据）"), run: () => doPack("dist") },
-  ]);
+  // 登录凭证（accounts.json/server-token.txt）默认不打包，勾选仅本次菜单有效，避免误分享泄露
+  let packWithCreds = false;
+  const openPackMenu = () =>
+    showMenu(b.left, b.bottom, [
+      { label: tr("📦 完整备份（配置+历史+git，无依赖）"), run: () => doPack("backup", packWithCreds) },
+      { label: tr("💼 全量（含 node_modules，解压零安装）"), run: () => doPack("full", packWithCreds) },
+      { label: tr("🎁 给别人（不含你的私有数据）"), run: () => doPack("dist") },
+      { sep: true },
+      {
+        label: (packWithCreds ? "☑ " : "☐ ") + tr("包含登录凭证（账号/手机令牌）"),
+        run: async () => {
+          if (!packWithCreds) {
+            if (await modalConfirm(tr("zip 将包含明文 OAuth 凭证与手机访问令牌，仅限自己迁移使用，切勿分享！\n确定包含？")))
+              packWithCreds = true;
+          } else packWithCreds = false;
+          setTimeout(openPackMenu, 0); // 等点击冒泡到 document 关完菜单后再重开，刷新勾选态
+        },
+      },
+    ]);
+  openPackMenu();
 };
 
 // ── Claude 账号快捷切换 ───────────────────────────────────────

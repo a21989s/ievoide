@@ -1089,21 +1089,26 @@ ipcMain.handle("acctDelete", async (_e, email) => {
 // ── 打包：三种模式 → 桌面 zip ─────────────────────────────────
 // full=全量(含 node_modules/data/.git，零安装) | backup=完整备份(config+data+.git，无 node_modules)
 // | dist=给别人(无 data、无 node_modules，含 .git/config)
-ipcMain.handle("packAll", async (_e, mode = "full") => {
+// opts.withCreds=true 时才打包登录凭证（默认排除，避免分享 zip 泄露）
+ipcMain.handle("packAll", async (_e, mode = "full", opts = {}) => {
   try {
     const prefix =
       { full: "claude-tools-portable", backup: "claude-tools-full", dist: "claude-tools-dist" }[mode] ||
       "claude-tools-portable";
     const stamp = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 14);
     const out = path.join(app.getPath("desktop"), `${prefix}-${stamp}.zip`);
-    // 共同排除：日志、之前生成的任何包（避免自包含）
+    // 凭证文件：accounts.json 存明文 OAuth、server-token.txt 是手机端访问令牌
+    const credFiles = ["data/accounts.json", "data/server-token.txt"];
+    // 共同排除：日志、之前生成的任何包（避免自包含）；凭证默认排除
     const excl = ["*.log", "claude-tools-*.zip"];
+    if (!opts.withCreds) excl.push(...credFiles);
     if (mode !== "full") excl.push("node_modules/*");
     if (mode === "dist") excl.push("data/*");
 
     if (process.platform === "win32") {
       // Windows 自带 bsdtar；--exclude 用目录/通配
       const tarExcl = ["--exclude=*.log", "--exclude=claude-tools-*.zip"];
+      if (!opts.withCreds) tarExcl.push(...credFiles.map((f) => `--exclude=${f}`));
       if (mode !== "full") tarExcl.push("--exclude=node_modules");
       if (mode === "dist") tarExcl.push("--exclude=data");
       await execFileAsync("tar", ["-a", "-c", "-f", out, ...tarExcl, "."], {
