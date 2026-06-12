@@ -2621,6 +2621,21 @@ async function costStatLines() {
     );
   } catch { return ""; }
 }
+let _usageGood = null; // 上一次成功拿到的限流数据；端点被限流时回显旧值并标 ⚠，别让百分比凭空消失
+function renderUsage(el, d, staleWhy, local) {
+  const parts = [];
+  if (d.sub) parts.push(d.sub);
+  if (d.fh && d.fh.utilization != null) parts.push(`⏰${fmtTimeShort(d.fh.resets_at)} ${Math.round(d.fh.utilization)}%`);
+  if (d.sd && d.sd.utilization != null) parts.push(`7d ${Math.round(d.sd.utilization)}%`);
+  el.textContent = (parts.join(" · ") || tr("用量")) + (staleWhy ? " ⚠" : "");
+  el.title =
+    (staleWhy ? staleWhy + "\n" + trf("以下为 {0} 的旧数据：", fmtTimeShort(d.at)) + "\n" : "") +
+    `${tr("订阅：")}${d.sub || "-"}\n` +
+    `${tr("5小时窗：")}${d.fh?.utilization ?? "-"}%  · ${tr("重置 ")}${fmtTime(d.fh?.resets_at)}\n` +
+    `${tr("7天窗：")}${d.sd?.utilization ?? "-"}%  · ${tr("重置 ")}${fmtTime(d.sd?.resets_at)}\n` +
+    `${tr("本会话花费：$")}${d.cost?.toFixed?.(4) ?? "-"}` +
+    local;
+}
 async function loadUsage(force) {
   const el = $("usage");
   el.textContent = tr("用量…");
@@ -2629,38 +2644,38 @@ async function loadUsage(force) {
     window.api.getUsage(force ? { force: true } : undefined),
     costStatLines(),
   ]);
-  if (!u || u.error || !u.rate_limits_available || !u.rate_limits) {
-    el.textContent = u && u.subscription_type ? u.subscription_type.toUpperCase() : tr("用量 N/A");
-    el.title = (u && u.error ? tr("用量不可用：") + u.error : tr("当前会话无订阅用量信息（如用 API Key）")) + local;
+  // 用量端点本身被限流（429）时，rate_limits 里不是窗口数据而是个 error 对象
+  const rlErr = u?.rate_limits?.error;
+  if (!u || u.error || !u.rate_limits_available || !u.rate_limits || rlErr) {
+    const why = u && u.error ? tr("用量不可用：") + u.error
+      : rlErr ? tr("用量端点被限流，稍后自动恢复：") + (rlErr.message || "")
+      : tr("当前会话无订阅用量信息（如用 API Key）");
+    if (_usageGood) { renderUsage(el, _usageGood, why, local); return; }
+    el.textContent = (u && u.subscription_type ? u.subscription_type.toUpperCase() : tr("用量 N/A")) + (rlErr ? " ⚠" : "");
+    el.title = why + local;
     return;
   }
-  const sub = (u.subscription_type || "").toUpperCase();
-  const fh = u.rate_limits.five_hour;
-  const sd = u.rate_limits.seven_day;
-  const parts = [];
-  if (sub) parts.push(sub);
-  if (fh && fh.utilization != null) parts.push(`⏰${fmtTimeShort(fh.resets_at)} ${Math.round(fh.utilization)}%`);
-  if (sd && sd.utilization != null) parts.push(`7d ${Math.round(sd.utilization)}%`);
-  el.textContent = parts.join(" · ") || tr("用量");
-  el.title =
-    `${tr("订阅：")}${sub || "-"}\n` +
-    `${tr("5小时窗：")}${fh?.utilization ?? "-"}%  · ${tr("重置 ")}${fmtTime(fh?.resets_at)}\n` +
-    `${tr("7天窗：")}${sd?.utilization ?? "-"}%  · ${tr("重置 ")}${fmtTime(sd?.resets_at)}\n` +
-    `${tr("本会话花费：$")}${u.session?.total_cost_usd?.toFixed?.(4) ?? "-"}` +
-    local;
+  _usageGood = {
+    sub: (u.subscription_type || "").toUpperCase(),
+    fh: u.rate_limits.five_hour,
+    sd: u.rate_limits.seven_day,
+    cost: u.session?.total_cost_usd,
+    at: Date.now(),
+  };
+  renderUsage(el, _usageGood, null, local);
 }
 let _usageThrottle = 0;
 function loadUsageThrottled() {
   const now = Date.now();
-  if (now - _usageThrottle < 30000) return; // 与定时刷新同频，最多 30s 一次
+  if (now - _usageThrottle < 60000) return; // 与定时刷新同频，最多 60s 一次
   _usageThrottle = now;
   loadUsage();
 }
 $("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
-// 每 30 秒刷新（与 main.js 的 USAGE_TTL 对齐；用户要求用量可 30s 级跟踪）。
+// 每 60 秒刷新（30s 轮询曾触发用量端点 429 限流；用户要求放缓到 60s 一次）。
 // 探测走控制通道不耗 token，仅子进程开销；窗口不可见时跳过。
-setInterval(() => { if (!document.hidden) loadUsage(); }, 30000);
+setInterval(() => { if (!document.hidden) loadUsage(); }, 60000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadUsageThrottled(); }); // 恢复可见时立即刷一次（带节流防抖）
 
 // ── 模型切换：顶栏下拉，写回 config 后下一轮 chat 即生效，与用量/费用联动控成本 ──

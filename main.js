@@ -1017,8 +1017,8 @@ ipcMain.handle("getUsage", async (_e, { force } = {}) => {
   usageInflight = probeUsage();
   try {
     const usage = await usageInflight;
-    // 失败结果不写缓存，下次仍可立即重试
-    if (usage && !usage.error) usageCache = { ts: Date.now(), value: usage };
+    // 失败结果不写缓存，下次仍可立即重试；端点被限流时 rate_limits 里是个 error 对象，同样视为失败
+    if (usage && !usage.error && !usage.rate_limits?.error) usageCache = { ts: Date.now(), value: usage };
     return usage;
   } finally {
     usageInflight = null;

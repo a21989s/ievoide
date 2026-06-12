@@ -249,6 +249,8 @@
     "用量 N/A": "Usage N/A",
     "用量不可用：": "Usage unavailable: ",
     "当前会话无订阅用量信息（如用 API Key）": "No subscription usage info for this session (e.g. when using an API key)",
+    "用量端点被限流，稍后自动恢复：": "Usage endpoint rate-limited, will recover shortly: ",
+    "以下为 {0} 的旧数据：": "Showing stale data from {0}:",
     "用量": "Usage",
     "订阅：": "Subscription: ",
     "5小时窗：": "5h window: ",
