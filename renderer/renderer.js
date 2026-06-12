@@ -579,6 +579,52 @@ async function openFile(path, name, line) {
   }
 }
 
+// ── 代码地图：单轮只读分析当前 workdir，产出 mermaid 模块/依赖图并在查看器渲染 ──
+// 入口：命令面板 / 快捷技能「🗺 生成代码地图」；可一键保存为 docs/codemap.md 衔接文档维护
+let codemapBusy = false;
+async function genCodemap() {
+  if (!currentFolder) { toast(tr("请先选择文件夹"), "error"); return; }
+  if (codemapBusy) { toast(tr("代码地图生成中…"), "info"); return; }
+  codemapBusy = true;
+  showViewer(tr("代码地图"));
+  useBody("md");
+  vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">🗺</div><div>${esc(tr("正在分析代码结构，生成代码地图…（约 1-3 分钟）"))}</div></div>`;
+  try {
+    const r = await window.api.codemap();
+    // 等待期间用户可能已打开别的文件/关掉查看器，不再覆盖
+    if ($("vtitle").textContent !== tr("代码地图")) {
+      if (r && r.error) toast(tr("代码地图生成失败：") + r.error, "error");
+      return;
+    }
+    if (!r || r.error) {
+      vbody.innerHTML = `<div class="v-fallback"><div class="vf-ic">⚠️</div><div>${esc(tr("代码地图生成失败：") + ((r && r.error) || ""))}</div></div>`;
+      return;
+    }
+    vbody.innerHTML = "";
+    const bar = document.createElement("div");
+    bar.style.cssText = "margin:0 0 8px;text-align:right";
+    const save = document.createElement("button");
+    save.className = "vf-open";
+    save.textContent = tr("💾 保存为 docs/codemap.md");
+    save.onclick = async () => {
+      const root = currentFolder.replace(/\/+$/, "");
+      await window.api.mkdir(root + "/docs");
+      const w = await window.api.writeFile(root + "/docs/codemap.md", r.markdown);
+      if (w && w.ok) {
+        toast(tr("已保存 docs/codemap.md"), "success");
+        $("tree").innerHTML = "";
+        await renderChildren($("tree"), currentFolder, 0); // 刷新文件树立即可见
+      } else toast(tr("保存失败：") + ((w && w.error) || ""), "error");
+    };
+    bar.appendChild(save);
+    const body = document.createElement("div");
+    vbody.append(bar, body);
+    await renderMdInto(body, r.markdown);
+  } finally {
+    codemapBusy = false;
+  }
+}
+
 $("vclose").onclick = () => {
   const v = $("viewer");
   v.style.display = "none";
@@ -2409,11 +2455,12 @@ function cmdkBaseCommands() {
     { ic: "👤", label: tr("切换账号"), run: () => $("acctBtn").click() },
     { ic: "🌐", label: tr("切换语言"), run: () => $("langBtn").onclick() },
     { ic: "⌨️", label: tr("快捷键速查"), run: () => toggleKbdHelp() },
+    { ic: "🗺", label: tr("生成代码地图"), run: () => genCodemap() },
   ];
-  // 快捷技能：直接以技能提示词发起一次对话
+  // 快捷技能：直接以技能提示词发起一次对话（action: 开头的为内置动作）
   (QUICK_SKILLS || []).forEach((q) => cmds.push({
     ic: q.icon || "⚡", label: tr(q.label), hint: tr("快捷技能"),
-    run: () => { $("input").value = q.prompt; send(); },
+    run: () => runQuickSkill(q),
   }));
   return cmds;
 }
@@ -3663,6 +3710,7 @@ const DEFAULT_QUICK_SKILLS = [
   { icon: "🔍", label: "Copilot Review", prompt: "/code-review" },
   { icon: "🧪", label: "运行测试", prompt: "运行本项目的测试用例，并把结果汇报给我" },
   { icon: "🔀", label: "建 PR", prompt: "/pr" },
+  { icon: "🗺", label: "生成代码地图", prompt: "action:codemap" },
 ];
 let QUICK_SKILLS;
 try {
@@ -3670,6 +3718,19 @@ try {
   QUICK_SKILLS = Array.isArray(saved) ? saved : DEFAULT_QUICK_SKILLS.slice();
 } catch {
   QUICK_SKILLS = DEFAULT_QUICK_SKILLS.slice();
+}
+// 老用户的列表存在 localStorage 里不含新内置项：补发一次（之后删掉不会复活）
+if (!localStorage.getItem("claudeTools.quickSkills.codemapSeeded")) {
+  if (!QUICK_SKILLS.some((q) => q.prompt === "action:codemap"))
+    QUICK_SKILLS.push({ icon: "🗺", label: "生成代码地图", prompt: "action:codemap" });
+  try { localStorage.setItem("claudeTools.quickSkills.codemapSeeded", "1"); } catch {}
+  persistQuickSkills();
+}
+// 执行快捷技能：action: 开头的是内置动作，其余作为 prompt 发起对话
+function runQuickSkill(q) {
+  if (q.prompt === "action:codemap") { genCodemap(); return; }
+  $("input").value = q.prompt;
+  send();
 }
 function persistQuickSkills() {
   try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {}
@@ -3702,11 +3763,7 @@ function renderQuickbar() {
     b.type = "button";
     b.textContent = `${q.icon ? q.icon + " " : ""}${tr(q.label)}`;
     b.title = `${q.prompt}\n${tr("右键编辑 / 删除")}`;
-    b.onclick = () => {
-      const input = $("input");
-      input.value = q.prompt;
-      send(); // 复用既有发送逻辑（含排队 / 自动新对话标题等）
-    };
+    b.onclick = () => runQuickSkill(q); // 普通项复用既有发送逻辑，action: 项走内置动作
     b.oncontextmenu = (e) => { e.preventDefault(); editQuickSkill(i); };
     bar.appendChild(b);
   });

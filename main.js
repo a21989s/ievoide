@@ -724,6 +724,61 @@ ipcMain.handle("saveTextFile", async (_e, { defaultName, content }) => {
   }
 });
 
+// ── 代码地图：对当前 workdir 做一次只读分析，产出模块/依赖关系的 mermaid 图 ──
+// 省钱设计：限只读工具 + maxTurns 上限 + 复用 evolveModel（便宜模型够用），单轮查询不留会话
+let codemapping = false;
+ipcMain.handle("codemap", async () => {
+  if (codemapping) return { error: "已有代码地图生成中" };
+  if (!workdir) return { error: "请先选择文件夹" };
+  codemapping = true;
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 300000); // 5 分钟兜底超时
+  try {
+    const prompt =
+      "用 Glob/Read/Grep 快速浏览本项目的结构（优先看 README、配置/入口文件、目录划分，扫描即可、不要逐文件精读），" +
+      "梳理出模块划分与模块间的依赖/调用关系，产出一份代码地图。\n" +
+      "最后只输出一个 Markdown 文档（不要任何额外解释），格式：\n" +
+      "# 代码地图\n" +
+      "不超过 3 句话的架构概述\n" +
+      "```mermaid\n" +
+      "graph LR 的模块/依赖关系图（节点 ≤20 个、标签简短，可按目录/职责用 subgraph 分组；" +
+      "节点 id 只用字母数字，标签含特殊字符时用双引号包裹，确保 mermaid 语法正确）\n" +
+      "```\n" +
+      "随后用列表给每个核心模块一行职责说明。";
+    const response = query({
+      prompt,
+      options: {
+        cwd: workdir,
+        permissionMode: "bypassPermissions",
+        allowedTools: ["Read", "Glob", "Grep"], // 只读分析，杜绝副作用
+        disallowedTools: ["Write", "Edit", "NotebookEdit", "Bash", "Task", "WebSearch", "WebFetch"], // 双保险：禁写/禁执行/禁联网，控住成本
+        maxTurns: 15, // 限制工具循环轮数，控制 token 消耗
+        abortController: abort,
+        systemPrompt: { type: "preset", preset: "claude_code" },
+        ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
+        ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
+      },
+    });
+    let text = "", final = "";
+    for await (const msg of response) {
+      if (msg.type === "assistant") {
+        for (const b of msg.message.content) if (b.type === "text") text += b.text;
+      } else if (msg.type === "result" && msg.subtype === "success") final = msg.result || "";
+    }
+    const markdown = /```mermaid/.test(final) ? final : text;
+    if (!/```mermaid/.test(markdown)) return { error: "未生成出 mermaid 图，请重试" };
+    // 只截取最终文档（模型偶尔会在文档前带过程性文字）
+    const start = markdown.indexOf("# 代码地图");
+    return { ok: true, markdown: start >= 0 ? markdown.slice(start) : markdown };
+  } catch (err) {
+    if (abort.signal.aborted) return { error: "已超时或中止" };
+    return { error: String(err?.message || err) };
+  } finally {
+    clearTimeout(timer);
+    codemapping = false;
+  }
+});
+
 // ── 对话：支持多个并发查询，按 convId 隔离；事件都带上 convId ───
 const runs = new Map(); // convId -> AbortController
 

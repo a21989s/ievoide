@@ -26,6 +26,7 @@ contextBridge.exposeInMainWorld("api", {
   mobileStop: () => ipcRenderer.invoke("mobileStop"),
   chat: (payload) => ipcRenderer.send("chat", payload),
   chatRewind: (id) => ipcRenderer.invoke("chatRewind", id),
+  codemap: () => ipcRenderer.invoke("codemap"),
   stop: (convId) => ipcRenderer.send("stop", { convId }),
   getUsage: (opts) => ipcRenderer.invoke("getUsage", opts),
   getModel: () => ipcRenderer.invoke("getModel"),
