@@ -375,12 +375,14 @@ function lanIP() {
   return cands[0] || "";
 }
 function mobileToken() {
-  // 与 server.mjs 同一令牌来源：data/server-token.txt（缺失则由 server 生成后再读）
-  try {
-    return fsSync.readFileSync(path.join(TOOLS_DIR, "data", "server-token.txt"), "utf8").trim();
-  } catch {
-    return "";
+  // 与 server.mjs 同源：优先与安装目录无关的共享文件（CT_TOKEN_FILE 或
+  // ~/.claude-tools/server-token.txt），回退旧版本地 data/server-token.txt。
+  // 这样常驻引擎即便从别的目录启动，App 端也能读到它写回共享文件的同一个令牌。
+  const shared = process.env.CT_TOKEN_FILE || path.join(os.homedir(), ".claude-tools", "server-token.txt");
+  for (const f of [shared, path.join(TOOLS_DIR, "data", "server-token.txt")]) {
+    try { const t = fsSync.readFileSync(f, "utf8").trim(); if (t) return t; } catch {}
   }
+  return "";
 }
 async function mobileInfo() {
   const ip = lanIP();

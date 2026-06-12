@@ -50,14 +50,18 @@ async function readMcp() {
   } catch { return null; }
 }
 
-// 访问令牌：优先环境变量 CT_TOKEN，其次 data/server-token.txt，否则随机生成并保存
-const tokenFile = path.join(__dirname, "data", "server-token.txt");
+// 访问令牌。共享文件放在与安装目录无关的位置（~/.claude-tools/server-token.txt，可用
+// CT_TOKEN_FILE 覆盖），桌面 App 与常驻引擎即使从不同目录启动也能读到同一个令牌——
+// 否则 App 端读不到引擎的令牌，二维码 URL 会缺 token。
+// 取值顺序：CT_TOKEN 环境变量 > 共享文件 > 旧版本地 data/server-token.txt > 新生成。
+const sharedTokenFile = process.env.CT_TOKEN_FILE || path.join(os.homedir(), ".claude-tools", "server-token.txt");
+const legacyTokenFile = path.join(__dirname, "data", "server-token.txt");
 let TOKEN = (process.env.CT_TOKEN || "").trim();
-if (!TOKEN) { try { TOKEN = fs.readFileSync(tokenFile, "utf8").trim(); } catch {} }
-if (!TOKEN) {
-  TOKEN = crypto.randomBytes(6).toString("hex");
-  try { fs.mkdirSync(path.dirname(tokenFile), { recursive: true }); fs.writeFileSync(tokenFile, TOKEN); } catch {}
-}
+if (!TOKEN) { try { TOKEN = fs.readFileSync(sharedTokenFile, "utf8").trim(); } catch {} }
+if (!TOKEN) { try { TOKEN = fs.readFileSync(legacyTokenFile, "utf8").trim(); } catch {} }
+if (!TOKEN) TOKEN = crypto.randomBytes(6).toString("hex");
+// 始终回写共享文件：无论令牌来自环境变量、旧文件还是新生成，都让 App 端能从同一处读到。
+try { fs.mkdirSync(path.dirname(sharedTokenFile), { recursive: true }); fs.writeFileSync(sharedTokenFile, TOKEN); } catch {}
 const authed = (req, url) => (url.searchParams.get("token") || req.headers["x-token"]) === TOKEN;
 
 // 对话历史共享存储：与桌面端共用同一个 data/claude-tools-conversations.json。
