@@ -1241,11 +1241,33 @@ function openHistory() {
   $("histSearch").focus();
 }
 function closeHistory() { $("historyModal").classList.remove("open"); }
+// 历史条目正文纯文本缓存：id -> { html, text }（html 变了才重新解析，避免每次搜索都建 DOM）
+const histTextCache = new Map();
+function histPlainText(h) {
+  if (!h.html) return "";
+  const c = histTextCache.get(h.id);
+  if (c && c.html === h.html) return c.text;
+  const tmp = document.createElement("div");
+  tmp.innerHTML = h.html;
+  const text = (tmp.textContent || "").replace(/\s+/g, " ").trim();
+  histTextCache.set(h.id, { html: h.html, text });
+  return text;
+}
+// 取关键词命中处约 80 字符的上下文摘要，命中词用 <mark> 高亮
+function histSnippet(text, q) {
+  const idx = text.toLowerCase().indexOf(q);
+  if (idx < 0) return "";
+  const start = Math.max(0, idx - 30);
+  const end = Math.min(text.length, idx + q.length + 50);
+  return (start > 0 ? "…" : "") +
+    esc(text.slice(start, idx)) + `<mark>${esc(text.slice(idx, idx + q.length))}</mark>` + esc(text.slice(idx + q.length, end)) +
+    (end < text.length ? "…" : "");
+}
 function renderHistory(filter) {
   const box = $("histList");
   box.innerHTML = "";
   const q = (filter || "").toLowerCase();
-  const items = archived.filter((h) => !q || (h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q));
+  const items = archived.filter((h) => !q || (h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q) || histPlainText(h).toLowerCase().includes(q));
   if (!items.length) {
     box.innerHTML = `<div class="hist-empty">${q ? tr("无匹配历史") : tr("暂无历史记录")}</div>`;
     return;
@@ -1254,9 +1276,13 @@ function renderHistory(filter) {
     const row = document.createElement("div");
     row.className = "hist-row";
     const title = esc(h.title || tr("新对话"));
+    // 仅正文命中（标题/时间未命中）时展示上下文摘要，帮用户确认是哪段对话
+    const titleHit = q && ((h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q));
+    const snippet = q && !titleHit ? histSnippet(histPlainText(h), q) : "";
     row.innerHTML =
       `<div class="hist-main"><div class="hist-title">${title}</div>` +
-      `<div class="hist-meta">${fmtTime(h.archivedAt)}${h.sessionId ? `<span class="hist-badge">${tr("可续聊")}</span>` : ""}</div></div>` +
+      `<div class="hist-meta">${fmtTime(h.archivedAt)}${h.sessionId ? `<span class="hist-badge">${tr("可续聊")}</span>` : ""}</div>` +
+      (snippet ? `<div class="hist-snippet">${snippet}</div>` : "") + `</div>` +
       `<button class="hist-open">${tr("打开")}</button><button class="hist-del" title="${tr("删除")}">×</button>`;
     row.querySelector(".hist-open").onclick = () => restoreFromHistory(h.id);
     row.querySelector(".hist-del").onclick = (e) => { e.stopPropagation(); deleteFromHistory(h.id); };
@@ -1278,6 +1304,7 @@ function restoreFromHistory(id) {
 }
 function deleteFromHistory(id) {
   archived = archived.filter((x) => x.id !== id);
+  histTextCache.delete(id);
   persistConvs();
   renderHistory($("histSearch").value || "");
 }
