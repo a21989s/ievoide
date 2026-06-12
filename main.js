@@ -1619,7 +1619,7 @@ ipcMain.handle("evolveAudit", async () => {
       '\n\n最后只输出一个 JSON 数组（不要任何额外文字/解释/代码块标记），每项形如 {"title":"简短标题","requirement":"给进化器执行的一句话需求（联网项末尾附来源 URL）","severity":"high|medium|low"}。';
     const response = query({
       prompt,
-      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND }, ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}), ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}) },
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", maxTurns: 30, abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND }, ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}), ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}) },
     });
     let text = "";
     for await (const msg of response) {
@@ -1728,6 +1728,9 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
       options: {
         cwd: TOOLS_DIR,
         permissionMode: "bypassPermissions",
+        // 兜底封顶工具循环轮数：防跑飞的长循环把全量上下文反复读入（cache_read 是 evolve 账单大头）。
+        // steer 多轮追加需求会消耗轮数，故设得比 audit 宽松。
+        maxTurns: 60,
         systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND },
         ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
         ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),

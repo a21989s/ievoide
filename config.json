@@ -4,6 +4,6 @@
   "model": "opus",
   "effort": "low",
   "maxThinkingTokens": 8192,
-  "evolveModel": null,
+  "evolveModel": "claude-sonnet-4-6",
   "planModel": null
 }
