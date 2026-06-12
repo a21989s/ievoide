@@ -1660,6 +1660,9 @@ async function saveFileAsAttachment(file) {
     dataUrl: file.type.startsWith("image/") ? `data:${file.type};base64,${b64}` : null,
   };
 }
+// 气泡/历史/需求清单里的图片统一用 file:// 引用已存盘附件，不把整张 base64 写进持久化 HTML；
+// dataUrl 仅用于发送前 attachList 的临时缩略图（旧存档里的 data: 条目仍由 CSP 放行，正常显示）
+const fileUrl = (p) => "file://" + encodeURI(p);
 async function addAttachment(file) {
   try {
     pendingAttachments.push(await saveFileAsAttachment(file));
@@ -1751,9 +1754,11 @@ function renderMsgAttachments(bubble, atts) {
   const wrap = document.createElement("div");
   wrap.className = "msg-attach";
   atts.forEach((a) => {
-    if (a.dataUrl) {
+    // 已存盘的图片用 file:// 路径引用，避免 base64 随 pane.innerHTML 持久化；无路径时退回 dataUrl
+    const src = a.path && (a.type || "").startsWith("image/") ? fileUrl(a.path) : a.dataUrl;
+    if (src) {
       const img = document.createElement("img");
-      img.src = a.dataUrl;
+      img.src = src;
       img.title = a.name;
       wrap.appendChild(img);
     } else {
@@ -3252,7 +3257,7 @@ function renderReqs() {
       ? `<div class="req-atts">` +
         atts.map((a) =>
           `<span class="req-att" title="${esc(a.path)}">` +
-          (a.dataUrl ? `<img src="${a.dataUrl}">` : `📎`) +
+          (a.path && (a.type || "").startsWith("image/") ? `<img src="${fileUrl(a.path)}">` : a.dataUrl ? `<img src="${a.dataUrl}">` : `📎`) +
           `<span>${esc(a.name)}</span></span>`
         ).join("") +
         `</div>`
@@ -3361,7 +3366,7 @@ function addRequirement(text) {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5),
     text,
     status: "pending",
-    atts: reqPendingAtts.slice(),
+    atts: reqPendingAtts.map(({ dataUrl, ...a }) => a), // dataUrl 仅录入预览用，不进 localStorage
     links: reqPendingLinks.slice(),
   });
   reqPendingAtts = [];
