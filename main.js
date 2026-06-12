@@ -643,6 +643,42 @@ ipcMain.handle("mkdir", async (_e, dirPath) => {
   }
 });
 
+// ── 文件树右键操作：重命名 / 移入废纸篓 / Finder 中显示 ─────────
+// 写操作均限制在当前工作目录内防 ../ 越界
+function insideWorkdir(p) {
+  if (!workdir) return false;
+  const root = path.resolve(workdir);
+  const abs = path.resolve(p);
+  return abs === root || abs.startsWith(root + path.sep);
+}
+ipcMain.handle("renameEntry", async (_e, oldPath, newPath) => {
+  try {
+    if (!insideWorkdir(oldPath) || !insideWorkdir(newPath)) {
+      return { ok: false, error: "路径越界" };
+    }
+    if (fsSync.existsSync(newPath)) return { ok: false, error: "同名文件已存在" };
+    await fs.rename(oldPath, newPath);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+ipcMain.handle("trashEntry", async (_e, p) => {
+  try {
+    // 禁止删工作目录本身
+    if (!insideWorkdir(p) || path.resolve(p) === path.resolve(workdir)) {
+      return { ok: false, error: "路径越界" };
+    }
+    await shell.trashItem(path.resolve(p)); // 移入废纸篓而非硬删，可随时找回
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+});
+ipcMain.handle("revealInFolder", (_e, p) => {
+  if (typeof p === "string" && p) shell.showItemInFolder(path.resolve(p));
+});
+
 // ── 二进制读取（PDF 编辑器用），返回 base64 ────────────────────
 ipcMain.handle("readFileBuffer", async (_e, filePath) => {
   try {

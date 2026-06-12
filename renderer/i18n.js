@@ -49,6 +49,18 @@
     "📦 打包": "📦 Package",
     "全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装": "Package everything (node_modules / data / history) to Desktop — unzip and run, zero install",
     "切换语言 / Switch language": "切换语言 / Switch language",
+    // —— 文件树右键菜单 ——
+    "重命名": "Rename",
+    "新名称：": "New name:",
+    "名称不能包含 /": "Name cannot contain /",
+    "重命名失败：": "Rename failed: ",
+    "复制相对路径": "Copy Relative Path",
+    "已复制：": "Copied: ",
+    "复制失败": "Copy failed",
+    "在 Finder / 文件管理器中显示": "Reveal in Finder / File Manager",
+    "删除（移入废纸篓）": "Delete (Move to Trash)",
+    "把 {0} 移入废纸篓？": "Move {0} to Trash?",
+    "删除失败：": "Delete failed: ",
     // —— 侧栏切换 ——
     "⎇ 源代码管理": "⎇ Source Control",
     "源代码管理": "Source Control",

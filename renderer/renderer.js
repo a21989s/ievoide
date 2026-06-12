@@ -114,6 +114,12 @@ async function renderChildren(container, dirPath, depth, expandSet) {
     // 文件名来自任意目录，必须转义——否则含 < & 或 <img onerror> 的文件名会破坏渲染/注入标记
     node.innerHTML = `<span class="twist">${it.isDir ? "▸" : ""}</span>${it.isDir ? "📁" : "📄"} ${esc(it.name)}`;
     container.appendChild(node);
+    // 右键：重命名 / 删除 / 复制相对路径 / Finder 中显示（VSCode 资源管理器基本盘）
+    node.oncontextmenu = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      fileNodeMenu(it, e.clientX, e.clientY);
+    };
 
     if (it.isDir) {
       let expanded = false;
@@ -147,6 +153,51 @@ async function renderChildren(container, dirPath, depth, expandSet) {
       };
     }
   }
+}
+
+// 文件树节点右键菜单：重命名 / 删除（废纸篓）/ 复制相对路径 / Finder 中显示
+function fileNodeMenu(it, x, y) {
+  const root = (currentFolder || "").replace(/\/+$/, "");
+  const rel = it.path.startsWith(root + "/") ? it.path.slice(root.length + 1) : it.path;
+  showMenu(x, y, [
+    {
+      label: tr("重命名"),
+      run: async () => {
+        const name = ((await modalPrompt(tr("新名称："), it.name)) || "").trim();
+        if (!name || name === it.name) return;
+        if (name.includes("/")) { toast(tr("名称不能包含 /"), "error"); return; }
+        const newPath = it.path.slice(0, it.path.length - it.name.length) + name;
+        const r = await window.api.renameEntry(it.path, newPath);
+        if (!r.ok) { toast(tr("重命名失败：") + (r.error || ""), "error"); return; }
+        // 把 DOM 里的旧路径前缀改成新路径，refreshFileTree 才能按新路径恢复展开与选中态
+        document.querySelectorAll("#tree .node").forEach((n) => {
+          if (n.dataset.path === it.path) n.dataset.path = newPath;
+          else if (n.dataset.path.startsWith(it.path + "/"))
+            n.dataset.path = newPath + n.dataset.path.slice(it.path.length);
+        });
+        await refreshFileTree();
+      },
+    },
+    {
+      label: tr("复制相对路径"),
+      run: async () => {
+        try { await navigator.clipboard.writeText(rel); toast(tr("已复制：") + rel); }
+        catch { toast(tr("复制失败"), "error"); }
+      },
+    },
+    { label: tr("在 Finder / 文件管理器中显示"), run: () => window.api.revealInFolder(it.path) },
+    { sep: true },
+    {
+      label: tr("删除（移入废纸篓）"),
+      danger: true,
+      run: async () => {
+        if (!(await modalConfirm(trf("把 {0} 移入废纸篓？", it.name)))) return;
+        const r = await window.api.trashEntry(it.path);
+        if (!r.ok) { toast(tr("删除失败：") + (r.error || ""), "error"); return; }
+        await refreshFileTree();
+      },
+    },
+  ]);
 }
 
 // AI 改动文件 / 撤销改动后重建文件树：保留已展开的目录层级与选中文件
