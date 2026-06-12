@@ -413,14 +413,20 @@ ipcMain.handle("saveConvs", async (_e, data) => {
 });
 
 // ── 列目录（懒加载，点击文件夹才展开下一层）──────────────────
-const IGNORE = new Set(["node_modules", ".git", ".DS_Store"]);
+// 黑名单制：只排除真正无用的点条目与常见构建产物目录，
+// .github/.env.example/.gitignore 等开发常用点文件正常显示与检索。
+const IGNORE = new Set([
+  "node_modules", ".git", ".hg", ".svn", ".DS_Store", ".cache",
+  "dist", "build", "coverage", "out", "target",
+  ".next", ".nuxt", ".turbo", ".parcel-cache", "__pycache__", ".venv", "venv",
+]);
 ipcMain.handle("listDir", async (_e, dirPath) => {
   const target = dirPath || workdir;
   if (!target) return [];
   try {
     const entries = await fs.readdir(target, { withFileTypes: true });
     return entries
-      .filter((d) => !d.name.startsWith(".") && !IGNORE.has(d.name))
+      .filter((d) => !IGNORE.has(d.name))
       .map((d) => ({
         name: d.name,
         path: path.join(target, d.name),
@@ -476,7 +482,7 @@ async function listWorkdirFiles() {
     }
     for (const d of entries) {
       if (all.length >= FILE_CACHE_MAX) return;
-      if (d.name.startsWith(".") || IGNORE.has(d.name)) continue;
+      if (IGNORE.has(d.name)) continue;
       const full = path.join(dir, d.name);
       if (d.isDirectory()) {
         const rel = path.relative(workdir, full).replace(/\\/g, "/");
@@ -1733,7 +1739,7 @@ ipcMain.handle("gitRepos", async () => {
   try {
     const entries = await fs.readdir(workdir, { withFileTypes: true });
     for (const e of entries) {
-      if (!e.isDirectory() || e.name.startsWith(".") || IGNORE.has(e.name)) continue;
+      if (!e.isDirectory() || IGNORE.has(e.name)) continue;
       const child = path.join(workdir, e.name);
       if (await isGitRepo(child)) repos.push({ name: e.name, path: child });
     }
