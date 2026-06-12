@@ -1265,6 +1265,9 @@ function makeConv(seed) {
     unread: false, // 非活跃时轮次完成/出错 => true，tab 上显示未读圆点，切回即清除
     queue: [], // 当前轮进行中时，后续追问排队，依次自动发送
     askTimers: [], // AskUserQuestion 卡片的自动倒计时 setInterval，删除/重载时统一清理
+    promptHist: Array.isArray(seed?.promptHist) ? seed.promptHist.slice(-20) : [], // 最近 20 条已发送 prompt，供输入框 ↑/↓ 召回
+    _histIdx: -1, // 当前召回位置（-1=未在历史导航中，运行时状态不持久化）
+    _histDraft: null, // 开始召回前暂存的未发送草稿，Esc/↓ 越界时还原
     costUsd: seed?.costUsd || 0, // 本会话累计费用（SDK 按当前模型单价结算的 total_cost_usd 累加）
     tokens: seed?.tokens || 0, // 本会话累计 token（输入+输出+缓存，全价口径，兼容旧存档）
     usage: seed?.usage || { in: 0, out: 0, cw: 0, cr: 0 }, // 分项累计：输入/输出/缓存写/缓存读，用于按真实计费比例折算
@@ -1290,6 +1293,7 @@ function buildConvState() {
       tokens: c.tokens,
       usage: c.usage,
       ctx: c.ctx,
+      promptHist: c.promptHist,
       html: c.pane ? c.pane.innerHTML : c._html || "",
     })),
     active: activeConv?.id || null,
@@ -1712,6 +1716,17 @@ function send() {
   renderAttachList();
   $("slashPopup").classList.remove("open");
   $("filePopup").classList.remove("open");
+
+  // ↑/↓ 历史召回栈：成功发出（含排队）即入栈，相邻去重，每会话最多保留 20 条
+  if (text) {
+    const h = conv.promptHist || (conv.promptHist = []);
+    if (h[h.length - 1] !== text) {
+      h.push(text);
+      if (h.length > 20) h.shift();
+    }
+    conv._histIdx = -1;
+    conv._histDraft = null;
+  }
 
   if (!conv.title || conv.title === "新对话") {
     const t = text || (atts[0] && atts[0].name) || tr("附件");
@@ -2226,12 +2241,53 @@ $("input").addEventListener("keydown", (e) => {
       return;
     }
   }
+  // ↑/↓ 历史召回（终端/Cursor 惯例）：输入为空或光标在首行时 ↑ 取上一条已发 prompt（循环），
+  // ↓ 反向、越过最新一条还原草稿；Esc 还原召回前暂存的草稿。补全弹窗打开时已在上方 return，不会抢键
+  const conv = activeConv;
+  if (conv && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.isComposing) {
+    const hist = conv.promptHist || [];
+    const ta = e.target;
+    const navigating = conv._histIdx >= 0;
+    if (e.key === "ArrowUp" && hist.length &&
+        (navigating || !ta.value || !ta.value.slice(0, ta.selectionStart).includes("\n"))) {
+      e.preventDefault();
+      if (!navigating) conv._histDraft = ta.value; // 切换前暂存未发送草稿
+      conv._histIdx = navigating ? (conv._histIdx - 1 + hist.length) % hist.length : hist.length - 1;
+      ta.value = hist[conv._histIdx];
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      return;
+    }
+    if (e.key === "ArrowDown" && navigating) {
+      e.preventDefault();
+      if (conv._histIdx >= hist.length - 1) {
+        // 越过最新一条 => 还原草稿并退出导航
+        ta.value = conv._histDraft || "";
+        conv._histIdx = -1;
+        conv._histDraft = null;
+      } else {
+        ta.value = hist[++conv._histIdx];
+      }
+      ta.setSelectionRange(ta.value.length, ta.value.length);
+      return;
+    }
+    if (e.key === "Escape" && navigating) {
+      e.preventDefault();
+      e.stopPropagation(); // 别让全局 Esc 顺手关掉其他浮层
+      ta.value = conv._histDraft || "";
+      conv._histIdx = -1;
+      conv._histDraft = null;
+      return;
+    }
+  }
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     send(); // Ctrl/⌘+Enter 发送（忙碌时 send() 内部会自动排队）
   }
   // 普通 Enter 不拦截 => 换行
 });
+// 手动编辑（含修改召回出来的内容）即退出历史导航，下次 ↑ 会把当前内容重新存为草稿，
+// 避免继续从旧位置切换而覆盖未保存的修改（程序赋值不触发 input 事件，召回本身不受影响）
+$("input").addEventListener("input", () => { if (activeConv) activeConv._histIdx = -1; });
 
 // ── 左侧栏折叠/展开 ────────────────────────────────────────
 $("toggleSidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
