@@ -26,6 +26,10 @@
     "🧹 上下文已达 {0}，自动发送 /compact 压缩后继续…":
       "🧹 Context reached {0} — auto-sending /compact, then your message will follow…",
     "🔄 持续进化：巡检无产出，30 分钟后再试": "🔄 Continuous evolve: audit produced nothing, retrying in 30 min",
+    "⏸ 订阅 5 小时窗用量已达 {0}%，持续进化暂停 {1} 分钟（配额留给对话）":
+      "⏸ 5-hour window usage reached {0}% — continuous evolve paused for {1} min (saving quota for chat)",
+    "⏸ 配额逼近上限，跳过本次自动修错": "⏸ Quota near limit — skipping this auto-fix",
+    "⏸ 配额逼近上限，定期自检推迟 {0} 分钟": "⏸ Quota near limit — periodic self-check postponed {0} min",
     "快捷键速查（按 ? 打开）": "Keyboard shortcuts (press ?)",
     "⌨️ 快捷键速查": "⌨️ Keyboard Shortcuts",
     "全局": "Global",

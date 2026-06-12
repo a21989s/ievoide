@@ -2788,6 +2788,7 @@ window.api.on("mcp:status", () => { if ($("mcpModal").classList.contains("open")
 let evolveBusy = false;
 let _autoCooldown = 0;
 let _periodicTimer = null;
+let _periodicGen = 0; // tick 改为 async 后，用代次使被 applyPeriodic 重启废弃的在途 tick 失效，避免双链路
 
 // 进化日志会被流式逐块写入（每个 token 一次），多轮进化/周期自检持续累积。
 // 不设上限时 <pre> 文本节点会无限增长，每次追加都要整段重排，最终拖垮渲染层
@@ -3072,9 +3073,30 @@ const pickNextBacklog = (list) =>
 let _continuousTimer = null;
 // 代次标记：每次 applyContinuous 自增，await 期间被重启的旧循环代次会失效，确保任意时刻只有一条循环在跑
 let _continuousGen = 0;
+// ── 配额闸门：所有「自动触发」的进化（持续进化/定期自检/自动修错）跑之前先看订阅 5 小时窗 ──
+// 用量 ≥ 阈值就暂停到重置时间。进化用的是与对话相同的主力模型，无人值守地连跑会在
+// 几十分钟内抽干整个配额窗（2026-06-12 实测 38 分钟 15 轮耗尽），把对话也一起卡死。
+// 手动点「开始」的进化不受限——用户自己决定花不花。
+const QUOTA_PAUSE_PCT = 85;
+async function quotaGate() {
+  try {
+    const u = await window.api.getUsage();
+    const fh = u && u.rate_limits_available && u.rate_limits && u.rate_limits.five_hour;
+    if (!fh || fh.utilization == null || fh.utilization < QUOTA_PAUSE_PCT) return 0;
+    const untilReset = fh.resets_at ? new Date(fh.resets_at).getTime() - Date.now() : 0;
+    return Math.max(untilReset, 600000); // 重置时间拿不到/已过 => 至少停 10 分钟再探
+  } catch { return 0; } // 探针失败（如 API Key 无订阅信息）=> 不拦
+}
 async function continuousTick(gen) {
   if (gen !== _continuousGen || !$("evContinuous").checked) return;
   if (evolveBusy) { _continuousTimer = setTimeout(() => continuousTick(gen), 10000); return; }
+  const wait = await quotaGate();
+  if (gen !== _continuousGen) return;
+  if (wait > 0) {
+    evLog(trf("⏸ 订阅 5 小时窗用量已达 {0}%，持续进化暂停 {1} 分钟（配额留给对话）", QUOTA_PAUSE_PCT, Math.round(wait / 60000)));
+    if ($("evContinuous").checked) _continuousTimer = setTimeout(() => continuousTick(gen), wait);
+    return;
+  }
   let list = (await window.api.getEvolveBacklog()) || [];
   if (gen !== _continuousGen) return; // await 期间循环被重启，本代退出
   let next = pickNextBacklog(list);
@@ -3205,10 +3227,12 @@ window.api.on("evolve:rolledback", (m) => {
 });
 window.api.on("issues:update", () => {
   loadIssues();
-  // 全自动修复：有新错误且开启了开关、当前空闲、过了冷却 => 自动进化修复最新错误
+  // 全自动修复：有新错误且开启了开关、当前空闲、过了冷却、配额未触顶 => 自动进化修复最新错误
   if ($("evAuto").checked && !evolveBusy && Date.now() - _autoCooldown > 90000) {
     _autoCooldown = Date.now();
-    window.api.getIssues().then((list) => {
+    quotaGate().then(async (wait) => {
+      if (wait > 0) { evLog(tr("⏸ 配额逼近上限，跳过本次自动修错")); return; }
+      const list = await window.api.getIssues();
       if (list && list[0]) runEvolve("修复这个运行时错误（务必先定位根因再改）：\n" + list[0].message);
     });
   }
@@ -3220,15 +3244,24 @@ window.api.on("issues:update", () => {
 // 这里据 evLastRun 补齐剩余间隔，重启后到点（或已逾期）即续跑，让循环不被打断。
 function applyPeriodic() {
   clearTimeout(_periodicTimer);
+  const pgen = ++_periodicGen; // 废弃所有在途的旧 tick
   if ($("evPeriodic").checked) {
     // 间隔被清空/填非法值时 +value 会是 NaN 或过小值，setTimeout 会按 0 处理导致循环被立即反复触发。
     // 这里兜底为默认 30 分钟，并 clamp 到 60 秒下限。
     let ms = +$("evInterval").value;
     if (!Number.isFinite(ms) || ms <= 0) ms = 1800000;
     ms = Math.max(60000, ms);
-    const tick = () => {
+    const tick = async () => {
+      if (pgen !== _periodicGen) return;
       // 忙则稍后再试，别因为撞上一轮就把这一轮整个跳过
       if (evolveBusy) { _periodicTimer = setTimeout(tick, 15000); return; }
+      const wait = await quotaGate();
+      if (pgen !== _periodicGen || !$("evPeriodic").checked) return; // await 期间被重启/关掉
+      if (wait > 0) {
+        evLog(trf("⏸ 配额逼近上限，定期自检推迟 {0} 分钟", Math.round(wait / 60000)));
+        _periodicTimer = setTimeout(tick, wait);
+        return;
+      }
       try { localStorage.setItem("claudeTools.evLastRun", String(Date.now())); } catch {}
       runEvolve("审视你自己的源码，找出一个明确的 bug、隐患或可改进点并修复（只改一处、保持稳定）。");
       _periodicTimer = setTimeout(tick, ms);
