@@ -1717,6 +1717,49 @@ ipcMain.handle("gitCommit", (_e, repo, message) =>
   gitOp(repo, ["commit", "-m", message])
 );
 
+// ── AI 生成提交信息：取 staged diff（无则取全部未提交 diff），SDK 单轮生成一句中文提交信息 ──
+ipcMain.handle("gitGenCommitMsg", async (_e, repo) => {
+  if (!repo) return { error: "未指定仓库" };
+  try {
+    let { stdout: diff } = await git(["diff", "--cached"], repo);
+    if (!diff.trim())
+      ({ stdout: diff } = await git(["diff", "HEAD"], repo).catch(() => git(["diff"], repo)));
+    if (!diff.trim()) {
+      // 仅有未跟踪文件时，用文件名列表当上下文
+      const { stdout: untracked } = await git(["ls-files", "--others", "--exclude-standard"], repo);
+      if (untracked.trim()) diff = "新增未跟踪文件：\n" + untracked;
+    }
+    if (!diff.trim()) return { error: "没有可生成提交信息的改动" };
+    if (diff.length > 12000) diff = diff.slice(0, 12000) + "\n…(diff 已截断)";
+    const abort = new AbortController();
+    const timer = setTimeout(() => { try { abort.abort(); } catch {} }, 60000);
+    try {
+      const response = query({
+        prompt: `根据以下 git diff 生成一句简洁的中文提交信息（不超过 50 字，动词开头，概括改动意图）。只输出提交信息本身，不要引号、前缀或解释，不要使用任何工具。\n\n${diff}`,
+        options: {
+          cwd: repo,
+          maxTurns: 1,
+          permissionMode: "bypassPermissions",
+          abortController: abort,
+          ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
+        },
+      });
+      let text = "";
+      for await (const msg of response) {
+        if (msg.type === "assistant")
+          for (const b of msg.message.content) if (b.type === "text") text += b.text;
+      }
+      const message = text.trim().split("\n").filter(Boolean)[0]?.replace(/^["'“「]|["'”」]$/g, "").trim();
+      if (!message) return { error: "生成结果为空" };
+      return { message };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    return { error: String(err?.stderr || err?.message || err).trim() };
+  }
+});
+
 // 某提交改动的文件列表（--root 兼容初始提交）
 ipcMain.handle("gitCommitFiles", async (_e, repo, sha) => {
   try {

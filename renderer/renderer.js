@@ -872,6 +872,22 @@ $("scCommit").onclick = async () => {
 $("scMsg").addEventListener("keydown", (e) => {
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); $("scCommit").click(); }
 });
+// ✨ AI 生成提交信息：取 staged diff（无则全部未提交 diff）单轮生成并回填
+$("scGenMsg").onclick = async () => {
+  const btn = $("scGenMsg");
+  if (btn.classList.contains("busy")) return;
+  if (!activeRepo) { toast(tr("请先选择仓库"), "error"); return; }
+  btn.classList.add("busy");
+  btn.textContent = "⟳";
+  try {
+    const r = await window.api.gitGenCommitMsg(activeRepo);
+    if (r && r.message) { $("scMsg").value = r.message; $("scMsg").focus(); }
+    else toast(tr("生成提交信息失败：") + tr(r?.error || ""), "error");
+  } finally {
+    btn.classList.remove("busy");
+    btn.textContent = "✨";
+  }
+};
 $("scStageAll").onclick = () => doGit(() => window.api.gitStageAll(activeRepo));
 $("scUnstageAll").onclick = () => doGit(() => window.api.gitUnstageAll(activeRepo));
 $("scPull").onclick = () => doGit(() => window.api.gitPull(activeRepo), tr("已拉取"));

@@ -236,6 +236,9 @@
       #scCommitBox { display: flex; gap: 6px; margin: 8px 0 4px; }
       #scMsg { flex: 1; resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 7px; font: inherit; font-size: 12px; }
       #scCommit { background: var(--accent); color: #fff; border: 0; border-radius: 5px; padding: 0 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+      #scGenMsg { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 0 7px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+      #scGenMsg.busy { cursor: wait; animation: scGenSpin 1s linear infinite; }
+      @keyframes scGenSpin { to { transform: rotate(360deg); } }
       .sc-grp { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); margin: 6px 0 2px; }
       .sc-grp .sc-n { background: #333; border-radius: 9px; padding: 0 6px; font-size: 10px; }
       .sc-grp .sc-grp-act { margin-left: auto; cursor: pointer; padding: 0 6px; border-radius: 3px; font-size: 14px; }
@@ -723,6 +726,7 @@
           <div class="branch-dd" id="branchDropdown"></div>
           <div id="scCommitBox">
             <textarea id="scMsg" rows="1" data-i18n-ph="提交信息（Ctrl+Enter 提交已暂存）" placeholder="提交信息（Ctrl+Enter 提交已暂存）"></textarea>
+            <button id="scGenMsg" data-i18n-title="AI 生成提交信息（基于暂存/未提交 diff）" title="AI 生成提交信息（基于暂存/未提交 diff）">✨</button>
             <button id="scCommit" data-i18n-title="提交已暂存的更改" title="提交已暂存的更改">✓</button>
           </div>
           <div class="sc-grp"><span data-i18n="暂存的更改">暂存的更改</span><span class="sc-n" id="scStagedN">0</span><span class="sc-grp-act" id="scUnstageAll" data-i18n-title="全部取消暂存" title="全部取消暂存">−</span></div>

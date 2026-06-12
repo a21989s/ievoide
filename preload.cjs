@@ -64,6 +64,7 @@ contextBridge.exposeInMainWorld("api", {
   gitDiscard: (repo, f, untracked) => ipcRenderer.invoke("gitDiscard", repo, f, untracked),
   gitDiff: (repo, f, staged) => ipcRenderer.invoke("gitDiff", repo, f, staged),
   gitCommit: (repo, msg) => ipcRenderer.invoke("gitCommit", repo, msg),
+  gitGenCommitMsg: (repo) => ipcRenderer.invoke("gitGenCommitMsg", repo),
   gitCommitFiles: (repo, sha) => ipcRenderer.invoke("gitCommitFiles", repo, sha),
   gitCommitDiff: (repo, sha, f) => ipcRenderer.invoke("gitCommitDiff", repo, sha, f),
   gitPull: (repo) => ipcRenderer.invoke("gitPull", repo),
