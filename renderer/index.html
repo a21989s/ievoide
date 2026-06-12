@@ -562,7 +562,8 @@
       #setBody .mob-tip { font-size: 12px; color: var(--muted, #999); line-height: 1.5; margin: 0 0 12px; }
       .set-label { display: block; font-size: 12px; opacity: .8; margin: 12px 0 5px; }
       #setPrompt { width: 100%; box-sizing: border-box; resize: vertical; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 13px; outline: none; }
-      #setPerm, #setPlanModel { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
+      .usage.over-budget { color: #e5534b; font-weight: 600; }
+      #setPerm, #setPlanModel, #setBudget { width: 100%; box-sizing: border-box; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 6px 8px; font-size: 13px; }
       .set-row { display: flex; align-items: center; gap: 8px; margin: 14px 0 0; font-size: 13px; cursor: pointer; }
       .set-actions { display: flex; justify-content: flex-end; align-items: center; gap: 10px; margin-top: 16px; }
       #setSave { padding: 5px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
@@ -894,6 +895,8 @@
             <option value="claude-haiku-4-5">Haiku 4.5</option>
             <option value="claude-sonnet-4-6">Sonnet 4.6</option>
           </select>
+          <label class="set-label" data-i18n="每日费用预算（美元，超出即提醒并自动暂停持续进化；留空=不限制）">每日费用预算（美元，超出即提醒并自动暂停持续进化；留空=不限制）</label>
+          <input id="setBudget" type="number" min="0" step="0.5" placeholder="如 5" />
           <label class="set-row"><input type="checkbox" id="setAutoRestart" /><span data-i18n="自进化改完后自动重启/重载以生效">自进化改完后自动重启/重载以生效</span></label>
           <div class="set-actions"><span id="setMsg" class="meta"></span><button id="setSave" data-i18n="保存">保存</button></div>
         </div>

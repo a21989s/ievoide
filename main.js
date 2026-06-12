@@ -90,6 +90,9 @@ const DEFAULT_CONFIG = {
   // 计划模式专用模型。null=跟随 model（默认不改变现有行为）。plan 轮被 SDK 强制只读，
   // 用户可自主降档（如 haiku）省钱；「✅ 按计划执行」的执行轮仍用主力模型，绝不自动降级
   planModel: null,
+  // 每日费用预算（美元）。null=关闭。当日 chat+evolve 累计费用首次超过阈值时
+  // 推送一次 budget:exceeded：toast+系统通知、用量标红、自动暂停持续进化（纯本地判断零额外 token）
+  dailyBudgetUsd: null,
   // 进化改完后是否立即重启/重载来生效。默认 false：不打断进化循环——主进程改动
   // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
   evolveAutoRestart: false,
@@ -1163,6 +1166,7 @@ ipcMain.handle("getUsage", async (_e, { force } = {}) => {
 const costStatsPath = () => path.join(app.getPath("userData"), "cost-stats.json");
 let costStats = null; // 懒加载缓存：{ days: { "YYYY-MM-DD": { chat|evolve: { in,out,cw,cr,cost,turns } } } }
 let costSaveTimer = null;
+let budgetAlertedDay = null; // 当日只提醒一次；跨天或调整阈值后可再次触发
 const localDay = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function loadCostStats() {
@@ -1189,6 +1193,15 @@ function recordCost(source, usage, costUsd) {
   t.cr += usage?.cache_read_input_tokens || 0;
   t.cost += costUsd || 0;
   t.turns += 1;
+  // 每日预算闸：当日累计费用首次超过阈值时推送一次（跨天自动复位），纯本地判断零额外 token
+  const budget = appConfig.dailyBudgetUsd;
+  if (budget > 0 && budgetAlertedDay !== day) {
+    const spent = Object.values(s.days[day]).reduce((a, v) => a + (v.cost || 0), 0);
+    if (spent >= budget) {
+      budgetAlertedDay = day;
+      if (win && !win.isDestroyed()) win.webContents.send("budget:exceeded", { spent, budget, day });
+    }
+  }
   // 防抖落盘：连续多轮只写一次
   clearTimeout(costSaveTimer);
   costSaveTimer = setTimeout(() => { fs.writeFile(costStatsPath(), JSON.stringify(s)).catch(() => {}); }, 1500);
@@ -1219,6 +1232,7 @@ ipcMain.handle("getConfig", () => ({
   maxThinkingTokens: appConfig.maxThinkingTokens || null,
   evolveModel: appConfig.evolveModel || null,
   planModel: appConfig.planModel || null,
+  dailyBudgetUsd: appConfig.dailyBudgetUsd || null,
 }));
 ipcMain.handle("setConfig", (_e, patch) => {
   patch = patch || {};
@@ -1231,6 +1245,10 @@ ipcMain.handle("setConfig", (_e, patch) => {
     appConfig.evolveModel = patch.evolveModel || null;
   if (patch.planModel === null || typeof patch.planModel === "string")
     appConfig.planModel = patch.planModel || null;
+  if (patch.dailyBudgetUsd === null || typeof patch.dailyBudgetUsd === "number") {
+    appConfig.dailyBudgetUsd = patch.dailyBudgetUsd > 0 ? patch.dailyBudgetUsd : null;
+    budgetAlertedDay = null; // 阈值变更后允许按新阈值重新触发
+  }
   try {
     const file = path.join(TOOLS_DIR, "config.json");
     let cur = {};
@@ -1243,6 +1261,7 @@ ipcMain.handle("setConfig", (_e, patch) => {
       maxThinkingTokens: appConfig.maxThinkingTokens,
       evolveModel: appConfig.evolveModel,
       planModel: appConfig.planModel,
+      dailyBudgetUsd: appConfig.dailyBudgetUsd,
     }, null, 2));
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
   return { ok: true };

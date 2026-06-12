@@ -2988,6 +2988,7 @@ $("settingsBtn").onclick = async () => {
     $("setPrompt").value = c.systemPromptAppend || "";
     $("setPerm").value = c.permissionMode || "bypassPermissions";
     $("setPlanModel").value = c.planModel || "";
+    $("setBudget").value = c.dailyBudgetUsd ?? "";
     $("setAutoRestart").checked = !!c.evolveAutoRestart;
   } catch {}
   $("setMsg").textContent = "";
@@ -3000,6 +3001,7 @@ $("setSave").onclick = async () => {
     systemPromptAppend: $("setPrompt").value,
     permissionMode: $("setPerm").value,
     planModel: $("setPlanModel").value || null,
+    dailyBudgetUsd: parseFloat($("setBudget").value) > 0 ? parseFloat($("setBudget").value) : null,
     evolveAutoRestart: $("setAutoRestart").checked,
   });
   if (r && r.ok) {
@@ -3418,6 +3420,21 @@ function applyContinuous(initialDelay) {
   }
 }
 $("evContinuous").onchange = () => { applyContinuous(); updateEvolveIndicator(); };
+
+// ── 每日预算超支提醒：主进程 recordCost 纯本地判断，当日首次超阈值推送一次 ──
+// toast+系统通知止损，用量标红；若持续进化开着则自动暂停（无人值守循环正是跑飞烧钱的高危场景）
+window.api.on("budget:exceeded", ({ spent, budget }) => {
+  const msg = trf("⚠️ 今日费用 ${0} 已超预算 ${1}", spent.toFixed(2), budget);
+  toast(msg, "error");
+  try { new Notification(tr("每日预算超支"), { body: msg }); } catch {}
+  $("usage").classList.add("over-budget");
+  if ($("evContinuous").checked) {
+    $("evContinuous").checked = false;
+    applyContinuous(); // 代次自增使在途循环失效
+    evLog(msg + tr("，持续进化已自动暂停（设置面板可调整预算）"));
+    updateEvolveIndicator();
+  }
+});
 
 // 进化记录（最近几次，供参考）
 const EVOLVE_STATUS = {
