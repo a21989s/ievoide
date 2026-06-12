@@ -2772,6 +2772,18 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) load
   };
 })();
 
+// ── 思考深度(effort)切换：顶栏下拉，写回 config 后下一轮 chat 即生效（省 token 主旋钮）──
+(async () => {
+  const sel = $("effortSel");
+  if (!sel) return;
+  try { sel.value = (await window.api.getEffort()) || ""; } catch {}
+  sel.onchange = async () => {
+    const r = await window.api.setEffort(sel.value);
+    if (r && r.ok)
+      $("status").textContent = trf("已切换思考深度：{0}（下一轮对话生效）", sel.value || tr("默认"));
+  };
+})();
+
 // ── 打包：点 📦 弹三选一（完整备份 / 全量 / 给别人）→ 桌面 zip ──
 async function doPack(mode, withCreds) {
   const label = { full: tr("全量(含依赖,零安装)"), backup: tr("完整备份(含历史)"), dist: tr("给别人(不含私有数据)") }[mode];
