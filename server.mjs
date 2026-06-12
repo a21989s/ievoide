@@ -84,7 +84,12 @@ function mergeConvs(disk, incoming) {
   const dkById = new Map(dkList.map((c) => [c && c.id, c]).filter(([id]) => id));
   const list = inList.map((c) => {
     const d = c && dkById.get(c.id);
-    return d && d.running ? d : c; // 流式中的以磁盘为准
+    if (!d) return c;
+    if (d.running) return d; // 流式中的以磁盘为准
+    // 防丢：客户端送来空 html 但磁盘已有内容时，保留磁盘的 html/sessionId/cwd——
+    // 避免某端短暂空白(如刚加载/切换)的快照把整条对话内容覆盖成空白。
+    if (d.html && !(c && c.html)) return { ...c, html: d.html, sessionId: c.sessionId || d.sessionId, cwd: c.cwd || d.cwd };
+    return c;
   });
   const inIds = new Set(list.map((c) => c && c.id));
   for (const d of dkList) if (d && d.id && !inIds.has(d.id)) list.push(d); // 磁盘独有的保留

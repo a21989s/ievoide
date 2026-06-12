@@ -262,7 +262,8 @@
         }, 800);
       }
       function saveConvs() {
-        const a = active(); if (a) a.html = chat.innerHTML;
+        // 防丢：仅当当前视图非空、或这条对话本就没内容时才写回；不要用空白覆盖已有内容
+        const a = active(); if (a && (chat.innerHTML || !a.html)) a.html = chat.innerHTML;
         convs.forEach(recordHistory); saveHistory(); // 活动对话也实时入库，关闭 tab 后历史仍在
         try { localStorage.setItem("ct.convs", JSON.stringify({ list: convs, active: activeId })); } catch {}
         pushConvs(); // 同步到服务器，桌面端可见
@@ -276,13 +277,18 @@
         await loadConvs();
         if (convs.some((c) => c.id === keep)) activeId = keep;
         const a = active();
-        // 当前对话：只有别端(桌面/服务器)正在流式(running)时才采用服务器 html，
-        // 否则保留本端视图——避免定时同步把本端刚生成、尚未确认落盘的回复覆盖丢失。
-        if (a && !a.running) {
-          a.html = keepHtml; // 把本端真相写回 convs，防止之后切走再切回拿到服务器的空版本
-        } else if (a) {
-          const next = a.html || "";
-          if (next !== chat.innerHTML) { chat.innerHTML = next; chat.scrollTop = chat.scrollHeight; }
+        if (a) {
+          const serverHtml = a.html || "";
+          if (a.running) {
+            // 别端(桌面/服务器)正在流式：采用服务器的实时进度
+            if (serverHtml !== chat.innerHTML) { chat.innerHTML = serverHtml; chat.scrollTop = chat.scrollHeight; }
+          } else if (keepHtml) {
+            // 本端有内容：以本端视图为真相写回 convs（防止切走再切回拿到旧/空版本）
+            a.html = keepHtml;
+          } else if (serverHtml) {
+            // 本端空白但服务器有内容（如刚加载/刚切回）：渲染服务器内容，绝不用空白覆盖
+            chat.innerHTML = serverHtml; chat.scrollTop = chat.scrollHeight;
+          }
         }
         renderTabs();
       }
