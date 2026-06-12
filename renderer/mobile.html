@@ -242,9 +242,15 @@
         const keep = activeId;
         await loadConvs();
         if (convs.some((c) => c.id === keep)) activeId = keep;
-        chat.innerHTML = active().html || ""; renderTabs(); chat.scrollTop = chat.scrollHeight;
+        // 仅在内容确有变化时重渲染，避免定时同步每 4s 把滚动位置拽回底部
+        const next = active().html || "";
+        if (next !== chat.innerHTML) { chat.innerHTML = next; chat.scrollTop = chat.scrollHeight; }
+        renderTabs();
       }
       document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshConvs(); });
+      // 定时拉取最新（看到桌面端/服务器流式的新进度），避免只靠切前台才同步。
+      // busy（本端正在流式回复）时 refreshConvs 自身会跳过，不打断当前对话。
+      setInterval(() => { if (!document.hidden) refreshConvs(); }, 4000);
       function mk() { return { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 5), title: "新对话", sessionId: null, html: "" }; }
       function renderTabs() {
         const t = $("tabs"); t.innerHTML = "";

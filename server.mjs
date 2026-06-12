@@ -69,6 +69,37 @@ const authed = (req, url) => (url.searchParams.get("token") || req.headers["x-to
 // 桌面端靠文件监听实时看到手机端新开的对话及进度——不依赖手机页面存活推送（锁屏/断网也不丢）。
 const convFile = path.join(__dirname, "data", "claude-tools-conversations.json");
 const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+// 合并客户端快照(incoming)与磁盘当前(disk)，避免 stale 客户端整份覆盖。
+// 规则：磁盘上 running 的对话以磁盘为准（服务器正在流式落盘，客户端没有这部分进度）；
+// 其余 id 取客户端版本；磁盘独有的对话保留下来（别端新开的不丢）。history 取并集。
+function mergeConvs(disk, incoming) {
+  const out = { ...incoming };
+  const inList = Array.isArray(incoming.list) ? incoming.list : [];
+  const dkList = Array.isArray(disk.list) ? disk.list : [];
+  const dkById = new Map(dkList.map((c) => [c && c.id, c]).filter(([id]) => id));
+  const list = inList.map((c) => {
+    const d = c && dkById.get(c.id);
+    return d && d.running ? d : c; // 流式中的以磁盘为准
+  });
+  const inIds = new Set(list.map((c) => c && c.id));
+  for (const d of dkList) if (d && d.id && !inIds.has(d.id)) list.push(d); // 磁盘独有的保留
+  out.list = list;
+  // history 取并集（客户端未携带时也不丢磁盘归档）
+  const inHist = Array.isArray(incoming.history) ? incoming.history : [];
+  const dkHist = Array.isArray(disk.history) ? disk.history : [];
+  const histIds = new Set(inHist.map((h) => h && h.id));
+  out.history = [...inHist, ...dkHist.filter((h) => h && h.id && !histIds.has(h.id))];
+  return out;
+}
+// 读取单条对话记录（用于续聊时取回它"出生"时的 cwd——session 文件按目录存盘，
+// 跨设备续聊必须沿用同一个 cwd 才能让 CLI 找到对应会话）。找不到返回 null。
+async function readConv(convId) {
+  if (!convId) return null;
+  try {
+    const d = JSON.parse(await fsp.readFile(convFile, "utf8"));
+    return (Array.isArray(d.list) ? d.list : []).find((x) => x && x.id === convId) || null;
+  } catch { return null; }
+}
 async function updateConv(convId, mut) {
   if (!convId) return;
   try {
@@ -170,12 +201,15 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       let p; try { p = JSON.parse(body); } catch { return json(res, { error: "bad json" }, 400); }
       try {
-        // 客户端未携带 history 时，保留磁盘上已有的归档历史，避免被覆盖丢失
-        if (p && p.history === undefined) {
-          try { const cur = JSON.parse(await fsp.readFile(convFile, "utf8")); if (Array.isArray(cur.history)) p.history = cur.history; } catch {}
-        }
+        // 客户端发来的是它内存里的整份快照，可能已过期。不能盲覆盖——否则会把
+        // 桌面端/服务器流式过程中刚写进磁盘的新消息整份冲掉（"消息完全不对"的根因）。
+        // 读盘后按 id 合并：磁盘上 running 的对话（服务器正在流式落盘）以磁盘为准，
+        // 其余取客户端版本；list/history 取并集，避免丢掉别端新开的对话。
+        let cur = {};
+        try { cur = JSON.parse(await fsp.readFile(convFile, "utf8")); } catch {}
+        const merged = mergeConvs(cur, p);
         await fsp.mkdir(path.dirname(convFile), { recursive: true });
-        await fsp.writeFile(convFile, JSON.stringify(p));
+        await fsp.writeFile(convFile, JSON.stringify(merged));
         return json(res, { ok: true });
       } catch (e) { return json(res, { error: String(e) }, 500); }
     });
@@ -392,6 +426,8 @@ const server = http.createServer(async (req, res) => {
           c.html = convHtml();
           c.running = !final; // 桌面端据此显示"手机端进行中"
           if (convSession) c.sessionId = convSession;
+          // 记下这条对话实际用的 cwd，供下次（含跨设备）续聊沿用
+          if (effCwd && !c.cwd) c.cwd = effCwd;
         });
       };
       // 错误同时发给客户端 + 记入落盘 html（手机已断开时桌面端也能看到出错原因）
@@ -399,6 +435,14 @@ const server = http.createServer(async (req, res) => {
         send("error", { message: m });
         extraHtml += `<div class="meta" style="color:#e57373">出错了：${escHtml(String(m).slice(0, 400))}</div>`;
       };
+      // 续聊时优先用对话"出生"时存下的 cwd：session 文件按项目目录存盘，
+      // 沿用同一个 cwd 才能让 CLI 找到对应会话（跨设备续聊不再丢上下文）。
+      // 新对话/记录里没存 cwd 时，回退到本次请求带来的 cwd。
+      let effCwd = cwd;
+      if (resume) {
+        const stored = await readConv(convId);
+        if (stored && stored.cwd) effCwd = stored.cwd;
+      }
       try {
         const mcpServers = await readMcp();
         const cfg = loadCfg(); // 热读取，桌面端旋钮改动立即生效
@@ -407,7 +451,7 @@ const server = http.createServer(async (req, res) => {
         const baseOpts = {
           // 未选目录时用中性 scratch 目录当 cwd（与桌面端一致）：
           // 避免以 homedir 为项目目录——会把家目录的 CLAUDE.md/git 状态等无关上下文喂给模型，白耗 token
-          cwd: cwd || scratchDir(),
+          cwd: effCwd || scratchDir(),
           permissionMode: cfg.permissionMode || "bypassPermissions",
           includePartialMessages: true,
           systemPrompt: {
@@ -466,8 +510,10 @@ const server = http.createServer(async (req, res) => {
           await runOnce({ ...baseOpts, ...(resume ? { resume } : {}) });
         } catch (err) {
           const m = String(err?.stack || err);
-          if (abort.signal.aborted && resume && /No conversation found|session id/i.test(m)) {
-            // 续接失败：起新会话重试一次
+          if (resume && /No conversation found|session id/i.test(m) && !abort.signal.aborted) {
+            // 续接失败（常见于跨设备续聊：sessionId 存在 A 设备的项目目录下，
+            // 却拿到 B 设备的 cwd 去 resume，CLI 找不到对应会话文件）：
+            // 起新会话重试一次。注意要排除"客户端已断开"的情况——那种已无意义。
             try { await runOnce(baseOpts); }
             catch (e2) { sendErr(String(e2?.stack || e2)); }
           } else if (isAuthErr(m) && !abort.signal.aborted) {

@@ -1387,6 +1387,7 @@ function makeConv(seed) {
     id: seed?.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
     title: seed?.title || "新对话",
     sessionId: seed?.sessionId || null,
+    cwd: seed?.cwd || null, // 本对话"出生"时的 cwd：session 文件按目录存盘，续聊（含跨设备）须沿用
     inited: !!seed?.inited,
     _html: seed?.html || "",
     pane: null,
@@ -1421,6 +1422,7 @@ function buildConvState() {
       id: c.id,
       title: c.title,
       sessionId: c.sessionId,
+      cwd: c.cwd,
       inited: c.inited,
       costUsd: c.costUsd,
       tokens: c.tokens,
@@ -1786,6 +1788,7 @@ async function syncConvsFromDisk() {
       if (!local.busy && item.html && item.html !== localHtml) {
         local.title = item.title || local.title;
         local.sessionId = item.sessionId || local.sessionId;
+        local.cwd = local.cwd || item.cwd || null; // 沿用对方记下的出生 cwd（跨设备续聊找回 session）
         local.inited = local.inited || !!item.inited;
         if (local.pane) {
           local.pane.innerHTML = item.html;
@@ -1993,7 +1996,8 @@ function startTurn(conv, text, opts) {
   scrollIfActive(conv);
   const plan = opts && "plan" in opts ? opts.plan : planMode;
   conv._planTurn = plan; // 记录本轮是否计划模式：chat:done 时据此渲染「按计划执行」操作条
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan });
+  // 续聊时带上本对话存下的 cwd，让主进程沿用同一目录找到对应 session（新对话为 null，主进程回退到当前 workdir）
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, cwd: conv.cwd || null });
   persistConvs();
 }
 
@@ -4493,10 +4497,11 @@ window.api.on("chat:tool", ({ convId, id, name, input }) =>
 window.api.on("chat:toolresult", ({ convId, id, isError, text }) =>
   appendToolResult(getConv(convId), id, isError, text)
 );
-window.api.on("chat:done", ({ convId, cost, ms, session, usage, ctx, checkpoint }) => {
+window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkpoint }) => {
   const conv = getConv(convId);
   const turnWrap = conv?.currentBubble; // 捕获本轮容器，finishTurn 会清空引用
   if (conv && session) conv.sessionId = session; // 记住本对话 session
+  if (conv && cwd && !conv.cwd) conv.cwd = cwd; // 记住本对话出生 cwd，供下次/跨设备续聊沿用
   if (conv) {
     // 累计本会话费用与 token（usage 含输入/输出/缓存读写各项，分项记录便于按计费比例折算）
     if (typeof cost === "number") conv.costUsd += cost;

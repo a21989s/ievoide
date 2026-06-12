@@ -932,7 +932,7 @@ const PLAN_PREAMBLE =
   "【计划模式】在本次回复中，请先不要修改任何文件、也不要执行有副作用的命令（仅允许只读地阅读/检索代码）。" +
   "请先分析下面的需求，然后给出一个清晰的分步实施方案（涉及哪些文件、关键改动点、潜在风险），等我确认后再执行。\n\n--- 用户需求 ---\n";
 
-ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
+ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
   if (plan) prompt = PLAN_PREAMBLE + prompt;
   const abort = new AbortController();
   let stopped = false; // 用户是否已主动停止（避免重复发 chat:stopped）
@@ -963,8 +963,10 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
   const prev = runs.get(convId);
   if (prev) { try { prev.stop(true); } catch {} }
   runs.set(convId, entry);
-  // 没选目录也能聊：用一个中性 scratch 目录当 cwd（无项目上下文）；选了目录则用目录（带文件上下文）
-  const cwd = workdir || (await scratchDir());
+  // 没选目录也能聊：用一个中性 scratch 目录当 cwd（无项目上下文）；选了目录则用目录（带文件上下文）。
+  // reqCwd 是续聊时渲染层带回的本对话"出生"cwd——session 文件按目录存盘，沿用它才能让
+  // CLI 找到对应会话（含跨设备：手机端落盘的 cwd 也会通过对话记录回流到这里）。
+  const cwd = reqCwd || workdir || (await scratchDir());
   const mcpServers = await readMcpConfig(); // App 级 mcp.json（可选）
 
   // 进入本轮前对 git 工作区打检查点，完成后若有改动可一键回滚（仅当 cwd 在 git 仓库且已有提交）
@@ -1060,6 +1062,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
           cost: msg.total_cost_usd,
           ms: msg.duration_ms,
           session: msg.session_id,
+          cwd, // 本轮实际用的 cwd，供渲染层记进对话记录（下次/跨设备续聊沿用）
           usage: msg.usage || null, // {input_tokens, output_tokens, cache_*}，供渲染层累计本会话用量
           ctx: lastCtx, // 当前上下文规模（最后一次请求的输入侧 token），供渲染层提示压缩/新开对话
           checkpoint,
