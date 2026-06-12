@@ -499,23 +499,24 @@ ipcMain.handle("searchFiles", async (_e, query) => {
   const all = await listWorkdirFiles();
   const dirs = fileCache.dirs || [];
   const MAX = 50; // 最多返回 50 条，避免大仓库卡顿
+  // 全量过滤后统一打分排序再截断：命中位置越靠前越优、相对路径越短越优，
+  // 避免遍历序靠后的更优匹配（如文件名开头命中）被提前 break 永远挤掉。
+  const rank = (items) =>
+    items
+      .filter((it) => !q || it.relLower.includes(q))
+      .sort((a, b) => {
+        if (q) {
+          const pa = a.relLower.indexOf(q);
+          const pb = b.relLower.indexOf(q);
+          if (pa !== pb) return pa - pb;
+        }
+        return a.relLower.length - b.relLower.length;
+      })
+      .slice(0, MAX);
   // 目录优先排在前面，选中后插入 @相对目录/ 让模型把整个目录纳入上下文
-  const dirOut = [];
-  for (const d of dirs) {
-    if (dirOut.length >= MAX) break;
-    if (!q || d.relLower.includes(q)) dirOut.push(d);
-  }
-  dirOut.sort((a, b) => a.relLower.indexOf(q) - b.relLower.indexOf(q));
-  const out = [];
-  for (const f of all) {
-    if (out.length >= MAX) break;
-    if (!q || f.relLower.includes(q)) out.push(f);
-  }
-  // 匹配位置越靠前越优先
-  out.sort((a, b) => a.relLower.indexOf(q) - b.relLower.indexOf(q));
   return [
-    ...dirOut.map(({ name, path, rel }) => ({ name, path, rel, dir: true })),
-    ...out.map(({ name, path, rel }) => ({ name, path, rel })),
+    ...rank(dirs).map(({ name, path, rel }) => ({ name, path, rel, dir: true })),
+    ...rank(all).map(({ name, path, rel }) => ({ name, path, rel })),
   ].slice(0, MAX);
 });
 
