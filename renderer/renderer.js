@@ -2549,15 +2549,15 @@ async function loadUsage(force) {
 let _usageThrottle = 0;
 function loadUsageThrottled() {
   const now = Date.now();
-  if (now - _usageThrottle < 60000) return; // 最多每分钟自动刷一次
+  if (now - _usageThrottle < 30000) return; // 与定时刷新同频，最多 30s 一次
   _usageThrottle = now;
   loadUsage();
 }
 $("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
-// 自动刷新放缓到 5 分钟，且窗口不可见时跳过（避免后台反复触发 probeUsage 子进程）；
-// 即时性由手动点击 force 与 chat:done 后的 loadUsageThrottled 兜底。
-setInterval(() => { if (!document.hidden) loadUsage(); }, 300000);
+// 每 30 秒刷新（与 main.js 的 USAGE_TTL 对齐；用户要求用量可 30s 级跟踪）。
+// 探测走控制通道不耗 token，仅子进程开销；窗口不可见时跳过。
+setInterval(() => { if (!document.hidden) loadUsage(); }, 30000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadUsageThrottled(); }); // 恢复可见时立即刷一次（带节流防抖）
 
 // ── 模型切换：顶栏下拉，写回 config 后下一轮 chat 即生效，与用量/费用联动控成本 ──
