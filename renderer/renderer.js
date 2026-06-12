@@ -2388,7 +2388,7 @@ document.addEventListener("keydown", (e) => {
     // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
     const ev = $("evolveModal");
     if (ev.classList.contains("open") && !ev.classList.contains("docked")) { ev.classList.remove("open"); return; }
-    for (const id of ["kbdModal", "historyModal", "mobileModal", "mcpModal"]) {
+    for (const id of ["kbdModal", "historyModal", "mobileModal", "mcpModal", "plibModal"]) {
       if ($(id).classList.contains("open")) { $(id).classList.remove("open"); return; }
     }
     const ctx = $("ctxMenu"), acct = $("acctMenu");
@@ -3836,6 +3836,14 @@ function renderQuickbar() {
     b.oncontextmenu = (e) => { e.preventDefault(); editQuickSkill(i); };
     bar.appendChild(b);
   });
+  // 「📚」打开分场景编程 Prompt 库
+  const lib = document.createElement("button");
+  lib.className = "qbtn";
+  lib.type = "button";
+  lib.textContent = "📚";
+  lib.title = tr("编程 Prompt 库（分场景模板）");
+  lib.onclick = openPromptLib;
+  bar.appendChild(lib);
   // 末尾「＋」用于新增快捷按钮
   const add = document.createElement("button");
   add.className = "qbtn qbtn-add";
@@ -3846,6 +3854,121 @@ function renderQuickbar() {
   bar.appendChild(add);
 }
 renderQuickbar();
+
+// ── 编程 Prompt 库：分场景的高质量模板 ───────────────────────
+// 点击：填入输入框并聚焦（标 send 的直接发送——它们针对当前项目自洽，无需补充目标）。
+// ⭐：收藏为快捷按钮。模板统一要求「先定位/列证据/输出简洁」，与省 token 的用法一致。
+const PROMPT_LIBRARY = [
+  { cat: "🧭 理解代码", items: [
+    { icon: "🧭", label: "项目上手指南", send: true,
+      prompt: "我是新接手这个项目的开发者，给我一份 10 分钟上手指南：架构与技术栈、核心模块及职责、关键数据流向、建议从哪几个文件开始读。简洁列表即可" },
+    { icon: "💡", label: "解释这段代码",
+      prompt: "解释 @ 的实现：先一句话说用途，再列关键流程与重要边界条件（文件:行号），不要逐行复述" },
+    { icon: "🔗", label: "梳理调用链",
+      prompt: "梳理「」的完整调用链：从入口到落地按顺序列出涉及的 文件:行号，每步一句话" },
+  ]},
+  { cat: "🐛 调试排错", items: [
+    { icon: "🚨", label: "排查报错",
+      prompt: "排查这个报错：先定位根因（给出证据 文件:行号），再给最小修复，不要顺手大改：\n" },
+    { icon: "🔬", label: "只读定位 bug",
+      prompt: "这个 bug 的现象是：。请先只读地定位根因，列出证据（文件:行号）和修复思路，经我确认后再动手改" },
+    { icon: "🪵", label: "加调试日志",
+      prompt: "在「」相关的关键路径上加必要的调试日志（带关键变量值），帮助定位问题，改动最小化，问题解决后我会让你移除" },
+  ]},
+  { cat: "🔧 重构优化", items: [
+    { icon: "🔧", label: "小步重构",
+      prompt: "重构 @ ：保持行为完全不变，目标是更可读、去重复。小步进行，每步一句话说明改了什么、为什么安全" },
+    { icon: "🧬", label: "抽取公共逻辑",
+      prompt: "找出这些文件中的重复/相似逻辑并抽成公共函数或模块，列出抽取前后的对照：@" },
+    { icon: "🧹", label: "找死代码", send: true,
+      prompt: "扫描项目中未被引用的导出、函数与文件，输出清单（每项附判断证据），先不要删，等我确认" },
+  ]},
+  { cat: "🧪 测试", items: [
+    { icon: "🧪", label: "补单元测试",
+      prompt: "为 @ 写单元测试：覆盖正常路径、边界条件与错误分支，复用项目现有的测试框架与风格，跑通后汇报覆盖了哪些场景" },
+    { icon: "🩹", label: "修失败的测试", send: true,
+      prompt: "运行本项目测试，对失败的用例先判断是代码 bug 还是测试过期：是 bug 修代码，是过期改断言，逐个说明判断依据" },
+  ]},
+  { cat: "⚡ 性能", items: [
+    { icon: "⚡", label: "性能体检", send: true,
+      prompt: "只读地找出最可能的性能热点（循环内 IO、重复计算、N+1、不必要的全量遍历/重渲染），列 top5：文件:行号 + 一句话问题 + 一句话修法，先不要改" },
+    { icon: "📈", label: "优化指定代码",
+      prompt: "优化 @ 的性能：先说明瓶颈在哪（给出推理或测量依据），经我确认后再改，避免为微小收益牺牲可读性" },
+  ]},
+  { cat: "🛡 安全", items: [
+    { icon: "🛡", label: "安全检查", send: true,
+      prompt: "对本项目做一次安全检查：注入、路径穿越、命令拼接、敏感信息硬编码/泄漏、不安全的反序列化。输出按风险排序的清单（文件:行号 + 一句话修法），先不要改" },
+  ]},
+  { cat: "📝 文档注释", items: [
+    { icon: "📝", label: "生成/更新 README", send: true,
+      prompt: "为本项目生成或更新 README：用途、安装运行步骤、使用示例、目录结构说明。以简洁实用为准，不要营销话术" },
+    { icon: "💬", label: "补关键注释",
+      prompt: "给 @ 中不易读懂的部分补注释：只解释「为什么这么做」与约束/陷阱，不复述代码在做什么" },
+  ]},
+  { cat: "🔀 Git 协作", items: [
+    { icon: "🧾", label: "总结未提交改动", send: true,
+      prompt: "总结当前未提交的改动：按文件分组、每处一句话动机，最后给一条符合本仓库风格的 commit message" },
+    { icon: "🆚", label: "对比主分支差异", send: true,
+      prompt: "对比当前分支与主分支（main/master）的差异：按功能归组总结，标出风险点与需要重点 review 的文件" },
+  ]},
+];
+function openPromptLib() {
+  $("plibModal").classList.add("open");
+  $("plibSearch").value = "";
+  renderPromptLib("");
+  $("plibSearch").focus();
+}
+function renderPromptLib(kw) {
+  const el = $("plibList");
+  el.innerHTML = "";
+  const q = (kw || "").toLowerCase();
+  let shown = 0;
+  PROMPT_LIBRARY.forEach((cat) => {
+    const items = cat.items.filter((p) => !q || (p.label + p.prompt + cat.cat).toLowerCase().includes(q));
+    if (!items.length) return;
+    const h = document.createElement("div");
+    h.className = "plib-cat";
+    h.textContent = tr(cat.cat);
+    el.appendChild(h);
+    items.forEach((p) => {
+      shown++;
+      const row = document.createElement("div");
+      row.className = "plib-row";
+      row.innerHTML =
+        `<div class="plib-main"><div class="plib-label"></div><div class="plib-prompt"></div></div>` +
+        (p.send ? `<span class="plib-send" data-i18n-title="点击即直接发送" title="点击即直接发送">${tr("直发")}</span>` : "") +
+        `<button class="plib-star" data-i18n-title="收藏为快捷按钮" title="收藏为快捷按钮">⭐</button>`;
+      row.querySelector(".plib-label").textContent = `${p.icon} ${tr(p.label)}`;
+      row.querySelector(".plib-prompt").textContent = p.prompt;
+      row.onclick = () => {
+        $("plibModal").classList.remove("open");
+        const input = $("input");
+        input.value = p.prompt;
+        if (p.send) { send(); return; }
+        input.focus();
+        // 光标定位到首个待补充处（@ 或「」或行尾），方便直接补目标
+        const at = p.prompt.indexOf("@");
+        const blank = p.prompt.indexOf("「」");
+        const pos = blank >= 0 ? blank + 1 : at >= 0 ? at + 1 : p.prompt.length;
+        input.setSelectionRange(pos, pos);
+      };
+      row.querySelector(".plib-star").onclick = (e) => {
+        e.stopPropagation();
+        if (!QUICK_SKILLS.some((s) => s.prompt === p.prompt)) {
+          QUICK_SKILLS.push({ icon: p.icon, label: p.label, prompt: p.prompt });
+          persistQuickSkills();
+          renderQuickbar();
+        }
+        toast(tr("已收藏到快捷栏"));
+      };
+      el.appendChild(row);
+    });
+  });
+  if (!shown) el.innerHTML = `<div class="plib-empty">${tr("无匹配")}</div>`;
+}
+$("plibClose").onclick = () => $("plibModal").classList.remove("open");
+$("plibModal").onclick = (e) => { if (e.target.id === "plibModal") $("plibModal").classList.remove("open"); };
+$("plibSearch").oninput = () => renderPromptLib($("plibSearch").value.trim());
 
 // ── 斜杠命令 / skills / subagent 补全 ───────────────────────
 let slashCommands = []; // [{ name, kind: 'command'|'skill'|'agent' }]

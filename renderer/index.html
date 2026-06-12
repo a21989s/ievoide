@@ -511,6 +511,22 @@
       .hist-del { width: 26px; height: 26px; border: none; background: none; color: var(--fg); opacity: .5; font-size: 18px; cursor: pointer; border-radius: 6px; }
       .hist-del:hover { opacity: 1; background: rgba(220,60,60,.18); }
       .hist-empty { text-align: center; opacity: .55; padding: 40px 0; }
+      /* 编程 Prompt 库：分场景模板，点击填入输入框 */
+      #plibModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
+      #plibModal.open { display: flex; }
+      #plibModal .box { width: 640px; max-width: 94vw; height: 76%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
+      #plibSearch { margin: 10px 12px 6px; padding: 7px 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; outline: none; }
+      #plibList { flex: 1; overflow-y: auto; padding: 4px 10px 12px; }
+      .plib-cat { font-size: 12px; font-weight: 700; opacity: .65; margin: 12px 4px 4px; }
+      .plib-row { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+      .plib-row:hover { background: rgba(127,127,127,.1); }
+      .plib-main { flex: 1; min-width: 0; }
+      .plib-label { font-size: 13px; }
+      .plib-prompt { font-size: 11px; opacity: .55; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .plib-send { font-size: 10px; padding: 0 6px; border-radius: 8px; background: rgba(80,160,90,.18); color: #4caf50; flex: none; }
+      .plib-star { width: 26px; height: 26px; border: none; background: none; color: var(--fg); opacity: .4; font-size: 14px; cursor: pointer; border-radius: 6px; flex: none; }
+      .plib-star:hover { opacity: 1; background: rgba(230,180,60,.18); }
+      .plib-empty { text-align: center; opacity: .55; padding: 36px 0; }
       #mcpModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
       #mcpModal.open { display: flex; }
       #mcpModal .box { width: 560px; max-width: 92vw; max-height: 80vh; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
@@ -869,6 +885,13 @@
         <div class="vhead"><span data-i18n="🕘 对话历史">🕘 对话历史</span><button id="histClose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <input id="histSearch" data-i18n-ph="搜索标题或时间…" placeholder="搜索标题或时间…" />
         <div id="histList"></div>
+      </div>
+    </div>
+    <div id="plibModal">
+      <div class="box">
+        <div class="vhead"><span data-i18n="📚 编程 Prompt 库">📚 编程 Prompt 库</span><button id="plibClose" data-i18n-title="关闭" title="关闭">✕</button></div>
+        <input id="plibSearch" data-i18n-ph="搜索场景或关键词…" placeholder="搜索场景或关键词…" />
+        <div id="plibList"></div>
       </div>
     </div>
     <div id="mcpModal">
