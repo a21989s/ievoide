@@ -69,6 +69,11 @@ const authed = (req, url) => (url.searchParams.get("token") || req.headers["x-to
 // 桌面端靠文件监听实时看到手机端新开的对话及进度——不依赖手机页面存活推送（锁屏/断网也不丢）。
 const convFile = path.join(__dirname, "data", "claude-tools-conversations.json");
 const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+
+// 自进化：同一时刻只允许一个进化会话（与桌面端互不串台，各自进程内串行即可）
+let evolving = false;
+const EVOLVE_APPEND =
+  "你正在改进你自己所在的「自进化 dev Tool」，源码就在当前工作目录。结构：main.js=Electron 主进程(所有 IPC/git/SDK 调用)；server.mjs=手机/远程端服务器(SSE 流式)；preload.cjs=contextBridge 暴露 window.api；renderer/index.html+renderer.js=桌面界面；renderer/mobile.html=手机界面；renderer/pdfeditor.js=PDF 编辑器。本产品定位是面向开发与日常文档维护的工具集，进化的总目标是让它更【易用、易组装搭配、简洁】，并且【让程序员的工作越方便越好、越省钱越好】（省钱=减少不必要的 token/API 消耗）。务必：① 改完保证应用能正常启动与加载、不破坏现有功能；② 只改必要文件、与周围代码风格一致；③ 不要运行 npm start 或重启应用（宿主会自动重载/重启并自检）。最后用简体中文一句话说明你改了什么。";
 // 合并客户端快照(incoming)与磁盘当前(disk)，避免 stale 客户端整份覆盖。
 // 规则：磁盘上 running 的对话以磁盘为准（服务器正在流式落盘，客户端没有这部分进度）；
 // 其余 id 取客户端版本；磁盘独有的对话保留下来（别端新开的不丢）。history 取并集。
@@ -99,6 +104,33 @@ async function readConv(convId) {
     const d = JSON.parse(await fsp.readFile(convFile, "utf8"));
     return (Array.isArray(d.list) ? d.list : []).find((x) => x && x.id === convId) || null;
   } catch { return null; }
+}
+// ── 对话级跨进程锁：手机(server.mjs)与桌面(main.js)同跑同一对话会让两个进程并发
+//    resume 同一个 session 文件，触发 CLI "No conversation found" 竞态。用一个共享锁文件
+//    串行化：一端在该对话内运行时，另一端先让路（提示稍候），从源头消除竞态。
+//    锁带 TTL，持有进程崩溃后到期自动失效，不会把对话永久锁死。──
+const LOCK_DIR = path.join(__dirname, "data", "locks");
+const LOCK_TTL = 600000; // 10 分钟：单轮极少超过；超时即视为持有者已死，可被接管
+const lockFile = (convId) => path.join(LOCK_DIR, String(convId).replace(/[^\w.-]/g, "_") + ".lock");
+async function acquireConvLock(convId, owner) {
+  if (!convId) return true;
+  try {
+    await fsp.mkdir(LOCK_DIR, { recursive: true });
+    const f = lockFile(convId);
+    try {
+      const cur = JSON.parse(await fsp.readFile(f, "utf8"));
+      if (cur && cur.owner !== owner && Date.now() - (cur.ts || 0) < LOCK_TTL) return false;
+    } catch {}
+    await fsp.writeFile(f, JSON.stringify({ owner, ts: Date.now() }));
+    return true;
+  } catch { return true; } // 锁子系统自身故障时不拦截正常使用
+}
+async function releaseConvLock(convId, owner) {
+  if (!convId) return;
+  try {
+    const cur = JSON.parse(await fsp.readFile(lockFile(convId), "utf8"));
+    if (cur && cur.owner === owner) await fsp.unlink(lockFile(convId));
+  } catch {}
 }
 async function updateConv(convId, mut) {
   if (!convId) return;
@@ -402,8 +434,14 @@ const server = http.createServer(async (req, res) => {
         connection: "keep-alive",
       });
       const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
-      const abort = new AbortController();
-      // 客户端断开连接才中止（监听响应连接，不是请求体——请求体读完就会触发 req close）
+      // 对话级锁：桌面端正在同一对话内运行时让路，避免并发 resume 同一 session 的竞态。
+      if (!(await acquireConvLock(convId, "mobile"))) {
+        send("error", { message: "该对话正在桌面端回复中，请稍候再发（避免两端同时续接同一会话）。" });
+        return res.end();
+      }
+      let abort = new AbortController(); // 可重建：续接失败重试时若旧控制器已被（误）中止，换新的
+      // 客户端断开连接才中止（监听响应连接，不是请求体——请求体读完就会触发 req close）。
+      // 经 Cloudflare Tunnel 等代理时，close 可能在会话仍需继续时被提前触发，故重试逻辑不死守它。
       res.on("close", () => abort.abort());
 
       // ── 对话进度即时落盘（见 updateConv 注释）。baseHtml 是手机端发送时
@@ -510,11 +548,12 @@ const server = http.createServer(async (req, res) => {
           await runOnce({ ...baseOpts, ...(resume ? { resume } : {}) });
         } catch (err) {
           const m = String(err?.stack || err);
-          if (resume && /No conversation found|session id/i.test(m) && !abort.signal.aborted) {
-            // 续接失败（常见于跨设备续聊：sessionId 存在 A 设备的项目目录下，
-            // 却拿到 B 设备的 cwd 去 resume，CLI 找不到对应会话文件）：
-            // 起新会话重试一次。注意要排除"客户端已断开"的情况——那种已无意义。
-            try { await runOnce(baseOpts); }
+          if (resume && /No conversation found|session id/i.test(m) && !res.writableEnded) {
+            // 续接失败：换了目录 / session 过期 / 手机与桌面并发 resume 同一会话时 CLI 查找竞态。
+            // 起新会话重试一次。判定用"响应是否真的已结束(writableEnded)"而非 abort——
+            // 经代理(Cloudflare Tunnel)时 abort 可能被提前误触发，但只要还能往回写就值得重试。
+            if (abort.signal.aborted) abort = new AbortController(); // 旧控制器已中止，重试要用新的
+            try { await runOnce({ ...baseOpts, abortController: abort }); }
             catch (e2) { sendErr(String(e2?.stack || e2)); }
           } else if (isAuthErr(m) && !abort.signal.aborted) {
             // 401：订阅 token 过期。重试时新起子进程会触发 CLI 自动刷新凭证，
@@ -542,6 +581,123 @@ const server = http.createServer(async (req, res) => {
       }
       // 收尾落盘：写入最终 html + sessionId，并清掉 running 标记（中断/出错也会走到这里）
       try { await flush(true); } catch {}
+      try { await releaseConvLock(convId, "mobile"); } catch {}
+      res.end();
+    });
+    return;
+  }
+
+  // ── 自进化：让 App 改自身源码（git 检查点 + 语法校验 + 失败自动回滚）──
+  // 与桌面端 main.js 的 evolve 同源：cwd 固定为本服务源码目录 __dirname。
+  if (req.method === "POST" && url.pathname === "/api/evolve") {
+    let body = "";
+    req.on("data", (c) => (body += c));
+    req.on("end", async () => {
+      let p;
+      try { p = JSON.parse(body); } catch { return json(res, { error: "bad json" }, 400); }
+      const requirement = (p.requirement || "").trim();
+      const attachments = Array.isArray(p.attachments) ? p.attachments : [];
+      const resume = typeof p.resume === "string" && p.resume ? p.resume : null; // 续接同一进化会话，支持连续追问
+      res.writeHead(200, {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-cache", connection: "keep-alive",
+      });
+      const send = (ev, data) => res.write(`event: ${ev}\ndata: ${JSON.stringify(data)}\n\n`);
+      const log = (t) => send("log", { text: t });
+      if (!requirement) { send("done", { error: "需求为空" }); return res.end(); }
+      if (evolving) { send("done", { error: "已有进化在进行中" }); return res.end(); }
+      evolving = true;
+      const abort = new AbortController();
+      res.on("close", () => abort.abort());
+      const gt = (args) => git(args, __dirname).then((r) => (r.stdout || "").toString());
+      let checkpoint = null;
+      try {
+        // 1) 检查点
+        if (!fs.existsSync(path.join(__dirname, ".git"))) {
+          await gt(["init"]);
+          try { await gt(["config", "user.name"]); } catch { await gt(["config", "user.name", "ideevolve"]); }
+          try { await gt(["config", "user.email"]); } catch { await gt(["config", "user.email", "ideevolve@local"]); }
+          await gt(["add", "-A"]); try { await gt(["commit", "-m", "evolve: init repo", "--allow-empty"]); } catch {}
+          log("📦 未检测到 git 仓库，已自动初始化");
+        }
+        try { await gt(["add", "-A"]); await gt(["commit", "-m", "evolve: checkpoint"]); } catch {}
+        checkpoint = (await gt(["rev-parse", "HEAD"])).trim();
+        log(`📌 检查点 ${checkpoint.slice(0, 7)}`);
+
+        // 2) Claude 改源码
+        log("🧠 分析并修改源码…");
+        const files = attachments.filter((f) => typeof f === "string" && fs.existsSync(f));
+        let attachNote = "";
+        if (files.length) {
+          attachNote = `\n\n参考附件（用 Read 工具查看，图片可直接识别）：\n${files.map((f) => "- " + f).join("\n")}`;
+          log("📎 附件：" + files.map((f) => path.basename(f)).join(", "));
+        }
+        const cfg = loadCfg();
+        const response = query({
+          prompt: `需求/问题：\n${requirement}${attachNote}\n\n请直接修改源码实现它（用 Read/Grep 定位，Edit/Write 修改）。`,
+          options: {
+            cwd: __dirname,
+            permissionMode: "bypassPermissions",
+            maxTurns: 60,
+            systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND },
+            ...((cfg.evolveModel || cfg.model) ? { model: cfg.evolveModel || cfg.model } : {}),
+            ...tokenOpts(cfg),
+            ...(resume ? { resume } : {}),
+            abortController: abort,
+          },
+        });
+        let summary = "", session = resume;
+        for await (const msg of response) {
+          if (msg.type === "assistant")
+            for (const b of msg.message.content) {
+              if (b.type === "text") { summary += b.text; send("chunk", { text: b.text }); }
+              else if (b.type === "tool_use") send("tool", { name: b.name });
+            }
+          else if (msg.type === "result") session = msg.session_id || session;
+        }
+
+        // 用户中途停止：丢弃半成品改动，回滚到检查点
+        if (abort.signal.aborted) {
+          try { await gt(["reset", "--hard", checkpoint]); await gt(["clean", "-fd"]); } catch {}
+          evolving = false;
+          send("done", { stopped: true, summary, session }); return res.end();
+        }
+
+        // 3) 改了哪些文件
+        const changed = (await gt(["status", "--porcelain"]))
+          .split("\n").map((s) => s.slice(3).trim()).filter(Boolean);
+        if (!changed.length) {
+          evolving = false;
+          send("done", { noChange: true, summary, session }); return res.end();
+        }
+        log("📝 改动：" + changed.join(", "));
+
+        // 4) 语法校验（失败回滚）
+        for (const f of changed) {
+          if (/\.(c|m)?js$/.test(f) && fs.existsSync(path.join(__dirname, f))) {
+            try { await execFileAsync("node", ["--check", path.join(__dirname, f)]); }
+            catch (err) {
+              log("❌ 语法校验失败，回滚");
+              try { await gt(["reset", "--hard", checkpoint]); await gt(["clean", "-fd"]); } catch {}
+              evolving = false;
+              send("done", { error: "语法错误已回滚", detail: String(err?.stderr || err).slice(0, 400), session });
+              return res.end();
+            }
+          }
+        }
+
+        // 5) 提交并应用
+        await gt(["add", "-A"]);
+        await gt(["commit", "-m", `evolve: ${requirement.slice(0, 60)}`]);
+        const commit = (await gt(["rev-parse", "HEAD"])).trim();
+        log("✅ 已提交 " + commit.slice(0, 7));
+        evolving = false;
+        send("done", { ok: true, summary, changed, commit, session });
+      } catch (err) {
+        evolving = false;
+        if (checkpoint && abort.signal.aborted) { try { await gt(["reset", "--hard", checkpoint]); await gt(["clean", "-fd"]); } catch {} }
+        send("done", { error: String(err?.message || err).slice(0, 400) });
+      }
       res.end();
     });
     return;

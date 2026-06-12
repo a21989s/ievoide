@@ -932,9 +932,36 @@ const PLAN_PREAMBLE =
   "【计划模式】在本次回复中，请先不要修改任何文件、也不要执行有副作用的命令（仅允许只读地阅读/检索代码）。" +
   "请先分析下面的需求，然后给出一个清晰的分步实施方案（涉及哪些文件、关键改动点、潜在风险），等我确认后再执行。\n\n--- 用户需求 ---\n";
 
+// ── 对话级跨进程锁：与 server.mjs 共用同一把（同一锁目录）。手机端与桌面端同跑一条对话时
+//    会并发 resume 同一个 session 文件，触发 CLI "No conversation found" 竞态；用共享锁文件
+//    串行化，一端在跑时另一端让路。锁带 TTL，持有进程崩溃后到期自动失效。──
+const LOCK_DIR = path.join(TOOLS_DIR, "data", "locks");
+const LOCK_TTL = 600000;
+const lockFile = (convId) => path.join(LOCK_DIR, String(convId).replace(/[^\w.-]/g, "_") + ".lock");
+async function acquireConvLock(convId, owner) {
+  if (!convId) return true;
+  try {
+    await fs.mkdir(LOCK_DIR, { recursive: true });
+    const f = lockFile(convId);
+    try {
+      const cur = JSON.parse(await fs.readFile(f, "utf8"));
+      if (cur && cur.owner !== owner && Date.now() - (cur.ts || 0) < LOCK_TTL) return false;
+    } catch {}
+    await fs.writeFile(f, JSON.stringify({ owner, ts: Date.now() }));
+    return true;
+  } catch { return true; }
+}
+async function releaseConvLock(convId, owner) {
+  if (!convId) return;
+  try {
+    const cur = JSON.parse(await fs.readFile(lockFile(convId), "utf8"));
+    if (cur && cur.owner === owner) await fs.unlink(lockFile(convId));
+  } catch {}
+}
+
 ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
   if (plan) prompt = PLAN_PREAMBLE + prompt;
-  const abort = new AbortController();
+  let abort = new AbortController(); // 可重建：续接失败重试时若旧控制器已中止，换新的（见下方 catch）
   let stopped = false; // 用户是否已主动停止（避免重复发 chat:stopped）
   // 所有发给渲染层的事件都带上 convId，渲染层据此路由到对应对话。
   // 若渲染帧已销毁(窗口关闭/重载/重启)则中止本次查询，避免 disposed 错误刷屏。
@@ -963,6 +990,12 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
   const prev = runs.get(convId);
   if (prev) { try { prev.stop(true); } catch {} }
   runs.set(convId, entry);
+  // 对话级锁：手机端正在同一对话内运行时让路，避免并发 resume 同一 session 的竞态。
+  if (!(await acquireConvLock(convId, "desktop"))) {
+    runs.delete(convId);
+    send("chat:error", { message: "该对话正在手机端回复中，请稍候再发（避免两端同时续接同一会话）。" });
+    return;
+  }
   // 没选目录也能聊：用一个中性 scratch 目录当 cwd（无项目上下文）；选了目录则用目录（带文件上下文）。
   // reqCwd 是续聊时渲染层带回的本对话"出生"cwd——session 文件按目录存盘，沿用它才能让
   // CLI 找到对应会话（含跨设备：手机端落盘的 cwd 也会通过对话记录回流到这里）。
@@ -1075,21 +1108,26 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
     await run(resume);
   } catch (err) {
     const msg = String(err?.stack || err);
-    // 续接的 session 不存在（如换了目录、session 过期）=> 自动起新会话重试一次
-    if (resume && !abort.signal.aborted && /No conversation found|session id/i.test(msg)) {
+    // 续接的 session 找不到（换了目录 / session 过期 / 手机与桌面并发 resume 同一会话时
+    // CLI 查找竞态）=> 起新会话重试一次。只要用户没【主动停止】(stopped) 就兜底——
+    // 不依赖 abort 状态：并发/同步抖动会误触发 abort，但那并不代表用户想中断。
+    if (resume && !stopped && /No conversation found|session id/i.test(msg)) {
+      // 旧控制器若已中止，重试会立刻 AbortError，故换一个新的（entry.stop/send 都引用变量，自动跟上）
+      if (abort.signal.aborted) abort = new AbortController();
       try {
         await run(null);
       } catch (err2) {
-        if (abort.signal.aborted) { if (!stopped) send("chat:stopped", {}); }
+        if (stopped || abort.signal.aborted) { if (!stopped) send("chat:stopped", {}); }
         else send("chat:error", { message: String(err2?.stack || err2) });
       }
-    } else if (abort.signal.aborted) {
+    } else if (stopped || abort.signal.aborted) {
       if (!stopped) send("chat:stopped", {}); // stop() 已发过则不重复
     } else {
       send("chat:error", { message: msg });
     }
   } finally {
     if (runs.get(convId) === entry) runs.delete(convId);
+    try { await releaseConvLock(convId, "desktop"); } catch {}
   }
 });
 

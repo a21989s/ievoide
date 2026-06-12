@@ -95,6 +95,21 @@
       .reqi.failed .rst { background:#3a1e1e; color:#e57373; }
       .reqi .racts { display:flex; gap:8px; margin-top:8px; }
       .reqi .ro { margin-top:8px; padding:8px; background:#141414; border-radius:6px; font-size:13px; white-space:pre-wrap; word-break:break-word; max-height:280px; overflow:auto; }
+      /* 自进化视图（多轮对话式） */
+      #evView { flex:1; display:none; flex-direction:column; min-height:0; }
+      body.ev-mode #tabs, body.ev-mode #chat, body.ev-mode #inbar, body.ev-mode #attRow { display:none; }
+      body.ev-mode #evView { display:flex; }
+      #evChat { flex:1; overflow-y:auto; overflow-x:hidden; padding:12px; -webkit-overflow-scrolling:touch; }
+      #evChat .msg.assistant .bubble { background:#1a2a1f; border:1px solid #2a4a35; }
+      .ev-intro { color:var(--muted); font-size:13px; line-height:1.7; text-align:center; padding:24px 16px; }
+      #evBar { display:flex; flex-direction:column; gap:8px; padding:10px; border-top:1px solid var(--border); background:var(--panel); padding-bottom:max(10px,env(safe-area-inset-bottom)); }
+      #evInp { resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font:inherit; font-size:14px; max-height:120px; }
+      #evBar .req-row #evRun { flex:1; }
+      .ev-status { display:inline-block; font-size:11px; margin-top:6px; padding:2px 9px; border-radius:8px; }
+      .ev-status.ok { background:#1e3a23; color:#73c991; }
+      .ev-status.nochange { background:#333; color:#aaa; }
+      .ev-status.err { background:#3a1e1e; color:#e57373; }
+      .ev-status.stopped { background:#3a3320; color:#e2c08d; }
       #inbar { display:flex; gap:8px; padding:10px; border-top:1px solid var(--border); background:var(--panel); padding-bottom:max(10px,env(safe-area-inset-bottom)); }
       #inp { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font:inherit; max-height:120px; }
       #toast { position:fixed; left:50%; bottom:84px; transform:translateX(-50%); background:#000a; color:#fff; padding:8px 14px; border-radius:20px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
@@ -129,6 +144,7 @@
     <div id="views">
       <div class="vtab active" data-v="chat" title="对话">💬</div>
       <div class="vtab" data-v="req" title="需求">📋</div>
+      <div class="vtab" data-v="ev" title="自进化">🧬</div>
       <div class="vtab" data-v="sc" title="源代码管理">⎇</div>
     </div>
     <div id="tabs"></div>
@@ -156,6 +172,20 @@
       </div>
       <div id="reqList"></div>
       <input type="file" id="reqFileInp" multiple style="display:none" />
+    </div>
+    <div id="evView">
+      <div id="evChat"></div>
+      <div id="evBar">
+        <div id="evAttRow"></div>
+        <textarea id="evInp" rows="2" placeholder="描述需求或要修复的问题，改完可继续追问续改…"></textarea>
+        <div class="req-row">
+          <button class="ghost" id="evAttBtn">📎</button>
+          <button id="evRun">▶ 进化</button>
+          <button class="ghost" id="evStop" disabled>⏹</button>
+          <button class="ghost" id="evNew" title="新会话">🆕</button>
+        </div>
+      </div>
+      <input type="file" id="evFileInp" multiple style="display:none" />
     </div>
     <div id="diffModal"><div class="dhead"><span id="dTitle"></span><button class="ghost" id="dClose">关闭</button></div><pre id="dBody"></pre></div>
     <div id="attRow"></div>
@@ -222,6 +252,7 @@
       function pushConvs() {
         clearTimeout(pushTimer);
         pushTimer = setTimeout(() => {
+          pushTimer = null; // 置空：refreshConvs 据此判断"本端是否有未同步的本地改动"
           try {
             fetch("/api/convs?token=" + encodeURIComponent(token), {
               method: "POST", headers: { "content-type": "application/json" },
@@ -238,13 +269,21 @@
       }
       // 回到前台时拉取最新（看到桌面端的新对话），但保持当前所在对话，回复中不打断
       async function refreshConvs() {
-        if (busy) return;
+        if (busy) return;        // 本端正在流式回复：绝不打断
+        if (pushTimer) return;   // 本端有未同步的本地改动（刚回复完等待 push）：先别用服务器版本覆盖，否则会把刚到的回复刷没
         const keep = activeId;
+        const keepHtml = chat.innerHTML; // 当前所见（本端可能刚回复完，是这条对话的真相）
         await loadConvs();
         if (convs.some((c) => c.id === keep)) activeId = keep;
-        // 仅在内容确有变化时重渲染，避免定时同步每 4s 把滚动位置拽回底部
-        const next = active().html || "";
-        if (next !== chat.innerHTML) { chat.innerHTML = next; chat.scrollTop = chat.scrollHeight; }
+        const a = active();
+        // 当前对话：只有别端(桌面/服务器)正在流式(running)时才采用服务器 html，
+        // 否则保留本端视图——避免定时同步把本端刚生成、尚未确认落盘的回复覆盖丢失。
+        if (a && !a.running) {
+          a.html = keepHtml; // 把本端真相写回 convs，防止之后切走再切回拿到服务器的空版本
+        } else if (a) {
+          const next = a.html || "";
+          if (next !== chat.innerHTML) { chat.innerHTML = next; chat.scrollTop = chat.scrollHeight; }
+        }
         renderTabs();
       }
       document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshConvs(); });
@@ -357,8 +396,10 @@
           const v = t.dataset.v;
           document.body.classList.toggle("sc-mode", v === "sc");
           document.body.classList.toggle("req-mode", v === "req");
+          document.body.classList.toggle("ev-mode", v === "ev");
           if (v === "sc") loadSC();
           if (v === "req") renderReqs();
+          if (v === "ev") renderEv();
         };
       });
       const esc2 = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
@@ -604,6 +645,83 @@
         toast(existing ? "已切到该对话" : "已恢复对话" + (h.sessionId ? "，可继续聊" : ""));
       }
       $("histBtn").onclick = openHistory;
+
+      // ── 自进化（多轮对话式：改完可在同一会话里继续追问续改）──────
+      let evBusy = false, evAbort = null, evAtts = [], evSession = null;
+      const evChat = $("evChat");
+      // 持久化聊天 html + 会话 id，刷新/切前后台不丢
+      try { const s = JSON.parse(localStorage.getItem("ct.ev") || "null"); if (s) { evSession = s.session || null; if (s.html) evChat.innerHTML = s.html; } } catch {}
+      const saveEv = () => { try { localStorage.setItem("ct.ev", JSON.stringify({ session: evSession, html: evChat.innerHTML })); } catch {} };
+      function renderEv() {
+        if (!evChat.querySelector(".msg") && !evChat.querySelector(".ev-intro"))
+          evChat.innerHTML = `<div class="ev-intro">🧬 让 App 改自己的源码<br>git 检查点 · 语法校验 · 失败自动回滚<br>改完可继续追问，在同一会话里接着改</div>`;
+        evChat.scrollTop = evChat.scrollHeight;
+      }
+      function evAddMsg(role, text) {
+        const intro = evChat.querySelector(".ev-intro"); if (intro) intro.remove();
+        const w = document.createElement("div"); w.className = "msg " + role;
+        w.innerHTML = `<div class="role">${role === "user" ? "你" : "🧬 进化"}</div>`;
+        const b = document.createElement("div"); b.className = "bubble"; if (text) b.textContent = text;
+        w.appendChild(b); evChat.appendChild(w); evChat.scrollTop = evChat.scrollHeight; return b;
+      }
+      $("evAttBtn").onclick = () => $("evFileInp").click();
+      $("evFileInp").onchange = async (e) => { for (const f of [...e.target.files]) { const a = await uploadFile(f).catch(() => null); if (a) evAtts.push(a); } e.target.value = ""; renderEvAtts(); };
+      function renderEvAtts() {
+        const el = $("evAttRow"); el.innerHTML = "";
+        evAtts.forEach((a, i) => { const c = document.createElement("div"); c.className = "att"; c.innerHTML = (a.dataUrl ? `<img src="${a.dataUrl}">` : "📎") + `<span>${esc2(a.name)}</span><span class="x">×</span>`; c.querySelector(".x").onclick = () => { evAtts.splice(i, 1); renderEvAtts(); }; el.appendChild(c); });
+      }
+      $("evInp").addEventListener("input", function () { this.style.height = "auto"; this.style.height = Math.min(120, this.scrollHeight) + "px"; });
+      $("evRun").onclick = async () => {
+        if (evBusy) return;
+        const requirement = $("evInp").value.trim();
+        if (!requirement) return toast("先描述一个需求");
+        const atts = evAtts.slice();
+        const ub = evAddMsg("user", requirement);
+        if (atts.length) { const w = document.createElement("div"); w.className = "matt"; atts.forEach((a) => { if (a.dataUrl) { const im = document.createElement("img"); im.src = a.dataUrl; w.appendChild(im); } else { const s = document.createElement("span"); s.className = "f"; s.textContent = "📎 " + a.name; w.appendChild(s); } }); ub.appendChild(w); }
+        $("evInp").value = ""; $("evInp").style.height = "auto";
+        const bubble = evAddMsg("assistant", ""); const grp = bubble.parentElement;
+        evBusy = true; evAbort = new AbortController();
+        $("evRun").disabled = true; $("evStop").disabled = false;
+        const attachments = atts.map((a) => a.path); evAtts = []; renderEvAtts(); saveEv();
+        let summary = "", result = null;
+        try {
+          const resp = await fetch("/api/evolve?token=" + encodeURIComponent(token), {
+            method: "POST", headers: { "content-type": "application/json" },
+            body: JSON.stringify({ requirement, attachments, resume: evSession }), signal: evAbort.signal,
+          });
+          const reader = resp.body.getReader(); const dec = new TextDecoder(); let buf = "";
+          while (true) {
+            const { value, done } = await reader.read(); if (done) break;
+            buf += dec.decode(value, { stream: true }); const parts = buf.split("\n\n"); buf = parts.pop();
+            for (const pp of parts) {
+              const ev = (pp.match(/event: (.*)/) || [])[1]; const dl = (pp.match(/data: (.*)/s) || [])[1]; if (!ev || !dl) continue;
+              const d = JSON.parse(dl);
+              if (ev === "log") { const m = document.createElement("div"); m.className = "meta"; m.textContent = d.text; grp.appendChild(m); evChat.scrollTop = evChat.scrollHeight; }
+              else if (ev === "tool") { const t = document.createElement("div"); t.className = "tool"; t.textContent = "🔧 " + d.name; grp.appendChild(t); evChat.scrollTop = evChat.scrollHeight; }
+              else if (ev === "chunk") { summary += d.text; bubble.textContent += d.text; evChat.scrollTop = evChat.scrollHeight; }
+              else if (ev === "done") result = d;
+            }
+          }
+        } catch (e) { if (evAbort && evAbort.signal.aborted) result = { stopped: true }; else result = { error: String(e) }; }
+        result = result || { error: "连接中断" };
+        if (result.session) evSession = result.session;
+        if (!bubble.textContent) bubble.textContent = summary || "(无文字输出)";
+        let status = "ok", label = "";
+        if (result.stopped) { status = "stopped"; label = "○ 已停止并回滚"; }
+        else if (result.error) { status = "err"; label = "✗ " + result.error; if (result.detail) { const m = document.createElement("div"); m.className = "tool err"; m.textContent = result.detail; grp.appendChild(m); } }
+        else if (result.noChange) { status = "nochange"; label = "无改动"; }
+        else { status = "ok"; label = "✓ 已应用：" + ((result.changed || []).join(", ") || "已提交") + (result.commit ? " · " + result.commit.slice(0, 7) : ""); }
+        const chip = document.createElement("div"); chip.className = "ev-status " + status; chip.textContent = label; grp.appendChild(chip);
+        if (status === "ok") toast("进化已应用，重启/重载后生效");
+        evBusy = false; evAbort = null; $("evRun").disabled = false; $("evStop").disabled = true;
+        evChat.scrollTop = evChat.scrollHeight; saveEv();
+      };
+      $("evStop").onclick = () => { if (evAbort) { evAbort.abort(); toast("正在停止并回滚…"); } };
+      $("evNew").onclick = () => {
+        if (evBusy) return toast("进化中，请稍候");
+        if (evChat.querySelector(".msg") && !confirm("开始新的进化会话？当前记录会清空。")) return;
+        evSession = null; evChat.innerHTML = ""; renderEv(); saveEv(); toast("已开始新会话");
+      };
 
       // 启动
       (async () => { await loadConvs(); chat.innerHTML = active().html || ""; renderTabs(); chat.scrollTop = chat.scrollHeight; })();
