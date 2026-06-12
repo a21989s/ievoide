@@ -1394,6 +1394,7 @@ function makeConv(seed) {
     toolCards: {},
     busy: false,
     unread: false, // 非活跃时轮次完成/出错 => true，tab 上显示未读圆点，切回即清除
+    remoteRunning: !!seed?.running, // 手机端正在这个对话里跑（来自共享文件的 running 标记）
     queue: [], // 当前轮进行中时，后续追问排队，依次自动发送
     askTimers: [], // AskUserQuestion 卡片的自动倒计时 setInterval，删除/重载时统一清理
     promptHist: Array.isArray(seed?.promptHist) ? seed.promptHist.slice(-20) : [], // 最近 20 条已发送 prompt，供输入框 ↑/↓ 召回
@@ -1413,6 +1414,7 @@ function clearAskTimers(conv) {
 }
 let _saveTimer = null;
 let archived = []; // 已关闭对话的历史归档（与手机端共用同一份文件的 history 字段）
+const removedIds = new Set(); // 本端删除过的对话/归档 id：保存合并与手机端同步时防"复活"
 function buildConvState() {
   return {
     list: conversations.map((c) => ({
@@ -1426,9 +1428,11 @@ function buildConvState() {
       ctx: c.ctx,
       promptHist: c.promptHist,
       html: c.pane ? c.pane.innerHTML : c._html || "",
+      ...(c.remoteRunning ? { running: true } : {}), // 保留手机端进行中标记，避免本端落盘把它抹掉
     })),
     active: activeConv?.id || null,
     history: archived,
+    removed: [...removedIds], // 主进程合并判断用，不落盘
   };
 }
 function persistConvs() {
@@ -1475,6 +1479,7 @@ function deleteConv(id) {
   if (conv.busy) window.api.stop(conv.id); // 删除前停掉它的查询
   if (conv.id === reqConvId) reqConvId = null; // 解绑需求清单（pumpReqs 会重新绑定）
   archiveConv(conv); // 关闭前归档到历史，可在「🕘 历史」里重新打开续聊
+  removedIds.add(conv.id); // 空对话不归档也算删除，防止从共享文件合并回来
   const wasActive = conv === activeConv;
   conversations.splice(i, 1);
   if (wasActive) {
@@ -1575,6 +1580,7 @@ function restoreFromHistory(id) {
 function deleteFromHistory(id) {
   archived = archived.filter((x) => x.id !== id);
   histTextCache.delete(id);
+  removedIds.add(id); // 防止从共享文件合并复活
   persistConvs();
   renderHistory($("histSearch").value || "");
 }
@@ -1627,8 +1633,10 @@ function renderConvList() {
     el.innerHTML =
       (c.busy
         ? `<span class="conv-run" title="${tr("进行中") + (c.queue.length ? trf("，排队 {0}", c.queue.length) : "")}">●${c.queue.length ? c.queue.length : ""}</span>`
-        : c.unread
-          ? `<span class="conv-unread" title="${tr("有新结果，点击查看")}">●</span>`
+        : c.remoteRunning
+          ? `<span class="conv-run" title="${tr("手机端进行中")}">●</span>`
+          : c.unread
+            ? `<span class="conv-unread" title="${tr("有新结果，点击查看")}">●</span>`
           : "") +
       `<span class="conv-title">${esc(dispTitle)}</span>` +
       `<span class="conv-del" title="${tr("关闭")}">×</span>`;
@@ -1756,6 +1764,57 @@ $("exportConv").onclick = (e) => exportActiveConv(e.shiftKey);
   renderConvList();
   persistConvs(); // 首次把数据落到磁盘
 })();
+
+// ── 双端同步：手机端写入共享历史文件后，主进程监听到变化发来通知，
+//    把文件里的新对话/新归档合并进来；正在回复中的对话不动，避免打断 ──
+async function syncConvsFromDisk() {
+  let d = null;
+  try { d = await window.api.loadConvs(); } catch {}
+  if (!d || !Array.isArray(d.list)) return;
+  let changed = false;
+  for (const item of d.list) {
+    if (!item || !item.id) continue;
+    const local = getConv(item.id);
+    if (local) {
+      // 手机端进行中标记（server.mjs 流式落盘时置位/收尾时清除）
+      if (!local.busy && local.remoteRunning !== !!item.running) {
+        local.remoteRunning = !!item.running;
+        changed = true;
+      }
+      // 已打开的对话：本端空闲且内容有变（手机端续聊了）才刷新
+      const localHtml = local.pane ? local.pane.innerHTML : local._html || "";
+      if (!local.busy && item.html && item.html !== localHtml) {
+        local.title = item.title || local.title;
+        local.sessionId = item.sessionId || local.sessionId;
+        local.inited = local.inited || !!item.inited;
+        if (local.pane) {
+          local.pane.innerHTML = item.html;
+          local.currentBubble = null; // DOM 已整体替换，旧引用作废
+          local.toolCards = {};
+        } else {
+          local._html = item.html;
+        }
+        if (local === activeConv) chat.scrollTop = chat.scrollHeight;
+        changed = true;
+      }
+    } else if (!removedIds.has(item.id) && !archived.some((h) => h.id === item.id)) {
+      conversations.push(makeConv(item)); // 手机端新开的对话
+      changed = true;
+    }
+  }
+  if (Array.isArray(d.history)) {
+    for (const h of d.history) {
+      if (!h || !h.id || removedIds.has(h.id) || getConv(h.id) || archived.some((x) => x.id === h.id)) continue;
+      archived.push(h);
+      changed = true;
+    }
+  }
+  if (changed) {
+    renderConvList();
+    persistConvs();
+  }
+}
+window.api.on("convs:changed", syncConvsFromDisk);
 
 // ── 对话渲染（全部按指定 conv 操作，支持后台对话）──────────
 function addMsg(conv, role, text) {
@@ -2859,7 +2918,8 @@ async function openAcctMenu(anchor) {
         // 续聊时强制新建会话，杜绝多账号下的会话串用
         conversations.forEach((c) => { c.sessionId = null; c.inited = false; });
         persistConvs();
-        $("status").textContent = trf("✅ 已切换到 {0}", email);
+        if (r.warning) { $("status").textContent = "⚠️ " + r.warning; alert(r.warning); }
+        else $("status").textContent = trf("✅ 已切换到 {0}", email);
         _usageThrottle = 0; loadUsage(true);
       } else {
         $("status").textContent = "";
@@ -4321,6 +4381,8 @@ window.api.on("chat:init", ({ convId, model, tools, mcp, commands, skills, agent
   conv.pane.appendChild(wrap);
   scrollIfActive(conv);
 });
+// token 数量缩写显示：1234 -> 1.2k
+const fmtTok = (n) => ((n = n || 0), n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
 window.api.on("chat:chunk", ({ convId, text }) => appendText(getConv(convId), text));
 window.api.on("chat:tool", ({ convId, id, name, input }) =>
   appendTool(getConv(convId), id, name, input)

@@ -289,6 +289,7 @@ app.whenReady().then(() => {
   } catch {}
   bootGuard();
   createWindow();
+  watchConvFile();
 });
 // 子进程（claude CLI / mobile server 等）异常退出也记一笔
 app.on("child-process-gone", (_e, details) => {
@@ -456,8 +457,32 @@ ipcMain.handle("loadConvs", async () => {
     return null;
   }
 });
+// 合并写：手机端会直接改这份文件（经 server.mjs），桌面端保存时把文件里
+// 本端没有的对话/归档保留下来，避免整份覆盖把手机端新开的会话抹掉。
+// data.removed 是本端已删除的 id（渲染层会话期记忆），防止删掉的又被合并复活。
+function mergeConvState(mine, theirs) {
+  if (!theirs || !Array.isArray(theirs.list)) return mine;
+  const removed = new Set(Array.isArray(mine.removed) ? mine.removed : []);
+  const mineList = Array.isArray(mine.list) ? mine.list : [];
+  const mineHist = Array.isArray(mine.history) ? mine.history : [];
+  const mineIds = new Set(mineList.map((c) => c && c.id));
+  const histIds = new Set(mineHist.map((h) => h && h.id));
+  const keep = (theirs.list || []).filter(
+    (c) => c && c.id && !mineIds.has(c.id) && !histIds.has(c.id) && !removed.has(c.id)
+  );
+  if (keep.length) mine.list = [...mineList, ...keep];
+  const extraHist = (Array.isArray(theirs.history) ? theirs.history : []).filter(
+    (h) => h && h.id && !histIds.has(h.id) && !mineIds.has(h.id) && !removed.has(h.id)
+  );
+  if (extraHist.length) mine.history = [...mineHist, ...extraHist];
+  return mine;
+}
 ipcMain.handle("saveConvs", async (_e, data) => {
   try {
+    try {
+      data = mergeConvState(data, JSON.parse(await fs.readFile(convFile(), "utf8")));
+    } catch {}
+    delete data.removed; // 仅用于合并判断，不落盘
     // 原子写：先写临时文件再 rename 覆盖，避免写到一半被中断导致正式文件截断损坏
     const target = convFile();
     const tmp = `${target}.${process.pid}.tmp`;
@@ -468,6 +493,28 @@ ipcMain.handle("saveConvs", async (_e, data) => {
     return { error: String(err) };
   }
 });
+
+// 监听共享历史文件：手机端写入后通知渲染层合并刷新（监听目录，文件被替换也不失效）
+function watchConvFile() {
+  const f = convFile();
+  try { fsSync.mkdirSync(path.dirname(f), { recursive: true }); } catch {}
+  let deb = null;
+  try {
+    fsSync.watch(path.dirname(f), (_evt, name) => {
+      if (name && name !== path.basename(f)) return;
+      if (deb) clearTimeout(deb);
+      deb = setTimeout(() => {
+        deb = null;
+        // 不区分写入来源：自家写入回读无变化即止（syncConvsFromDisk 幂等）。
+        // 之前按时间窗跳过"自家写入"，会把恰好同窗到达的手机端更新一并吞掉，
+        // 且之后无补偿通知——手机新开的对话桌面端要重启才看得到。
+        if (win && !win.isDestroyed()) win.webContents.send("convs:changed");
+      }, 500);
+    });
+  } catch (e) {
+    crashLog("convWatch", String(e));
+  }
+}
 
 // ── 列目录（懒加载，点击文件夹才展开下一层）──────────────────
 // 黑名单制：只排除真正无用的点条目与常见构建产物目录，
@@ -1075,7 +1122,9 @@ const probeUsage = async () => {
     return v;
   };
   try {
-    const cwd = workdir || (await scratchDir());
+    // 固定用 scratch 当 cwd：探测只走控制通道不耗 token，
+    // 但会在 cwd 对应项目下留一个空 session 文件，用 workdir 会污染项目的会话列表
+    const cwd = await scratchDir();
     const q = query({
       prompt: (async function* () {
         await new Promise((r) => abort.signal.addEventListener("abort", r));
@@ -1250,6 +1299,50 @@ function saveAccts(list) {
 function currentEmail() {
   return readJson(CLAUDE_JSON)?.oauthAccount?.emailAddress || null;
 }
+// 凭证的 access token 是否已过期（无 expiresAt 视为未知，按未过期处理）
+function credExpired(credentials) {
+  const exp = credentials?.claudeAiOauth?.expiresAt;
+  return typeof exp === "number" && exp <= Date.now();
+}
+// 把磁盘上的当前登录凭证回存进同邮箱的存档（没存过档的账号不自动入档）。
+// refresh token 每次刷新都会轮换，存档若停留在旧快照，切换写回后必 401
+// 且 CLI 无法自动续期，只能重新 /login——这正是"提示登录过期"的根因。
+function syncAcctFromDisk() {
+  const credentials = readJson(CRED_PATH);
+  const oauthAccount = readJson(CLAUDE_JSON)?.oauthAccount;
+  const email = oauthAccount?.emailAddress;
+  if (!credentials || !email) return;
+  const list = loadAccts();
+  const i = list.findIndex((a) => a.email === email);
+  if (i < 0) return;
+  list[i] = { ...list[i], credentials, oauthAccount, savedAt: Date.now() };
+  saveAccts(list);
+}
+// 空输入流探测：只走控制通道不消耗 token。凭证过期时子进程启动会触发 CLI
+// 刷新，以此验证存档的 refresh token 是否仍有效（成功后凭证文件已被刷新）。
+async function verifyAuth() {
+  const abort = new AbortController();
+  try {
+    // 固定用 scratch 当 cwd：探测只走控制通道不耗 token，
+    // 但会在 cwd 对应项目下留一个空 session 文件，用 workdir 会污染项目的会话列表
+    const cwd = await scratchDir();
+    const q = query({
+      prompt: (async function* () {
+        await new Promise((r) => abort.signal.addEventListener("abort", r));
+      })(),
+      options: { cwd, permissionMode: "bypassPermissions", abortController: abort },
+    });
+    await Promise.race([
+      q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try { abort.abort(); } catch {}
+  }
+}
 
 // 列表：返回各存档账号（不含 token）+ 当前登录邮箱
 ipcMain.handle("acctList", async () => {
@@ -1264,6 +1357,10 @@ ipcMain.handle("acctSaveCurrent", async () => {
   const oauthAccount = readJson(CLAUDE_JSON)?.oauthAccount;
   if (!credentials || !oauthAccount?.emailAddress) {
     return { error: "未找到当前登录凭证，请先用 Claude Code 登录" };
+  }
+  // 过期快照存进去就是个哑弹（写回时全靠可能已轮换作废的 refresh token），拒绝
+  if (credExpired(credentials)) {
+    return { error: "当前凭证已过期，请先随便发起一次对话触发刷新后再存档" };
   }
   const email = oauthAccount.emailAddress;
   const list = loadAccts().filter((a) => a.email !== email);
@@ -1283,6 +1380,8 @@ ipcMain.handle("acctSwitch", async (_e, email) => {
   const acct = loadAccts().find((a) => a.email === email);
   if (!acct) return { error: "账号不存在" };
   try {
+    // 切换前把当前账号的最新凭证回存，下次切回来才不是旧快照（refresh token 会轮换）
+    syncAcctFromDisk();
     writeCredentials(acct.credentials);
     const cj = readJson(CLAUDE_JSON) || {};
     cj.oauthAccount = acct.oauthAccount;
@@ -1293,6 +1392,17 @@ ipcMain.handle("acctSwitch", async (_e, email) => {
     // 切换账号后立即作废用量缓存与进行中的探测，避免界面在 USAGE_TTL 内仍显示上一个账号的旧用量
     usageCache = { ts: 0, value: null };
     usageInflight = null;
+    // 存档已过期：当场探测，CLI 刷新成功就把新凭证回存进档；失败提前告知，
+    // 免得用户开聊才撞上 401
+    if (credExpired(acct.credentials)) {
+      if (await verifyAuth()) syncAcctFromDisk();
+      else
+        return {
+          ok: true,
+          email,
+          warning: `该账号的存档凭证已失效且自动刷新失败，对话可能报 401：请在终端用 claude /login 重新登录 ${email}`,
+        };
+    }
     return { ok: true, email };
   } catch (err) {
     return { error: String(err?.message || err) };

@@ -17,15 +17,15 @@ const git = (args, cwd) => execFileAsync("git", args, { cwd, maxBuffer: 8 * 1024
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8787;
 
-// 复用 config.json（系统提示词/权限/模型）
-const cfg = (() => {
+// 复用 config.json（系统提示词/权限/模型）。
+// 每次对话热读取：桌面端切换模型/思考深度会写回 config.json，手机端下一轮立即生效，
+// 不用重启服务器（文件很小，读取开销可忽略）。
+function loadCfg() {
   try { return JSON.parse(fs.readFileSync(path.join(__dirname, "config.json"), "utf8")); }
   catch { return {}; }
-})();
-const sysAppend = cfg.systemPromptAppend || "始终用简体中文回答，除非用户明确要求其他语言。";
-const permissionMode = cfg.permissionMode || "bypassPermissions";
+}
 // 省 token 旋钮，详见 main.js DEFAULT_CONFIG 注释；与桌面端共用同一份 config.json。
-const tokenOpts = (() => {
+function tokenOpts(cfg) {
   const o = {};
   if (cfg.fallbackModel) o.fallbackModel = cfg.fallbackModel;
   if (["low", "medium", "high", "xhigh", "max"].includes(cfg.effort)) o.effort = cfg.effort;
@@ -33,7 +33,7 @@ const tokenOpts = (() => {
   if (Array.isArray(cfg.allowedTools) && cfg.allowedTools.length) o.allowedTools = cfg.allowedTools;
   if (Array.isArray(cfg.disallowedTools) && cfg.disallowedTools.length) o.disallowedTools = cfg.disallowedTools;
   return o;
-})();
+}
 
 // 未选目录时的中性工作目录（保证 SDK 有合法 cwd，但无项目文件上下文）
 function scratchDir() {
@@ -60,6 +60,34 @@ if (!TOKEN) {
 }
 const authed = (req, url) => (url.searchParams.get("token") || req.headers["x-token"]) === TOKEN;
 
+// 对话历史共享存储：与桌面端共用同一个 data/claude-tools-conversations.json。
+// 手机端对话由服务器在流式过程中即时落盘（开聊就写、回复中节流刷新、结束收尾），
+// 桌面端靠文件监听实时看到手机端新开的对话及进度——不依赖手机页面存活推送（锁屏/断网也不丢）。
+const convFile = path.join(__dirname, "data", "claude-tools-conversations.json");
+const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
+async function updateConv(convId, mut) {
+  if (!convId) return;
+  try {
+    let d = {};
+    try { d = JSON.parse(await fsp.readFile(convFile, "utf8")); } catch {}
+    if (!Array.isArray(d.list)) d.list = [];
+    let c = d.list.find((x) => x && x.id === convId);
+    if (!c) { c = { id: convId, title: "新对话", sessionId: null, html: "" }; d.list.unshift(c); }
+    mut(c);
+    await fsp.mkdir(path.dirname(convFile), { recursive: true });
+    await fsp.writeFile(convFile, JSON.stringify(d));
+  } catch {}
+}
+// 启动时清掉上次异常退出可能遗留的 running 标记（否则桌面端会一直显示"手机端进行中"）
+(async () => {
+  try {
+    const d = JSON.parse(await fsp.readFile(convFile, "utf8"));
+    let dirty = false;
+    for (const c of d.list || []) if (c && c.running) { delete c.running; dirty = true; }
+    if (dirty) await fsp.writeFile(convFile, JSON.stringify(d));
+  } catch {}
+})();
+
 // Claude 账号切换：与桌面端共用存档(accounts.json)。路径由 App 注入，独立运行时回退到默认 userData。
 const HOME = os.homedir();
 const CRED_PATH = path.join(HOME, ".claude", ".credentials.json");
@@ -68,6 +96,46 @@ const CLAUDE_JSON = path.join(HOME, ".claude.json");
 // 由 App 注入 CT_ACCOUNTS_PATH，独立运行时回退到同目录 data/accounts.json。
 const ACCTS_PATH = process.env.CT_ACCOUNTS_PATH || path.join(__dirname, "data", "accounts.json");
 const readJsonFile = (f) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return null; } };
+// 凭证的 access token 是否已过期（无 expiresAt 视为未知，按未过期处理）
+const credExpired = (credentials) => {
+  const exp = credentials?.claudeAiOauth?.expiresAt;
+  return typeof exp === "number" && exp <= Date.now();
+};
+// 把磁盘上的当前登录凭证回存进同邮箱的存档（与 main.js 同款逻辑）。
+// refresh token 每次刷新都会轮换，存档停留在旧快照的话，切换写回后必 401 且无法自动续期。
+function syncAcctFromDisk() {
+  const credentials = readJsonFile(CRED_PATH);
+  const oauthAccount = readJsonFile(CLAUDE_JSON)?.oauthAccount;
+  const email = oauthAccount?.emailAddress;
+  if (!credentials || !email) return;
+  const list = readJsonFile(ACCTS_PATH) || [];
+  const i = list.findIndex((a) => a.email === email);
+  if (i < 0) return;
+  list[i] = { ...list[i], credentials, oauthAccount, savedAt: Date.now() };
+  try { fs.writeFileSync(ACCTS_PATH, JSON.stringify(list, null, 2)); } catch {}
+}
+// 空输入流探测：只走控制通道不消耗 token；凭证过期时子进程启动会触发 CLI 刷新，
+// 以此验证存档的 refresh token 是否仍有效（成功后凭证文件已被刷新）。
+async function verifyAuth() {
+  const abort = new AbortController();
+  try {
+    const q = query({
+      prompt: (async function* () {
+        await new Promise((r) => abort.signal.addEventListener("abort", r));
+      })(),
+      options: { cwd: scratchDir(), permissionMode: "bypassPermissions", abortController: abort },
+    });
+    await Promise.race([
+      q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000)),
+    ]);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    try { abort.abort(); } catch {}
+  }
+}
 
 const json = (res, obj, code = 200) => {
   res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
@@ -89,8 +157,6 @@ const server = http.createServer(async (req, res) => {
     return json(res, { error: "unauthorized" }, 401);
   }
 
-  // 对话历史共享存储：与桌面端共用同一个 data/claude-tools-conversations.json
-  const convFile = path.join(__dirname, "data", "claude-tools-conversations.json");
   if (req.method === "GET" && url.pathname === "/api/convs") {
     try { return json(res, JSON.parse(await fsp.readFile(convFile, "utf8"))); }
     catch { return json(res, { list: [], active: null }); }
@@ -219,11 +285,23 @@ const server = http.createServer(async (req, res) => {
       const acct = (readJsonFile(ACCTS_PATH) || []).find((a) => a.email === p.email);
       if (!acct) return json(res, { error: "账号不存在" });
       try {
+        // 切换前把当前账号的最新凭证回存，下次切回来才不是旧快照
+        syncAcctFromDisk();
         await fsp.mkdir(path.dirname(CRED_PATH), { recursive: true });
         await fsp.writeFile(CRED_PATH, JSON.stringify(acct.credentials, null, 2));
         const cj = readJsonFile(CLAUDE_JSON) || {};
         cj.oauthAccount = acct.oauthAccount;
         await fsp.writeFile(CLAUDE_JSON, JSON.stringify(cj, null, 2));
+        // 存档已过期：当场探测，CLI 刷新成功就把新凭证回存进档；失败提前告知
+        if (credExpired(acct.credentials)) {
+          if (await verifyAuth()) syncAcctFromDisk();
+          else
+            return json(res, {
+              ok: true,
+              email: acct.email,
+              warning: `该账号的存档凭证已失效且自动刷新失败，对话可能报 401：请在电脑终端用 claude /login 重新登录 ${acct.email}`,
+            });
+        }
         return json(res, { ok: true, email: acct.email });
       } catch (e) { return json(res, { error: String(e?.message || e) }); }
     });
@@ -279,7 +357,7 @@ const server = http.createServer(async (req, res) => {
     req.on("end", async () => {
       let p;
       try { p = JSON.parse(body); } catch { return json(res, { error: "bad json" }, 400); }
-      const { prompt, cwd, resume } = p;
+      const { prompt, cwd, resume, convId, title, html: baseHtml } = p;
       res.writeHead(200, {
         "content-type": "text/event-stream; charset=utf-8",
         "cache-control": "no-cache",
@@ -289,36 +367,78 @@ const server = http.createServer(async (req, res) => {
       const abort = new AbortController();
       // 客户端断开连接才中止（监听响应连接，不是请求体——请求体读完就会触发 req close）
       res.on("close", () => abort.abort());
+
+      // ── 对话进度即时落盘（见 updateConv 注释）。baseHtml 是手机端发送时
+      //    已含用户消息的快照，服务器只负责往后追加助手回复部分。──
+      let asstText = "", extraHtml = "", convSession = resume || null;
+      let lastFlush = 0, flushTimer = null;
+      const convHtml = () =>
+        (baseHtml || "") +
+        `<div class="msg assistant"><div class="role">Claude</div><div class="bubble">${escHtml(asstText || "…")}</div>${extraHtml}</div>`;
+      const flush = (final = false) => {
+        if (!convId) return;
+        if (!final && Date.now() - lastFlush < 1200) {
+          if (!flushTimer) flushTimer = setTimeout(() => { flushTimer = null; flush(); }, 1200 - (Date.now() - lastFlush));
+          return;
+        }
+        if (flushTimer) { clearTimeout(flushTimer); flushTimer = null; }
+        lastFlush = Date.now();
+        return updateConv(convId, (c) => {
+          if (title) c.title = title;
+          c.html = convHtml();
+          c.running = !final; // 桌面端据此显示"手机端进行中"
+          if (convSession) c.sessionId = convSession;
+        });
+      };
+      // 错误同时发给客户端 + 记入落盘 html（手机已断开时桌面端也能看到出错原因）
+      const sendErr = (m) => {
+        send("error", { message: m });
+        extraHtml += `<div class="meta" style="color:#e57373">出错了：${escHtml(String(m).slice(0, 400))}</div>`;
+      };
       try {
         const mcpServers = await readMcp();
+        const cfg = loadCfg(); // 热读取，桌面端旋钮改动立即生效
         // 公共参数；每次调用新建子进程，子进程启动时 Claude Code CLI 会重新读取/刷新
         // ~/.claude/.credentials.json 里的订阅 OAuth token。
         const baseOpts = {
           // 未选目录时用中性 scratch 目录当 cwd（与桌面端一致）：
           // 避免以 homedir 为项目目录——会把家目录的 CLAUDE.md/git 状态等无关上下文喂给模型，白耗 token
           cwd: cwd || scratchDir(),
-          permissionMode,
+          permissionMode: cfg.permissionMode || "bypassPermissions",
           includePartialMessages: true,
-          systemPrompt: { type: "preset", preset: "claude_code", append: sysAppend },
+          systemPrompt: {
+            type: "preset",
+            preset: "claude_code",
+            append: cfg.systemPromptAppend || "始终用简体中文回答，除非用户明确要求其他语言。",
+          },
           ...(cfg.model ? { model: cfg.model } : {}),
-          ...tokenOpts,
+          ...tokenOpts(cfg),
           ...(mcpServers ? { mcpServers } : {}),
           abortController: abort,
         };
 
         // 跑一次完整的流式会话；任一异常向上抛给重试逻辑处理。
         const runOnce = async (opts) => {
+          asstText = ""; extraHtml = ""; // 重试会产出全新回复，清掉上一次的累积
+          flush(); // 开聊即落盘：桌面端立刻看到这个（新）对话和用户消息
           const r = query({ prompt, options: opts });
           for await (const msg of r) {
             if (msg.type === "stream_event") {
               const e = msg.event;
-              if (e?.type === "content_block_delta" && e.delta?.type === "text_delta")
+              if (e?.type === "content_block_delta" && e.delta?.type === "text_delta") {
                 send("chunk", { text: e.delta.text });
+                asstText += e.delta.text; flush();
+              }
             } else if (msg.type === "assistant") {
               for (const b of msg.message.content)
-                if (b.type === "tool_use") send("tool", { name: b.name });
+                if (b.type === "tool_use") {
+                  send("tool", { name: b.name });
+                  extraHtml += `<div class="tool">🔧 ${escHtml(b.name)}</div>`; flush();
+                }
             } else if (msg.type === "result") {
               const u = msg.usage || {};
+              convSession = msg.session_id || convSession;
+              extraHtml += `<div class="meta">用时 ${msg.duration_ms}ms</div>`;
               send("done", {
                 session: msg.session_id,
                 cost: msg.total_cost_usd,
@@ -335,7 +455,8 @@ const server = http.createServer(async (req, res) => {
         };
 
         // 认证失效（Pro 订阅 OAuth token 过期/失效）的特征。
-        const isAuthErr = (m) => /\b401\b|invalid authentication|failed to authenticate|unauthorized/i.test(m);
+        const isAuthErr = (m) =>
+          /\b401\b|invalid authentication|failed to authenticate|unauthorized|oauth token has expired|please run \/login/i.test(m);
 
         try {
           await runOnce({ ...baseOpts, ...(resume ? { resume } : {}) });
@@ -344,7 +465,7 @@ const server = http.createServer(async (req, res) => {
           if (abort.signal.aborted && resume && /No conversation found|session id/i.test(m)) {
             // 续接失败：起新会话重试一次
             try { await runOnce(baseOpts); }
-            catch (e2) { send("error", { message: String(e2?.stack || e2) }); }
+            catch (e2) { sendErr(String(e2?.stack || e2)); }
           } else if (isAuthErr(m) && !abort.signal.aborted) {
             // 401：订阅 token 过期。重试时新起子进程会触发 CLI 自动刷新凭证，
             // 稍等片刻再试，给后台刷新留出时间，最多重试 3 次。
@@ -357,30 +478,20 @@ const server = http.createServer(async (req, res) => {
                 recovered = true;
               } catch (e3) {
                 const m3 = String(e3?.stack || e3);
-                if (!isAuthErr(m3)) { send("error", { message: m3 }); recovered = true; }
+                if (!isAuthErr(m3)) { sendErr(m3); recovered = true; }
               }
             }
             if (!recovered && !abort.signal.aborted)
-              send("error", { message: "认证刷新失败：请在终端运行 `claude` 重新 /login 后再试。" });
+              sendErr("认证刷新失败：请在终端运行 `claude` 重新 /login 后再试。");
           } else {
-            send("error", { message: m });
+            sendErr(m);
           }
         }
       } catch (err) {
-        const m = String(err?.stack || err);
-        if (!abort.signal.aborted && resume && /No conversation found|session id/i.test(m)) {
-          // 续接失败：起新会话重试一次
-          try {
-            const r2 = query({ prompt, options: { cwd: cwd || os.homedir(), permissionMode, includePartialMessages: true, systemPrompt: { type: "preset", preset: "claude_code", append: sysAppend }, abortController: abort } });
-            for await (const msg of r2) {
-              if (msg.type === "stream_event") { const e = msg.event; if (e?.type === "content_block_delta" && e.delta?.type === "text_delta") send("chunk", { text: e.delta.text }); }
-              else if (msg.type === "result") send("done", { session: msg.session_id });
-            }
-          } catch (e2) { send("error", { message: String(e2?.message || e2) }); }
-        } else {
-          send("error", { message: m });
-        }
+        sendErr(String(err?.stack || err));
       }
+      // 收尾落盘：写入最终 html + sessionId，并清掉 running 标记（中断/出错也会走到这里）
+      try { await flush(true); } catch {}
       res.end();
     });
     return;

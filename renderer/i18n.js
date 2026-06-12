@@ -230,6 +230,7 @@
     "思考中…（可继续输入，自动排队）": "Thinking… (keep typing; auto-queued)",
     "你": "You",
     "进行中": "Running",
+    "手机端进行中": "Running on phone",
     "，排队 {0}": ", {0} queued",
     "移除": "Remove",
     "未知": "unknown",
@@ -285,6 +286,7 @@
     " · 命令 ": " · commands ",
     " · 子agent ": " · sub-agents ",
     "用时 ": "Took ",
+    "缓存命中 ": "cache hit ",
     "⏹ 已停止": "⏹ Stopped",
     "出错了：": "Error:",
     // —— 动态：PDF 编辑器 ——
