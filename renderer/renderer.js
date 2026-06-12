@@ -2494,7 +2494,10 @@ function loadUsageThrottled() {
 }
 $("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
-setInterval(() => loadUsage(), 30000); // 每 30 秒自动刷新
+// 自动刷新放缓到 5 分钟，且窗口不可见时跳过（避免后台反复触发 probeUsage 子进程）；
+// 即时性由手动点击 force 与 chat:done 后的 loadUsageThrottled 兜底。
+setInterval(() => { if (!document.hidden) loadUsage(); }, 300000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) loadUsageThrottled(); }); // 恢复可见时立即刷一次（带节流防抖）
 
 // ── 模型切换：顶栏下拉，写回 config 后下一轮 chat 即生效，与用量/费用联动控成本 ──
 (async () => {
