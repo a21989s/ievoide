@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld("api", {
   gitDiff: (repo, f, staged) => ipcRenderer.invoke("gitDiff", repo, f, staged),
   gitCommit: (repo, msg) => ipcRenderer.invoke("gitCommit", repo, msg),
   gitGenCommitMsg: (repo) => ipcRenderer.invoke("gitGenCommitMsg", repo),
+  gitGenChangelog: (repo) => ipcRenderer.invoke("gitGenChangelog", repo),
   gitCommitFiles: (repo, sha) => ipcRenderer.invoke("gitCommitFiles", repo, sha),
   gitCommitDiff: (repo, sha, f) => ipcRenderer.invoke("gitCommitDiff", repo, sha, f),
   gitPull: (repo) => ipcRenderer.invoke("gitPull", repo),

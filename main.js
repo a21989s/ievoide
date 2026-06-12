@@ -1925,6 +1925,70 @@ ipcMain.handle("gitGenCommitMsg", async (_e, repo) => {
   }
 });
 
+// ── 📜 生成 CHANGELOG：本地取上次生成点之后的 git log（零 token），SDK 单轮按 新增/修复/优化 分组，前置写入 CHANGELOG.md ──
+ipcMain.handle("gitGenChangelog", async (_e, repo) => {
+  if (!repo) return { error: "未指定仓库" };
+  const clPath = path.join(repo, "CHANGELOG.md");
+  try {
+    // 读取已有 CHANGELOG，找最新条目的生成点标记，只取其后的提交（增量、省 token）
+    let existing = "";
+    try { existing = await fs.readFile(clPath, "utf8"); } catch {}
+    const lastSha = existing.match(/<!--\s*changelog-head:\s*([0-9a-f]{7,40})\s*-->/)?.[1];
+    let logOut = "";
+    if (lastSha) {
+      // 标记的提交可能已被 rebase 掉，失败则退回最近 50 条
+      ({ stdout: logOut } = await git(["log", "--oneline", `${lastSha}..HEAD`], repo).catch(() => ({ stdout: "" })));
+      if (!logOut.trim() && !(await git(["cat-file", "-e", lastSha], repo).then(() => true, () => false)))
+        ({ stdout: logOut } = await git(["log", "--oneline", "-50"], repo));
+    } else {
+      ({ stdout: logOut } = await git(["log", "--oneline", "-50"], repo));
+    }
+    if (!logOut.trim()) return { error: "没有新的提交可生成 CHANGELOG" };
+    let log = logOut.trim().split("\n");
+    if (log.length > 200) log = log.slice(0, 200);
+    const { stdout: head } = await git(["rev-parse", "--short", "HEAD"], repo);
+    const abort = new AbortController();
+    const timer = setTimeout(() => { try { abort.abort(); } catch {} }, 90000);
+    try {
+      const response = query({
+        prompt: `把以下 git 提交日志整理成中文 CHANGELOG 条目，按「### 新增」「### 修复」「### 优化」分组（无内容的组省略），每条提交归并为一行「- 描述」，合并同类项、去掉 sha 与无意义提交（如 checkpoint/merge）。只输出 markdown 条目本身，不要版本标题、引号或解释，不要使用任何工具。\n\n${log.join("\n")}`,
+        options: {
+          cwd: repo,
+          maxTurns: 1,
+          permissionMode: "bypassPermissions",
+          abortController: abort,
+          ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
+        },
+      });
+      let text = "";
+      for await (const msg of response) {
+        if (msg.type === "assistant") {
+          for (const b of msg.message.content) if (b.type === "text") text += b.text;
+        } else if (msg.type === "result") recordCost("chat", msg.usage, msg.total_cost_usd); // changelog 生成属用户侧消耗
+      }
+      text = text.trim();
+      if (!text) return { error: "生成结果为空" };
+      // 新条目带生成点标记，下次只增量取其后的提交
+      const date = new Date().toISOString().slice(0, 10);
+      const entry = `## ${date}\n<!-- changelog-head: ${head.trim()} -->\n\n${text}\n`;
+      let content;
+      if (/^#\s/.test(existing)) {
+        // 已有标题行：插在标题之后、首个旧条目之前
+        const nl = existing.indexOf("\n");
+        content = existing.slice(0, nl + 1) + "\n" + entry + "\n" + existing.slice(nl + 1).replace(/^\n+/, "");
+      } else {
+        content = "# Changelog\n\n" + entry + (existing.trim() ? "\n" + existing : "");
+      }
+      await fs.writeFile(clPath, content, "utf8");
+      return { path: clPath };
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    return { error: String(err?.stderr || err?.message || err).trim() };
+  }
+});
+
 // 某提交改动的文件列表（--root 兼容初始提交）
 ipcMain.handle("gitCommitFiles", async (_e, repo, sha) => {
   try {

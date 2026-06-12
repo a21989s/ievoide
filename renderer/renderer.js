@@ -1112,6 +1112,28 @@ $("scGenMsg").onclick = async () => {
     btn.textContent = "✨";
   }
 };
+// 📜 生成 CHANGELOG：增量取提交日志 AI 分组，写入 CHANGELOG.md 后在 md 内联编辑器中打开供确认
+let changelogBusy = false;
+async function genChangelog() {
+  if (changelogBusy) return;
+  if (!activeRepo) { toast(tr("请先选择仓库"), "error"); return; }
+  changelogBusy = true;
+  const btn = $("scChangelog");
+  btn.textContent = "⟳";
+  toast(tr("正在生成 CHANGELOG…"), "info");
+  try {
+    const r = await window.api.gitGenChangelog(activeRepo);
+    if (r && r.path) {
+      await openFile(r.path, "CHANGELOG.md");
+      if (!mdEditing) enterMdEdit(); // 直接进编辑态，确认后 ⌘S 保存
+      toast(tr("已生成，请确认后保存"), "success");
+    } else toast(tr("生成 CHANGELOG 失败：") + tr(r?.error || ""), "error");
+  } finally {
+    changelogBusy = false;
+    btn.textContent = "📜";
+  }
+}
+$("scChangelog").onclick = genChangelog;
 $("scStageAll").onclick = () => doGit(() => window.api.gitStageAll(activeRepo));
 $("scUnstageAll").onclick = () => doGit(() => window.api.gitUnstageAll(activeRepo));
 $("scPull").onclick = () => doGit(() => window.api.gitPull(activeRepo), tr("已拉取"));
@@ -2481,6 +2503,7 @@ function cmdkBaseCommands() {
     { ic: "🌐", label: tr("切换语言"), run: () => $("langBtn").onclick() },
     { ic: "⌨️", label: tr("快捷键速查"), run: () => toggleKbdHelp() },
     { ic: "🗺", label: tr("生成代码地图"), run: () => genCodemap() },
+    { ic: "📜", label: tr("生成 CHANGELOG"), run: () => genChangelog() },
   ];
   // 快捷技能：直接以技能提示词发起一次对话（action: 开头的为内置动作）
   (QUICK_SKILLS || []).forEach((q) => cmds.push({
