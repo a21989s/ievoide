@@ -763,7 +763,10 @@ ipcMain.handle("codemap", async () => {
     for await (const msg of response) {
       if (msg.type === "assistant") {
         for (const b of msg.message.content) if (b.type === "text") text += b.text;
-      } else if (msg.type === "result" && msg.subtype === "success") final = msg.result || "";
+      } else if (msg.type === "result") {
+        recordCost("chat", msg.usage, msg.total_cost_usd); // 代码地图属用户侧消耗，记入 chat
+        if (msg.subtype === "success") final = msg.result || "";
+      }
     }
     const markdown = /```mermaid/.test(final) ? final : text;
     if (!/```mermaid/.test(markdown)) return { error: "未生成出 mermaid 图，请重试" };
@@ -919,6 +922,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
             } else { checkpoints.delete(cpId); cp = null; } // 无改动：丢弃检查点
           } catch {}
         }
+        recordCost("chat", msg.usage, msg.total_cost_usd); // 本地费用台账（按日聚合，关掉对话不丢）
         send("chat:done", {
           cost: msg.total_cost_usd,
           ms: msg.duration_ms,
@@ -1020,6 +1024,44 @@ ipcMain.handle("getUsage", async (_e, { force } = {}) => {
     usageInflight = null;
   }
 });
+
+// ── 本地费用台账：每轮 chat/evolve 的 token 与费用按日聚合落盘 ──────
+// 纯本地记账零额外 token：data/cost-stats.json 按【日 × 来源】聚合分项 tokens 与费用，
+// 保留 90 天，供右上角用量 tooltip 显示今日/本周/累计与趋势，量化省钱效果（关掉对话也不丢）。
+const costStatsPath = () => path.join(app.getPath("userData"), "cost-stats.json");
+let costStats = null; // 懒加载缓存：{ days: { "YYYY-MM-DD": { chat|evolve: { in,out,cw,cr,cost,turns } } } }
+let costSaveTimer = null;
+const localDay = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+function loadCostStats() {
+  if (!costStats) {
+    try { costStats = JSON.parse(fsSync.readFileSync(costStatsPath(), "utf8")); } catch {}
+    if (!costStats || typeof costStats.days !== "object" || !costStats.days) costStats = { days: {} };
+  }
+  return costStats;
+}
+function recordCost(source, usage, costUsd) {
+  if (!usage && !(costUsd > 0)) return; // 本轮无可记内容
+  const s = loadCostStats();
+  const day = localDay();
+  if (!s.days[day]) {
+    s.days[day] = {};
+    // 跨天时才清理一次：删掉 90 天前的旧数据，文件常年保持轻量
+    const cutoff = localDay(new Date(Date.now() - 90 * 86400000));
+    for (const k of Object.keys(s.days)) if (k < cutoff) delete s.days[k];
+  }
+  const t = s.days[day][source] || (s.days[day][source] = { in: 0, out: 0, cw: 0, cr: 0, cost: 0, turns: 0 });
+  t.in += usage?.input_tokens || 0;
+  t.out += usage?.output_tokens || 0;
+  t.cw += usage?.cache_creation_input_tokens || 0;
+  t.cr += usage?.cache_read_input_tokens || 0;
+  t.cost += costUsd || 0;
+  t.turns += 1;
+  // 防抖落盘：连续多轮只写一次
+  clearTimeout(costSaveTimer);
+  costSaveTimer = setTimeout(() => { fs.writeFile(costStatsPath(), JSON.stringify(s)).catch(() => {}); }, 1500);
+}
+ipcMain.handle("costStats", () => loadCostStats().days);
 
 // ── 模型切换 ─────────────────────────────────────────────────
 // 读/写当前模型（空=用账号默认）。setModel 写回 tools/config.json 并更新内存中的
@@ -1367,6 +1409,7 @@ ipcMain.handle("evolveAudit", async () => {
           if (b.type === "text") text += b.text;
           else if (b.type === "tool_use") send("evolve:log", `🔧 ${b.name}`);
         }
+      else if (msg.type === "result") recordCost("evolve", msg.usage, msg.total_cost_usd); // 巡检消耗记入 evolve
     }
     const m = text.match(/\[[\s\S]*\]/);
     let items = [];
@@ -1473,6 +1516,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
       },
     });
     let summary = "";
+    let prevCost = 0, prevUsage = {}; // result 的费用/用量是会话累计值，steer 多轮会出多个 result，记增量防重复计数
     for await (const msg of response) {
       if (msg.type === "assistant")
         for (const b of msg.message.content) {
@@ -1480,6 +1524,13 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
           else if (b.type === "tool_use") log(`🔧 ${b.name}`);
         }
       else if (msg.type === "result") {
+        const u = msg.usage || {};
+        const du = {};
+        for (const k of ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"])
+          du[k] = Math.max(0, (u[k] || 0) - (prevUsage[k] || 0));
+        recordCost("evolve", du, Math.max(0, (msg.total_cost_usd || 0) - prevCost));
+        prevCost = Math.max(prevCost, msg.total_cost_usd || 0);
+        prevUsage = u;
         // 本轮结束：没有待追加的调整消息则收尾结束输入流；否则继续下一轮
         if (!steer.queue.length) { steer.done = true; if (steer.wake) { steer.wake(); steer.wake = null; } }
       }
@@ -1837,8 +1888,9 @@ ipcMain.handle("gitGenCommitMsg", async (_e, repo) => {
       });
       let text = "";
       for await (const msg of response) {
-        if (msg.type === "assistant")
+        if (msg.type === "assistant") {
           for (const b of msg.message.content) if (b.type === "text") text += b.text;
+        } else if (msg.type === "result") recordCost("chat", msg.usage, msg.total_cost_usd); // 提交信息生成属用户侧消耗
       }
       const message = text.trim().split("\n").filter(Boolean)[0]?.replace(/^["'“「]|["'”」]$/g, "").trim();
       if (!message) return { error: "生成结果为空" };

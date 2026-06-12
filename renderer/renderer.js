@@ -2585,14 +2585,53 @@ function fmtTimeShort(t) {
   try { return new Date(t).toLocaleTimeString(getLang() === "en" ? "en-US" : "zh-CN", { hour: "2-digit", minute: "2-digit" }); }
   catch { return t; }
 }
+// 本地费用台账（main 进程把每轮 chat/evolve 的 tokens/费用按日聚合到 data/cost-stats.json）
+// → tooltip 文案：今日/本周/90天累计 + 近14天趋势 + chat/进化分账。纯本地 IPC，零 token 消耗。
+async function costStatLines() {
+  try {
+    const days = await window.api.costStats();
+    if (!days || !Object.keys(days).length) return "";
+    const dayKey = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const now = Date.now();
+    const today = dayKey(new Date(now));
+    const weekAgo = dayKey(new Date(now - 6 * 86400000));
+    const sum = { today: 0, week: 0, all: 0, chat: 0, evolve: 0, tokToday: 0 };
+    for (const [d, rec] of Object.entries(days))
+      for (const [src, t] of Object.entries(rec)) {
+        sum.all += t.cost;
+        sum[src === "evolve" ? "evolve" : "chat"] += t.cost;
+        if (d >= weekAgo) sum.week += t.cost;
+        if (d === today) { sum.today += t.cost; sum.tokToday += t.in + t.out + t.cw + t.cr; }
+      }
+    // 近 14 天费用趋势（块高按当期最大值归一，·=当天无消耗）
+    const lvl = "▁▂▃▄▅▆▇█";
+    const series = [];
+    for (let i = 13; i >= 0; i--) {
+      const rec = days[dayKey(new Date(now - i * 86400000))];
+      series.push(rec ? Object.values(rec).reduce((a, t) => a + t.cost, 0) : 0);
+    }
+    const max = Math.max(...series);
+    const spark = series.map((v) => (v <= 0 ? "·" : lvl[Math.min(7, Math.floor((v / max) * 8))])).join("");
+    return (
+      "\n" + tr("── 本地统计（实际消耗，关掉对话不丢）──") + "\n" +
+      trf("今日 ${0} · {1} tok ｜ 本周 ${2} ｜ 90天 ${3}",
+        sum.today.toFixed(2), fmtTokens(sum.tokToday), sum.week.toFixed(2), sum.all.toFixed(2)) + "\n" +
+      trf("近14天 {0} ｜ chat ${1} · 进化 ${2}", spark, sum.chat.toFixed(2), sum.evolve.toFixed(2))
+    );
+  } catch { return ""; }
+}
 async function loadUsage(force) {
   const el = $("usage");
   el.textContent = tr("用量…");
-  // force=true 跳过主进程的用量缓存（手动点击 / 切账号后需立即拿最新值）
-  const u = await window.api.getUsage(force ? { force: true } : undefined);
+  // force=true 跳过主进程的用量缓存（手动点击 / 切账号后需立即拿最新值）；本地台账并行取
+  const [u, local] = await Promise.all([
+    window.api.getUsage(force ? { force: true } : undefined),
+    costStatLines(),
+  ]);
   if (!u || u.error || !u.rate_limits_available || !u.rate_limits) {
     el.textContent = u && u.subscription_type ? u.subscription_type.toUpperCase() : tr("用量 N/A");
-    el.title = u && u.error ? tr("用量不可用：") + u.error : tr("当前会话无订阅用量信息（如用 API Key）");
+    el.title = (u && u.error ? tr("用量不可用：") + u.error : tr("当前会话无订阅用量信息（如用 API Key）")) + local;
     return;
   }
   const sub = (u.subscription_type || "").toUpperCase();
@@ -2607,7 +2646,8 @@ async function loadUsage(force) {
     `${tr("订阅：")}${sub || "-"}\n` +
     `${tr("5小时窗：")}${fh?.utilization ?? "-"}%  · ${tr("重置 ")}${fmtTime(fh?.resets_at)}\n` +
     `${tr("7天窗：")}${sd?.utilization ?? "-"}%  · ${tr("重置 ")}${fmtTime(sd?.resets_at)}\n` +
-    `${tr("本会话花费：$")}${u.session?.total_cost_usd?.toFixed?.(4) ?? "-"}`;
+    `${tr("本会话花费：$")}${u.session?.total_cost_usd?.toFixed?.(4) ?? "-"}` +
+    local;
 }
 let _usageThrottle = 0;
 function loadUsageThrottled() {
