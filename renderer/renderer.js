@@ -444,6 +444,9 @@ function flashLine(el) {
   setTimeout(() => el.classList.remove("line-flash"), 1600);
 }
 
+// 常见图片扩展名 → MIME，内联 <img> 预览用
+const IMG_MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", ico: "image/x-icon", svg: "image/svg+xml" };
+
 async function openFile(path, name, line) {
   const ext = name.split(".").pop().toLowerCase();
 
@@ -457,6 +460,21 @@ async function openFile(path, name, line) {
   if (["doc", "docx", "xls", "xlsx", "ppt", "pptx"].includes(ext)) {
     showViewer(name);
     showFallback(path, tr("此文件类型暂不支持内联预览。"));
+    return;
+  }
+
+  // 图片：读字节转 data URL 内联显示（标题栏附带尺寸），其余二进制类型仍走下方兜底
+  if (IMG_MIME[ext]) {
+    showViewer(name);
+    const r = await window.api.readFileBuffer(path);
+    if (!r || r.error) { showFallback(path, tr("图片读取失败：") + (r?.error || "")); return; }
+    useBody("img");
+    vbody.innerHTML = "";
+    const img = document.createElement("img");
+    img.alt = name;
+    img.onload = () => { $("vtitle").textContent = `${name}  ${img.naturalWidth}×${img.naturalHeight}`; };
+    img.src = `data:${IMG_MIME[ext]};base64,${r.base64}`;
+    vbody.appendChild(img);
     return;
   }
 

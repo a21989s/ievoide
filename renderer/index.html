@@ -450,6 +450,9 @@
       .v-fallback .vf-ic { font-size: 40px; opacity: .7; }
       .v-fallback .vf-open { padding: 7px 16px; border: 1px solid var(--accent); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; font-size: 13px; }
       .v-fallback .vf-open:hover { filter: brightness(1.08); }
+      /* 图片内联预览：自适应居中 */
+      #vbody.img { display: flex; align-items: center; justify-content: center; }
+      #vbody.img img { max-width: 100%; max-height: 100%; object-fit: contain; }
       #vclose, #evClose, #peClose { background: #add8e6; border-color: #add8e6; color: #0a3d62; }
       #vclose:hover, #evClose:hover, #peClose:hover { background: #9ccbe0; }
       #vdock { background: var(--bg); border: 1px solid var(--border); color: var(--fg); }
