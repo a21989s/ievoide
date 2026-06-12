@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; frame-src 'self'; object-src 'self'; worker-src 'self' blob:;" />
-    <title>Claude Tools</title>
+    <title>自进化 dev Tool</title>
     <style>
       :root {
         --bg: #1e1e1e;
@@ -461,6 +461,9 @@
       #vbody { flex: 1; margin: 0; overflow: auto; padding: 16px 20px; font-size: 13px; }
       #vbody.raw { font-family: ui-monospace, monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
       #vbody.raw pre.hl { margin: 0; white-space: pre; overflow: auto; }
+      /* 选中 → 加入对话：浮在选区上方的小按钮（需盖过 viewer(30) 与 evDiffModal(50)） */
+      #quoteBtn { position: fixed; z-index: 60; padding: 3px 10px; font-size: 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.35); white-space: nowrap; }
+      #quoteBtn:hover { filter: brightness(1.1); }
       /* 搜索直达定位：目标行背景闪烁 */
       #vbody .cl.line-flash { animation: line-flash 1.6s ease-out; border-radius: 3px; }
       @keyframes line-flash { 0%, 45% { background: rgba(86, 156, 214, 0.35); } 100% { background: transparent; } }

@@ -200,7 +200,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1180,
     height: 760,
-    title: "Claude Tools",
+    title: "自进化 dev Tool",
     backgroundColor: "#1e1e1e",
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -1160,7 +1160,7 @@ function rollback(sha) {
   } catch {}
 }
 const EVOLVE_APPEND =
-  "你正在改进你自己所在的 Electron 桌面应用「Claude Tools」，源码就在当前工作目录。结构：main.js=Electron 主进程(所有 IPC/git/SDK 调用)；preload.cjs=contextBridge 暴露 window.api；renderer/index.html+renderer.js=界面与逻辑；renderer/pdfeditor.js=PDF 编辑器。本产品定位是面向开发与日常文档维护的工具集，进化的总目标是让它更【易用、易组装搭配、简洁】，并且【让程序员的工作越方便越好、越省钱越好】（省钱=减少不必要的 token/API 消耗、避免冗余请求与重复计算），请让每次改动都朝这个方向推进。务必：① 改完保证应用能正常启动与加载、不破坏现有功能；② 只改必要文件、与周围代码风格一致；③ 不要运行 npm start 或重启应用（宿主会自动重载/重启并自检）。最后用简体中文一句话说明你改了什么。";
+  "你正在改进你自己所在的 Electron 桌面应用「自进化 dev Tool」，源码就在当前工作目录。结构：main.js=Electron 主进程(所有 IPC/git/SDK 调用)；preload.cjs=contextBridge 暴露 window.api；renderer/index.html+renderer.js=界面与逻辑；renderer/pdfeditor.js=PDF 编辑器。本产品定位是面向开发与日常文档维护的工具集，进化的总目标是让它更【易用、易组装搭配、简洁】，并且【让程序员的工作越方便越好、越省钱越好】（省钱=减少不必要的 token/API 消耗、避免冗余请求与重复计算），请让每次改动都朝这个方向推进。务必：① 改完保证应用能正常启动与加载、不破坏现有功能；② 只改必要文件、与周围代码风格一致；③ 不要运行 npm start 或重启应用（宿主会自动重载/重启并自检）。最后用简体中文一句话说明你改了什么。";
 
 ipcMain.handle("getIssues", () => issues);
 ipcMain.handle("clearIssues", () => {
@@ -1251,7 +1251,7 @@ ipcMain.handle("evolveAudit", async () => {
     const recent = readEvolveHistory().slice(0, 12).map((h) => "- " + (h.requirement || "").split("\n")[0]).join("\n");
     const openTitles = readBacklog().filter((x) => x.status !== "done").map((x) => "- " + x.title).join("\n");
     const prompt =
-      "为这款 Electron 桌面应用「Claude Tools」找出 3-6 个具体、可独立完成的改进点，写成给进化器执行的需求。改进点须来自以下两个渠道，请都覆盖：\n" +
+      "为这款 Electron 桌面应用「自进化 dev Tool」找出 3-6 个具体、可独立完成的改进点，写成给进化器执行的需求。改进点须来自以下两个渠道，请都覆盖：\n" +
       "【渠道一·源码巡检】用 Read/Grep 审视源码（main.js / preload.cjs / renderer/*），找 bug、隐患、体验或性能问题。\n" +
       "【渠道二·联网需求采集】用 WebSearch（必要时用 WebFetch 取正文）调研同类 AI 编码桌面工具（Cursor / Cline / Windsurf / Claude Code / Copilot 等）的新功能、最受欢迎功能、用户痛点与行业趋势（查询带 2026 等年份关键词）。只提炼【本 App 尚未具备或可增强】且契合本产品定位的需求；联网项的 requirement 末尾附上来源 URL。\n" +
       "本产品定位是面向开发与日常文档维护的工具集，自进化的总目标是让它更【易用、易组装搭配、简洁】，核心准则是【让程序员的工作越方便越好、越省钱越好】。优先考虑能提升以下方面的改进：" +

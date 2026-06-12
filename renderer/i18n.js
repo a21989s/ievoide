@@ -35,6 +35,7 @@
     "打开本速查面板": "Open this shortcut panel",
     "折叠 / 展开左侧栏": "Collapse / expand sidebar",
     "关闭当前弹层（查看器 / 历史 / 菜单等）": "Close the current overlay (viewer / history / menu)",
+    "💬 加入对话": "💬 Add to chat",
     "发送消息": "Send message",
     "换行": "New line",
     "在斜杠 / 文件补全弹窗中选择": "Navigate slash / file completion popup",

@@ -1,5 +1,6 @@
 {
   "name": "tools",
+  "productName": "自进化 dev Tool",
   "version": "1.0.0",
   "main": "main.js",
   "scripts": {

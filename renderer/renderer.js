@@ -449,6 +449,9 @@ const IMG_MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif:
 
 async function openFile(path, name, line) {
   const ext = name.split(".").pop().toLowerCase();
+  // 供「选中 → 加入对话」引用：尽量取相对当前文件夹的路径
+  quoteRelPath = currentFolder && path.startsWith(currentFolder)
+    ? path.slice(currentFolder.length).replace(/^\/+/, "") : path;
 
   if (ext === "pdf") {
     // 打开可编辑的 PDF 编辑器（PDF.js 渲染 + pdf-lib 保存）
@@ -545,6 +548,84 @@ if (localStorage.getItem("viewerDocked") === "1") $("viewer").classList.add("doc
   const w = parseInt(localStorage.getItem("viewerDockW") || "0", 10);
   if (w >= 320) document.documentElement.style.setProperty("--view-dock-w", w + "px");
 }
+
+// ── 选中 → 加入对话：查看器 / diff 弹窗里选中文本后浮出按钮，一键把「路径:行 + 引用」追加进聊天输入框 ──
+let quoteRelPath = null; // 当前查看内容对应的文件相对路径（推算不出则为空）
+const quoteBtn = document.createElement("button");
+quoteBtn.id = "quoteBtn";
+quoteBtn.setAttribute("data-i18n", "💬 加入对话");
+quoteBtn.textContent = tr("💬 加入对话");
+quoteBtn.style.display = "none";
+document.body.appendChild(quoteBtn);
+let quoteSel = null; // { text, path, line }
+
+function hideQuoteBtn() { quoteBtn.style.display = "none"; quoteSel = null; }
+
+// 从选区起点推算起始行：优先已有行号 span(.cl)，否则 raw 纯文本按前缀换行数推算；md/diff 渲染态无法对应源码行，省略
+function quoteStartLine(container, range) {
+  const node = range.startContainer;
+  const el = node.nodeType === 1 ? node : node.parentElement;
+  const cl = el && el.closest ? el.closest(".cl") : null;
+  if (cl && container.contains(cl)) return [...container.querySelectorAll(".cl")].indexOf(cl) + 1;
+  if (container === vbody && vbody.classList.contains("raw")) {
+    const r = document.createRange();
+    r.selectNodeContents(container);
+    r.setEnd(range.startContainer, range.startOffset);
+    return r.toString().split("\n").length;
+  }
+  return 0;
+}
+
+// diff 视图里从选区行向上找最近的 +++ b/xxx（或 diff --git）头推算文件路径
+function quoteDiffPath(range) {
+  let cur = range.startContainer;
+  if (cur.nodeType !== 1) cur = cur.parentElement && cur.parentElement.matches("span") ? cur.parentElement : cur;
+  while (cur) {
+    if (cur.nodeType === 1) {
+      const t = cur.textContent || "";
+      const m = t.match(/^\+\+\+ b\/(.+)$/) || t.match(/^diff --git a\/.+ b\/(.+)$/);
+      if (m) return m[1];
+    }
+    cur = cur.previousSibling;
+  }
+  return null;
+}
+
+// mouseup 后若有非空选区且落在容器内，把按钮浮到选区上方
+function onQuoteMouseUp(container, getPath) {
+  setTimeout(() => {
+    const sel = window.getSelection();
+    const text = sel && !sel.isCollapsed && sel.rangeCount ? sel.toString() : "";
+    if (!text.trim()) { hideQuoteBtn(); return; }
+    const range = sel.getRangeAt(0);
+    if (!container.contains(range.commonAncestorContainer)) { hideQuoteBtn(); return; }
+    quoteSel = { text: text.replace(/\n+$/, ""), path: getPath(range), line: quoteStartLine(container, range) };
+    const rect = range.getBoundingClientRect();
+    quoteBtn.style.display = "block";
+    quoteBtn.style.left = Math.min(window.innerWidth - 120, Math.max(8, rect.left + rect.width / 2 - 50)) + "px";
+    quoteBtn.style.top = Math.max(8, rect.top - 32) + "px";
+  }, 0);
+}
+vbody.addEventListener("mouseup", () =>
+  onQuoteMouseUp(vbody, (r) => quoteRelPath || (vbody.classList.contains("diff") ? quoteDiffPath(r) : null)));
+$("evDiffBody").addEventListener("mouseup", () => onQuoteMouseUp($("evDiffBody"), quoteDiffPath));
+
+quoteBtn.addEventListener("mousedown", (e) => e.preventDefault()); // 防止点击瞬间清掉选区
+quoteBtn.onclick = () => {
+  if (!quoteSel) { hideQuoteBtn(); return; }
+  const head = quoteSel.path ? quoteSel.path + (quoteSel.line ? ":" + quoteSel.line : "") + "\n" : "";
+  const inp = $("input");
+  inp.value = (inp.value ? inp.value.replace(/\n*$/, "\n") : "") + head + "```\n" + quoteSel.text + "\n```\n";
+  inp.focus();
+  inp.setSelectionRange(inp.value.length, inp.value.length);
+  inp.dispatchEvent(new Event("input")); // 触发输入框自适应高度等既有逻辑
+  window.getSelection()?.removeAllRanges();
+  hideQuoteBtn();
+};
+// 点别处 / 滚动时收起
+document.addEventListener("mousedown", (e) => { if (e.target !== quoteBtn) hideQuoteBtn(); });
+vbody.addEventListener("scroll", hideQuoteBtn);
+$("evDiffBody").addEventListener("scroll", hideQuoteBtn);
 
 // ── Git 面板：仓库行 + 分支下拉 + 提交图 ───────────────────
 function esc(s) {
@@ -822,6 +903,7 @@ async function openDiff(file, staged, untracked) {
   const r = await window.api.gitDiff(activeRepo, file, staged);
   showViewer((staged ? tr("[已暂存] ") : untracked ? tr("[新文件] ") : "") + file);
   useBody("diff");
+  quoteRelPath = file;
   vbody.innerHTML = diffToHtml((r && r.diff) || r?.error || tr("(无差异)"));
 }
 
@@ -845,6 +927,7 @@ function diffToHtml(diff) {
 async function openCommit(c) {
   showViewer(c.short + "  " + c.subject);
   useBody("");
+  quoteRelPath = null;
   vbody.innerHTML = `<div style="color:var(--muted);font-size:12px;margin-bottom:8px">${esc(c.short)} · ${tr("加载中…")}</div>`;
   const r = await window.api.gitCommitFiles(activeRepo, c.full);
   const files = (r && r.files) || [];
@@ -869,6 +952,7 @@ async function openCommitDiff(c, file) {
   const r = await window.api.gitCommitDiff(activeRepo, c.full, file);
   showViewer(c.short + "  " + file);
   useBody("diff");
+  quoteRelPath = file;
   vbody.innerHTML = "";
   const back = document.createElement("div");
   back.textContent = tr("← 返回文件列表");

@@ -1,4 +1,4 @@
-# Claude Tools
+# 自进化 dev Tool
 
 基于 Claude Agent SDK 的桌面 App（仿 Claude Code 插件）：多对话并行、完整 Source Control、PDF/MD/Mermaid 查看与编辑、附件、自进化等。
 
