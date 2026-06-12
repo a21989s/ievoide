@@ -3,5 +3,6 @@
   "permissionMode": "bypassPermissions",
   "model": "claude-fable-5",
   "maxThinkingTokens": 8192,
-  "evolveModel": null
+  "evolveModel": null,
+  "planModel": null
 }

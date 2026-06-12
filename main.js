@@ -72,6 +72,9 @@ const DEFAULT_CONFIG = {
   // 进化/巡检专用模型。null=跟随 model。持续进化是个无人值守的循环、token 大户，
   // 配个便宜模型（如 claude-sonnet-4-6）可大幅降低消耗，对话仍用主力模型
   evolveModel: null,
+  // 计划模式专用模型。null=跟随 model（默认不改变现有行为）。plan 轮被 SDK 强制只读，
+  // 用户可自主降档（如 haiku）省钱；「✅ 按计划执行」的执行轮仍用主力模型，绝不自动降级
+  planModel: null,
   // 进化改完后是否立即重启/重载来生效。默认 false：不打断进化循环——主进程改动
   // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
   evolveAutoRestart: false,
@@ -865,7 +868,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan }) => {
           preset: "claude_code",
           append: appConfig.systemPromptAppend || "",
         },
-        ...(appConfig.model ? { model: appConfig.model } : {}),
+        // plan 轮只读规划，可用 planModel 降档省钱；执行轮（plan=false）仍用主力模型
+        ...(((plan && appConfig.planModel) || appConfig.model) ? { model: (plan && appConfig.planModel) || appConfig.model } : {}),
         ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
         ...(mcpServers ? { mcpServers } : {}),
         abortController: abort,
@@ -1086,6 +1090,7 @@ ipcMain.handle("getConfig", () => ({
   evolveAutoRestart: !!appConfig.evolveAutoRestart,
   maxThinkingTokens: appConfig.maxThinkingTokens || null,
   evolveModel: appConfig.evolveModel || null,
+  planModel: appConfig.planModel || null,
 }));
 ipcMain.handle("setConfig", (_e, patch) => {
   patch = patch || {};
@@ -1096,6 +1101,8 @@ ipcMain.handle("setConfig", (_e, patch) => {
     appConfig.maxThinkingTokens = patch.maxThinkingTokens > 0 ? Math.floor(patch.maxThinkingTokens) : null;
   if (patch.evolveModel === null || typeof patch.evolveModel === "string")
     appConfig.evolveModel = patch.evolveModel || null;
+  if (patch.planModel === null || typeof patch.planModel === "string")
+    appConfig.planModel = patch.planModel || null;
   try {
     const file = path.join(TOOLS_DIR, "config.json");
     let cur = {};
@@ -1107,6 +1114,7 @@ ipcMain.handle("setConfig", (_e, patch) => {
       evolveAutoRestart: appConfig.evolveAutoRestart,
       maxThinkingTokens: appConfig.maxThinkingTokens,
       evolveModel: appConfig.evolveModel,
+      planModel: appConfig.planModel,
     }, null, 2));
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
   return { ok: true };

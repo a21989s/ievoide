@@ -2829,6 +2829,7 @@ $("settingsBtn").onclick = async () => {
     const c = await window.api.getConfig();
     $("setPrompt").value = c.systemPromptAppend || "";
     $("setPerm").value = c.permissionMode || "bypassPermissions";
+    $("setPlanModel").value = c.planModel || "";
     $("setAutoRestart").checked = !!c.evolveAutoRestart;
   } catch {}
   $("setMsg").textContent = "";
@@ -2840,6 +2841,7 @@ $("setSave").onclick = async () => {
   const r = await window.api.setConfig({
     systemPromptAppend: $("setPrompt").value,
     permissionMode: $("setPerm").value,
+    planModel: $("setPlanModel").value || null,
     evolveAutoRestart: $("setAutoRestart").checked,
   });
   if (r && r.ok) {
