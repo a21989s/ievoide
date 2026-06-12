@@ -3060,6 +3060,92 @@ $("mcpSave").onclick = async () => {
   $("mcpMsg").style.color = r.ok ? "#3ad07a" : "#d85a5a";
   if (r.ok) renderMcp();
 };
+// 常用 server 模板：点选合并写入 mcp.json，免手写 JSON（复用 mcpSave 校验）
+const MCP_TEMPLATES = [
+  { name: "filesystem", desc: "本地文件读写", cfg: { command: "npx", args: ["-y", "@modelcontextprotocol/server-filesystem", "{dir}"] },
+    inputs: [{ key: "{dir}", label: "允许访问的目录", def: "C:\\" }] },
+  { name: "github", desc: "GitHub 仓库 / issue / PR", cfg: { command: "npx", args: ["-y", "@modelcontextprotocol/server-github"], env: { GITHUB_PERSONAL_ACCESS_TOKEN: "{token}" } },
+    inputs: [{ key: "{token}", label: "GitHub Personal Access Token", def: "" }] },
+  { name: "fetch", desc: "抓取网页转 Markdown（需已安装 uv）", cfg: { command: "uvx", args: ["mcp-server-fetch"] } },
+  { name: "playwright", desc: "浏览器自动化与网页测试", cfg: { command: "npx", args: ["-y", "@playwright/mcp@latest"] } },
+  { name: "memory", desc: "知识图谱长期记忆", cfg: { command: "npx", args: ["-y", "@modelcontextprotocol/server-memory"] } },
+  { name: "sequential-thinking", desc: "分步推理规划", cfg: { command: "npx", args: ["-y", "@modelcontextprotocol/server-sequential-thinking"] } },
+  { name: "context7", desc: "最新库文档检索", cfg: { command: "npx", args: ["-y", "@upstash/context7-mcp"] } },
+];
+// 当前 mcp.json 里已有的 server 名（以编辑框文本为准，解析失败按空算）
+function mcpParsedNames() {
+  try { return Object.keys(JSON.parse($("mcpRaw").value).mcpServers || {}); } catch { return []; }
+}
+// 把模板（占位符已替换）合并进 mcp.json 并保存；同名不覆盖
+async function mcpAddFromTpl(tpl, values) {
+  let json;
+  try { json = JSON.parse($("mcpRaw").value || "{}"); } catch { json = {}; }
+  if (!json.mcpServers) json.mcpServers = {};
+  if (json.mcpServers[tpl.name]) {
+    $("mcpMsg").textContent = tr("已存在同名 server，未覆盖");
+    $("mcpMsg").style.color = "#d85a5a";
+    return;
+  }
+  let cfgStr = JSON.stringify(tpl.cfg);
+  for (const inp of tpl.inputs || []) cfgStr = cfgStr.replaceAll(inp.key, values[inp.key]);
+  json.mcpServers[tpl.name] = JSON.parse(cfgStr);
+  const r = await window.api.mcpSave(JSON.stringify(json, null, 2));
+  $("mcpMsg").textContent = r.ok ? tr("已添加 · 新对话生效") : tr("保存失败：") + r.error;
+  $("mcpMsg").style.color = r.ok ? "#3ad07a" : "#d85a5a";
+  if (r.ok) { $("mcpTplPanel").classList.remove("open"); renderMcp(); }
+}
+// 模板列表；带占位符输入的模板点选后先展示填写表单
+function renderMcpTpls() {
+  const panel = $("mcpTplPanel");
+  panel.innerHTML = "";
+  const existing = mcpParsedNames();
+  for (const tpl of MCP_TEMPLATES) {
+    const added = existing.includes(tpl.name);
+    const row = document.createElement("div");
+    row.className = "mcp-tpl-row" + (added ? " added" : "");
+    row.innerHTML = `<span class="mcp-tpl-name">${esc(tpl.name)}</span><span class="mcp-tpl-desc">${tr(tpl.desc)}${added ? " · " + tr("已添加") : ""}</span>`;
+    if (!added) row.onclick = () => {
+      if (!tpl.inputs) return mcpAddFromTpl(tpl, {});
+      panel.innerHTML = "";
+      const form = document.createElement("div");
+      form.className = "mcp-tpl-form";
+      const fields = tpl.inputs.map((inp) => {
+        const lab = document.createElement("label");
+        lab.textContent = `${tpl.name} · ${tr(inp.label)}`;
+        const input = document.createElement("input");
+        input.value = inp.def;
+        input.placeholder = tr(inp.label);
+        form.append(lab, input);
+        return { inp, input };
+      });
+      const btns = document.createElement("div");
+      btns.className = "btns";
+      const cancel = document.createElement("button");
+      cancel.textContent = tr("返回");
+      cancel.onclick = renderMcpTpls;
+      const ok = document.createElement("button");
+      ok.className = "ok";
+      ok.textContent = tr("添加");
+      ok.onclick = () => {
+        const values = {};
+        for (const f of fields) {
+          if (!f.input.value.trim()) return f.input.focus();
+          values[f.inp.key] = f.input.value.trim();
+        }
+        mcpAddFromTpl(tpl, values);
+      };
+      btns.append(cancel, ok);
+      form.appendChild(btns);
+      panel.appendChild(form);
+      fields[0].input.focus();
+    };
+    panel.appendChild(row);
+  }
+}
+$("mcpAddTpl").onclick = () => {
+  const panel = $("mcpTplPanel");
+  if (panel.classList.toggle("open")) renderMcpTpls();
+};
 // 连接状态随对话初始化更新：面板开着就刷新一下圆点
 window.api.on("mcp:status", () => { if ($("mcpModal").classList.contains("open")) renderMcp(); });
 

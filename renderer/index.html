@@ -547,9 +547,25 @@
       .mcp-edit-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; opacity: .8; }
       #mcpMsg { font-size: 11px; }
       #mcpRaw { width: 100%; box-sizing: border-box; min-height: 120px; resize: vertical; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-family: monospace; font-size: 12px; outline: none; }
-      .mcp-edit-row { display: flex; justify-content: flex-end; }
+      .mcp-edit-row { display: flex; justify-content: space-between; align-items: center; }
       #mcpSave { padding: 5px 16px; border: 1px solid var(--border); border-radius: 6px; background: var(--accent); color: #fff; cursor: pointer; }
       #mcpSave:hover { opacity: .9; }
+      #mcpAddTpl { padding: 5px 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; font-size: 12px; }
+      #mcpAddTpl:hover { background: rgba(127,127,127,.15); }
+      #mcpTplPanel { display: none; border: 1px solid var(--border); border-radius: 6px; max-height: 30vh; overflow-y: auto; }
+      #mcpTplPanel.open { display: block; }
+      .mcp-tpl-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; cursor: pointer; border-bottom: 1px solid var(--border); }
+      .mcp-tpl-row:last-child { border-bottom: none; }
+      .mcp-tpl-row:hover { background: rgba(127,127,127,.1); }
+      .mcp-tpl-row.added { opacity: .45; cursor: default; }
+      .mcp-tpl-name { font-size: 13px; flex: none; }
+      .mcp-tpl-desc { font-size: 11px; opacity: .55; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .mcp-tpl-form { padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+      .mcp-tpl-form label { font-size: 12px; opacity: .8; }
+      .mcp-tpl-form input { padding: 6px 8px; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; outline: none; font-size: 12px; }
+      .mcp-tpl-form .btns { display: flex; justify-content: flex-end; gap: 8px; }
+      .mcp-tpl-form .btns button { padding: 4px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--fg); cursor: pointer; font-size: 12px; }
+      .mcp-tpl-form .btns button.ok { background: var(--accent); color: #fff; }
       #mobBody { padding: 14px 16px; }
       #mobBody .mob-tip { font-size: 12px; color: var(--muted, #999); line-height: 1.5; margin: 0 0 12px; }
       #mobBody .mob-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
@@ -924,7 +940,8 @@
         <div id="mcpEditWrap">
           <div class="mcp-edit-head"><span data-i18n="编辑 mcp.json">编辑 mcp.json</span><span id="mcpMsg"></span></div>
           <textarea id="mcpRaw" spellcheck="false" data-i18n-ph='{ "mcpServers": { "name": { "command": "npx", "args": ["-y", "pkg"] } } }' placeholder='{ "mcpServers": { "name": { "command": "npx", "args": ["-y", "pkg"] } } }'></textarea>
-          <div class="mcp-edit-row"><button id="mcpSave" data-i18n="保存">保存</button></div>
+          <div id="mcpTplPanel"></div>
+          <div class="mcp-edit-row"><button id="mcpAddTpl" data-i18n="＋ 添加常用 server">＋ 添加常用 server</button><button id="mcpSave" data-i18n="保存">保存</button></div>
         </div>
       </div>
     </div>
