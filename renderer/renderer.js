@@ -3108,6 +3108,13 @@ async function loadBacklog() {
 // 解决一条优化项：标记 doing → 进化 → 据结果标记 done/skipped
 async function solveBacklogItem(it) {
   if (evolveBusy) return;
+  // 防误点重复消费：已在进行或已完成的条目再点，先确认——一次进化是完整 agent 会话，
+  // 重跑同一条等于白烧一遍 token（曾因重复点击把同一需求实现两遍）
+  if (it.status === "doing" || it.status === "done") {
+    const ok = await modalConfirm(trf("「{0}」已{1}，确定要重新进化一次吗？（会重新消耗 token）",
+      it.title, it.status === "done" ? tr("完成") : tr("在进行中")));
+    if (!ok) return;
+  }
   await window.api.updateEvolveBacklog(it.id, { status: "doing" });
   loadBacklog();
   const r = await runEvolve(it.requirement);

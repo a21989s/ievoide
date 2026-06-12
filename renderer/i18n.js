@@ -30,6 +30,10 @@
       "⏸ 5-hour window usage reached {0}% — continuous evolve paused for {1} min (saving quota for chat)",
     "⏸ 配额逼近上限，跳过本次自动修错": "⏸ Quota near limit — skipping this auto-fix",
     "⏸ 配额逼近上限，定期自检推迟 {0} 分钟": "⏸ Quota near limit — periodic self-check postponed {0} min",
+    "「{0}」已{1}，确定要重新进化一次吗？（会重新消耗 token）":
+      "“{0}” is already {1}. Re-run evolution on it? (will spend tokens again)",
+    "完成": "done",
+    "在进行中": "in progress",
     "快捷键速查（按 ? 打开）": "Keyboard shortcuts (press ?)",
     "⌨️ 快捷键速查": "⌨️ Keyboard Shortcuts",
     "全局": "Global",
