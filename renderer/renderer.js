@@ -1604,26 +1604,25 @@ function updateConvEstCost() {
   const convModel = (activeConv && activeConv._convModel) || "";
   const globalModel = ($("modelSelect") && $("modelSelect").value) || "";
   const effectiveModel = convModel || globalModel;
-  const inPrice = CONV_MODEL_PRICE[effectiveModel];
-  const outPrice = CONV_MODEL_OUT_PRICE[effectiveModel];
-  if (!inPrice) {
-    if (estEl) estEl.remove();
-    return;
-  }
+  const inPrice = CONV_MODEL_PRICE[effectiveModel] ?? 0;
+  const outPrice = CONV_MODEL_OUT_PRICE[effectiveModel] ?? 0;
   const inputTxt = ($("input") && $("input").value) || "";
   const inputTokens = Math.round(inputTxt.length / 4);
   const ctxTokens = (activeConv && activeConv.ctx) || 0;
   const totalInTokens = ctxTokens + inputTokens;
   // 输出侧粗估：按历史平均 500 tokens/回复
   const estOutTokens = 500;
-  const estUsd = (totalInTokens / 1e6) * inPrice + (estOutTokens / 1e6) * (outPrice || inPrice * 5);
+  const estUsd = inPrice > 0
+    ? (totalInTokens / 1e6) * inPrice + (estOutTokens / 1e6) * (outPrice || inPrice * 5)
+    : 0;
   if (!estEl) {
     estEl = document.createElement("span");
     estEl.id = "convEstCost";
     readout.parentElement.insertBefore(estEl, readout);
   }
   const totalK = totalInTokens >= 1000 ? `${(totalInTokens / 1000).toFixed(1)}k` : `${totalInTokens}`;
-  estEl.textContent = `发送 ≈${totalK} tok · $${estUsd < 0.001 ? "<0.001" : estUsd.toFixed(3)}`;
+  const costStr = inPrice === 0 ? "—" : (estUsd < 0.001 ? "<$0.001" : `$${estUsd.toFixed(3)}`);
+  estEl.textContent = `发送 ≈${totalK} tok · ${costStr}`;
   const modelLabel = effectiveModel || "默认";
   estEl.title =
     `上下文 ${ctxTokens.toLocaleString()} + 输入 ${inputTokens.toLocaleString()} = ${totalInTokens.toLocaleString()} tokens（输入侧）\n` +
