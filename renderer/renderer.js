@@ -1748,10 +1748,17 @@ function renderCostReadout() {
   const u = c.usage || { in: 0, out: 0, cw: 0, cr: 0 };
   const billed = Math.round(u.in + u.out + u.cw * 1.25 + u.cr * 0.1) || c.tokens;
   const big = c.ctx >= CTX_WARN;
-  el.textContent =
+  const pct = c.ctx ? Math.min(100, Math.round(c.ctx / CTX_AUTOCOMPACT * 100)) : 0;
+  const barHtml = c.ctx
+    ? `<span class="ctx-bar-wrap" title=""><span class="ctx-bar-fill${big ? " warn" : ""}" style="width:${pct}%"></span></span>`
+    : "";
+  el.innerHTML =
+    barHtml +
+    `<span>` +
     (big ? "⚠ " : "") +
     (c.ctx ? trf("上下文 {0} · ", fmtTokens(c.ctx)) : "") +
-    `${fmtTokens(billed)} tok · $${c.costUsd.toFixed(4)}`;
+    `${fmtTokens(billed)} tok · $${c.costUsd.toFixed(4)}` +
+    `</span>`;
   el.title =
     trf("当前上下文：约 {0} tokens（每轮都会随请求整体重发，是消耗的主因）", (c.ctx || 0).toLocaleString()) +
     "\n" +
