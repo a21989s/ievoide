@@ -1407,6 +1407,13 @@ function recordCost(source, usage, costUsd) {
   clearTimeout(costSaveTimer);
   costSaveTimer = setTimeout(() => { fs.writeFile(costStatsPath(), JSON.stringify(s)).catch(() => {}); }, 1500);
 }
+function flushCostStats() {
+  if (!costStats || !costSaveTimer) return;
+  clearTimeout(costSaveTimer);
+  costSaveTimer = null;
+  try { fsSync.writeFileSync(costStatsPath(), JSON.stringify(costStats)); } catch {}
+}
+app.on("before-quit", flushCostStats);
 ipcMain.handle("costStats", () => loadCostStats().days);
 
 // ── 活动日志：按轮次记录详细执行信息，用于分析 token 效率与工具使用模式 ──────
