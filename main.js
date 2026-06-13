@@ -525,8 +525,12 @@ ipcMain.handle("saveConvs", async (_e, data) => {
     // 原子写：先写临时文件再 rename 覆盖，避免写到一半被中断导致正式文件截断损坏
     const target = convFile();
     const tmp = `${target}.${process.pid}.tmp`;
-    await fs.writeFile(tmp, JSON.stringify(data));
-    await fs.rename(tmp, target);
+    try {
+      await fs.writeFile(tmp, JSON.stringify(data));
+      await fs.rename(tmp, target);
+    } finally {
+      fs.unlink(tmp).catch(() => {});
+    }
     return { ok: true };
   } catch (err) {
     return { error: String(err) };
@@ -801,13 +805,15 @@ ipcMain.handle("readWorkdirFile", async (_e, relPath) => {
 
 // ── 文本写回（md 编辑器用）：写临时文件后原子重命名，避免中途崩溃损坏原文件 ──
 ipcMain.handle("writeFile", async (_e, filePath, content) => {
+  const tmp = `${filePath}.${process.pid}.tmp`;
   try {
-    const tmp = `${filePath}.${process.pid}.tmp`;
     await fs.writeFile(tmp, content, "utf8");
     await fs.rename(tmp, filePath);
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err) };
+  } finally {
+    fs.unlink(tmp).catch(() => {});
   }
 });
 
@@ -899,13 +905,15 @@ ipcMain.handle("saveTextFile", async (_e, { defaultName, content }) => {
     filters: [{ name: "Markdown", extensions: ["md"] }, { name: "All Files", extensions: ["*"] }],
   });
   if (r.canceled || !r.filePath) return { canceled: true };
+  const tmp = `${r.filePath}.${process.pid}.tmp`;
   try {
-    const tmp = `${r.filePath}.${process.pid}.tmp`;
     await fs.writeFile(tmp, content, "utf8");
     await fs.rename(tmp, r.filePath);
     return { path: r.filePath };
   } catch (err) {
     return { error: String(err) };
+  } finally {
+    fs.unlink(tmp).catch(() => {});
   }
 });
 
