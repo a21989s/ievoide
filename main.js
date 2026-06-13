@@ -97,6 +97,8 @@ const DEFAULT_CONFIG = {
   // 每日硬性消费上限（美元）。null/0=不限。每次 send() 前检查当日累计费用，
   // 超限则直接拦截（不发 API 请求）并在对话框弹警告。
   maxDailySpendUSD: null,
+  // 单次进化最大输出 token 上限。null=不限。防止复杂多文件重构一次烧光日预算。
+  evolveMaxTokens: null,
   // 进化改完后是否立即重启/重载来生效。默认 false：不打断进化循环——主进程改动
   // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
   evolveAutoRestart: false,
@@ -1469,6 +1471,7 @@ ipcMain.handle("getConfig", () => ({
   lightModel: appConfig.lightModel || null,
   dailyBudgetUsd: appConfig.dailyBudgetUsd || null,
   maxDailySpendUSD: appConfig.maxDailySpendUSD || null,
+  evolveMaxTokens: appConfig.evolveMaxTokens || null,
 }));
 ipcMain.handle("setConfig", (_e, patch) => {
   patch = patch || {};
@@ -1489,6 +1492,8 @@ ipcMain.handle("setConfig", (_e, patch) => {
   }
   if (patch.maxDailySpendUSD === null || typeof patch.maxDailySpendUSD === "number")
     appConfig.maxDailySpendUSD = patch.maxDailySpendUSD > 0 ? patch.maxDailySpendUSD : null;
+  if (patch.evolveMaxTokens === null || typeof patch.evolveMaxTokens === "number")
+    appConfig.evolveMaxTokens = patch.evolveMaxTokens > 0 ? Math.floor(patch.evolveMaxTokens) : null;
   try {
     const file = path.join(TOOLS_DIR, "config.json");
     let cur = {};
@@ -1504,6 +1509,7 @@ ipcMain.handle("setConfig", (_e, patch) => {
       lightModel: appConfig.lightModel,
       dailyBudgetUsd: appConfig.dailyBudgetUsd,
       maxDailySpendUSD: appConfig.maxDailySpendUSD,
+      evolveMaxTokens: appConfig.evolveMaxTokens,
     }, null, 2));
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
   return { ok: true };
@@ -1969,7 +1975,7 @@ ipcMain.on("evolveAlive", () => {
   }
 });
 
-ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory }) => {
+ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory, evolveMaxTokens: payloadMaxTokens }) => {
   if (evolving) return { error: "已有进化在进行中" };
   if (!requirement || !requirement.trim()) return { error: "需求为空" };
   // 硬性每日消费上限：与 chat handler 保持一致，超限直接拦截
@@ -2056,6 +2062,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory })
         systemPrompt: { type: "preset", preset: "claude_code", append: (projectMemory ? "# 项目记忆\n" + projectMemory + "\n\n" : "") + (evolveAppend || "") + LOCAL_EVOLVE_PERSONA },
         ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
         ...tokenOpts(appConfig),
+        ...(() => { const mt = payloadMaxTokens > 0 ? Math.floor(payloadMaxTokens) : (appConfig.evolveMaxTokens || null); return mt ? { maxTokens: mt } : {}; })(),
         abortController: abort,
       },
     });

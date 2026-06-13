@@ -3597,6 +3597,7 @@ $("settingsBtn").onclick = async () => {
     $("setPlanModel").value = c.planModel || "";
     $("setBudget").value = c.dailyBudgetUsd ?? "";
     $("setMaxSpend").value = c.maxDailySpendUSD ?? "";
+    $("setEvolveMaxTokens").value = c.evolveMaxTokens ?? "";
     $("setAutoRestart").checked = !!c.evolveAutoRestart;
   } catch {}
   $("setMsg").textContent = "";
@@ -3613,6 +3614,7 @@ $("setSave").onclick = async () => {
     planModel: $("setPlanModel").value || null,
     dailyBudgetUsd: parseFloat($("setBudget").value) > 0 ? parseFloat($("setBudget").value) : null,
     maxDailySpendUSD: parseFloat($("setMaxSpend").value) > 0 ? parseFloat($("setMaxSpend").value) : null,
+    evolveMaxTokens: parseInt($("setEvolveMaxTokens").value) > 0 ? parseInt($("setEvolveMaxTokens").value) : null,
     evolveAutoRestart: $("setAutoRestart").checked,
   });
   if (r && r.ok) {
@@ -3890,7 +3892,8 @@ async function runEvolve(requirement) {
   evolveAttachments = [];
   renderAttachments();
   evLog("▶ " + requirement + (scopeGlob ? "\n🔒 限定文件：" + scopeGlob : "") + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
-  const r = await window.api.evolve({ requirement: effectiveReq, attachments, projectMemory: getProjectMemory() });
+  const _evolveMaxTokensVal = parseInt($("setEvolveMaxTokens")?.value);
+  const r = await window.api.evolve({ requirement: effectiveReq, attachments, projectMemory: getProjectMemory(), ...(_evolveMaxTokensVal > 0 ? { evolveMaxTokens: _evolveMaxTokensVal } : {}) });
   // evolve:done 事件通常会兜底设状态；但无改动等分支不发该事件，这里据返回值兜底，
   // 避免忙状态卡死（也让持续进化能据返回值推进下一条）。relaunch 会重启，无需处理。
   if (!(r && r.relaunch)) setEvolveBusy(false);
