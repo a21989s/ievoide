@@ -670,8 +670,25 @@
       #settingsModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
       #settingsModal.open { display: flex; }
       #settingsModal .box { width: 480px; max-width: 92vw; max-height: 84vh; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
+      #setTabs { display: flex; border-bottom: 1px solid var(--border); padding: 0 12px; flex-shrink: 0; }
+      .set-tab { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font: 12px inherit; padding: 8px 12px; cursor: pointer; border-radius: 0; margin-bottom: -1px; }
+      .set-tab:hover { color: var(--fg); }
+      .set-tab.active { color: var(--fg); border-bottom-color: var(--accent); }
       #setBody { padding: 12px 16px 16px; overflow-y: auto; }
+      #setBodyKbd { padding: 12px 16px 16px; overflow-y: auto; display: none; }
+      #setBodyKbd.active { display: block; }
       #setBody .mob-tip { font-size: 12px; color: var(--muted, #999); line-height: 1.5; margin: 0 0 12px; }
+      .hk-table { width: 100%; border-collapse: collapse; }
+      .hk-table th { font-size: 11px; color: var(--muted); font-weight: 600; text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+      .hk-table td { padding: 8px 4px; border-bottom: 1px solid rgba(255,255,255,.04); font-size: 13px; vertical-align: middle; }
+      .hk-cap { display: inline-flex; align-items: center; gap: 4px; min-width: 140px; }
+      .hk-cap kbd { font-family: inherit; font-size: 11px; color: var(--fg); background: #2a2a2a; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 4px; padding: 2px 6px; white-space: nowrap; }
+      .hk-cap .hk-none { font-size: 12px; color: var(--muted); }
+      .hk-rec { font-size: 11px; padding: 3px 8px; border-radius: 4px; background: #2a2a2a; border: 1px solid var(--border); color: var(--fg); cursor: pointer; flex: none; }
+      .hk-rec.recording { background: var(--accent); color: #fff; border-color: var(--accent); animation: hkpulse .6s infinite alternate; }
+      .hk-clr { font-size: 11px; padding: 3px 6px; border-radius: 4px; background: none; border: 1px solid var(--border); color: var(--muted); cursor: pointer; flex: none; }
+      .hk-clr:hover { color: #e5534b; border-color: #e5534b; }
+      @keyframes hkpulse { from { opacity: 1; } to { opacity: .6; } }
       .set-label { display: block; font-size: 12px; opacity: .8; margin: 12px 0 5px; }
       #setPrompt { width: 100%; box-sizing: border-box; resize: vertical; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font-size: 13px; outline: none; }
       .usage.over-budget { color: #e5534b; font-weight: 600; }
@@ -1051,6 +1068,10 @@
     <div id="settingsModal">
       <div class="box">
         <div class="vhead"><span data-i18n="⚙ 设置">⚙ 设置</span><button id="setClose" data-i18n-title="关闭" title="关闭">✕</button></div>
+        <div id="setTabs">
+          <button class="set-tab active" data-settab="general" data-i18n="通用">通用</button>
+          <button class="set-tab" data-settab="kbd" data-i18n="快捷键">快捷键</button>
+        </div>
         <div id="setBody">
           <p class="mob-tip" data-i18n="改动写回 config.json 并即时生效（下一轮对话生效），无需手工编辑源码文件。">改动写回 config.json 并即时生效（下一轮对话生效），无需手工编辑源码文件。</p>
           <label class="set-label" data-i18n="系统提示词追加（每轮对话附加给模型）">系统提示词追加（每轮对话附加给模型）</label>
@@ -1089,6 +1110,13 @@
           <div id="costChart7d" style="padding:6px 8px;background:#1a1200;border:1px solid #3a2800;border-radius:4px;min-height:44px"></div>
           <label class="set-row"><input type="checkbox" id="setAutoRestart" /><span data-i18n="自进化改完后自动重启/重载以生效">自进化改完后自动重启/重载以生效</span></label>
           <div class="set-actions"><span id="setMsg" class="meta"></span><button id="setSave" data-i18n="保存">保存</button></div>
+        </div>
+        <div id="setBodyKbd">
+          <p class="mob-tip" style="font-size:12px;color:var(--muted);margin:0 0 12px;" data-i18n="点击「录制」后按下组合键即可绑定；持久化到本地，无需 API。">点击「录制」后按下组合键即可绑定；持久化到本地，无需 API。</p>
+          <table class="hk-table" id="hkTable">
+            <thead><tr><th data-i18n="动作">动作</th><th data-i18n="当前快捷键">当前快捷键</th><th></th></tr></thead>
+            <tbody id="hkTbody"></tbody>
+          </table>
         </div>
       </div>
     </div>

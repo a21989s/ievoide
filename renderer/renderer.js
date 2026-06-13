@@ -3111,6 +3111,17 @@ $("toggleSidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
 // ── 全局快捷键（向 VSCode 看齐）──────────────────────────────
 // Cmd/Ctrl+B 折叠/展开侧栏；Esc 关闭最上层浮层（预览/弹窗/菜单）
 document.addEventListener("keydown", (e) => {
+  // 用户自定义快捷键（录制模式下由捕获监听器独占，此处跳过）
+  if (!_hkRecording && !e.metaKey) {
+    for (const def of HK_DEFS) {
+      const hk = loadHK()[def.id]; // 只匹配用户显式设置的快捷键，默认值由内置逻辑处理
+      if (hk && hkMatches(hk, e)) {
+        e.preventDefault(); e.stopPropagation();
+        dispatchHKAction(def.id);
+        return;
+      }
+    }
+  }
   // 按 ?（Shift+/）打开快捷键速查；在输入框中输入「?」时不拦截
   if (e.key === "?" && !e.metaKey && !e.ctrlKey && !e.altKey) {
     const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
@@ -3155,6 +3166,7 @@ document.addEventListener("keydown", (e) => {
     // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
     const ev = $("evolveModal");
     if (ev.classList.contains("open") && !ev.classList.contains("docked")) { ev.classList.remove("open"); return; }
+    if ($("settingsModal").classList.contains("open")) { closeSettings(); return; }
     for (const id of ["kbdModal", "historyModal", "mobileModal", "mcpModal", "plibModal"]) {
       if ($(id).classList.contains("open")) { $(id).classList.remove("open"); return; }
     }
@@ -3973,6 +3985,123 @@ async function renderCostChart7d() {
   } catch { if ($("costChart7d")) $("costChart7d").innerHTML = ""; }
 }
 
+// ── 用户自定义快捷键 ──────────────────────────────────────────
+const HK_DEFS = [
+  { id: "new-conv",      label: "新建对话",    def: { ctrl:true,  shift:false, alt:false, key:"n" } },
+  { id: "stop-gen",      label: "停止生成",    def: { ctrl:true,  shift:false, alt:false, key:"." } },
+  { id: "prev-conv",     label: "切换上一对话", def: { ctrl:false, shift:false, alt:true,  key:"ArrowLeft" } },
+  { id: "next-conv",     label: "切换下一对话", def: { ctrl:false, shift:false, alt:true,  key:"ArrowRight" } },
+  { id: "focus-input",   label: "聚焦输入框",  def: { ctrl:true,  shift:false, alt:false, key:"l" } },
+  { id: "open-settings", label: "打开设置",    def: { ctrl:true,  shift:false, alt:false, key:"," } },
+];
+let _userHK = null;
+function loadHK() {
+  if (_userHK) return _userHK;
+  try { _userHK = JSON.parse(localStorage.getItem("userHotkeys") || "{}"); } catch { _userHK = {}; }
+  return _userHK;
+}
+function saveHK() { localStorage.setItem("userHotkeys", JSON.stringify(_userHK || {})); }
+function getHK(id) { const h = loadHK(); return h[id] !== undefined ? h[id] : HK_DEFS.find(d => d.id === id)?.def; }
+function hkLabel(hk) {
+  if (!hk) return null;
+  const parts = [];
+  if (hk.ctrl) parts.push("Ctrl");
+  if (hk.alt) parts.push("Alt");
+  if (hk.shift) parts.push("Shift");
+  const k = hk.key.length === 1 ? hk.key.toUpperCase() : hk.key;
+  parts.push(k);
+  return parts.join("+");
+}
+function dispatchHKAction(id) {
+  if (id === "new-conv") { newConversation(); return true; }
+  if (id === "stop-gen") { if (activeConv?.busy) window.api.stop(activeConv.id); return true; }
+  if (id === "prev-conv") {
+    const idx = conversations.findIndex(c => c.id === activeConv?.id);
+    if (idx > 0) switchConv(conversations[idx - 1].id);
+    return true;
+  }
+  if (id === "next-conv") {
+    const idx = conversations.findIndex(c => c.id === activeConv?.id);
+    if (idx >= 0 && idx < conversations.length - 1) switchConv(conversations[idx + 1].id);
+    return true;
+  }
+  if (id === "focus-input") { $("input").focus(); return true; }
+  if (id === "open-settings") { $("settingsBtn").click(); return true; }
+  return false;
+}
+function hkMatches(hk, e) {
+  if (!hk) return false;
+  const eKey = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+  const hkKey = hk.key.length === 1 ? hk.key.toLowerCase() : hk.key;
+  return eKey === hkKey && !!e.ctrlKey === !!hk.ctrl && !!e.altKey === !!hk.alt && !!e.shiftKey === !!hk.shift && !e.metaKey;
+}
+
+let _hkRecording = null; // { id, rowEl }
+function renderHKRow(def) {
+  const hk = getHK(def.id);
+  const isDefault = !loadHK()[def.id];
+  const lbl = hkLabel(hk);
+  const tr = document.createElement("tr");
+  tr.innerHTML = `
+    <td>${def.label}</td>
+    <td><span class="hk-cap">${lbl ? `<kbd>${lbl}</kbd>${isDefault ? '<span style="font-size:10px;color:var(--muted);margin-left:2px">默认</span>' : ""}` : '<span class="hk-none">未设置</span>'}</span></td>
+    <td style="text-align:right;white-space:nowrap;display:flex;gap:6px;justify-content:flex-end">
+      <button class="hk-rec" data-hkid="${def.id}">录制</button>
+      <button class="hk-clr" data-hkclr="${def.id}" title="恢复默认">✕</button>
+    </td>`;
+  return tr;
+}
+function renderHKTable() {
+  const tbody = $("hkTbody");
+  if (!tbody) return;
+  tbody.innerHTML = "";
+  HK_DEFS.forEach(def => tbody.appendChild(renderHKRow(def)));
+  tbody.querySelectorAll(".hk-rec").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.hkid;
+      if (_hkRecording && _hkRecording.id === id) { _hkRecording = null; btn.textContent = "录制"; btn.classList.remove("recording"); return; }
+      if (_hkRecording) { _hkRecording.btn.textContent = "录制"; _hkRecording.btn.classList.remove("recording"); }
+      _hkRecording = { id, btn };
+      btn.textContent = "按下组合键…";
+      btn.classList.add("recording");
+    };
+  });
+  tbody.querySelectorAll(".hk-clr").forEach(btn => {
+    btn.onclick = () => {
+      const id = btn.dataset.hkclr;
+      delete loadHK()[id];
+      saveHK();
+      renderHKTable();
+    };
+  });
+}
+// 录制模式拦截 keydown
+document.addEventListener("keydown", (e) => {
+  if (!_hkRecording) return;
+  // 忽略纯修饰键
+  if (["Control","Alt","Shift","Meta"].includes(e.key)) return;
+  e.preventDefault(); e.stopPropagation();
+  const hk = { ctrl: e.ctrlKey, alt: e.altKey, shift: e.shiftKey, key: e.key };
+  loadHK()[_hkRecording.id] = hk;
+  saveHK();
+  _hkRecording.btn.textContent = "录制"; _hkRecording.btn.classList.remove("recording");
+  _hkRecording = null;
+  renderHKTable();
+}, true);
+
+// 设置面板 tab 切换
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".set-tab");
+  if (!btn) return;
+  document.querySelectorAll(".set-tab").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  const tab = btn.dataset.settab;
+  $("setBody").style.display = tab === "general" ? "" : "none";
+  const kbdPanel = $("setBodyKbd");
+  if (tab === "kbd") { kbdPanel.classList.add("active"); renderHKTable(); }
+  else kbdPanel.classList.remove("active");
+});
+
 $("settingsBtn").onclick = async () => {
   try {
     const c = await window.api.getConfig();
@@ -3989,8 +4118,15 @@ $("settingsBtn").onclick = async () => {
   $("settingsModal").classList.add("open");
   renderCostChart7d();
 };
-$("setClose").onclick = () => $("settingsModal").classList.remove("open");
-$("settingsModal").onclick = (e) => { if (e.target.id === "settingsModal") $("settingsModal").classList.remove("open"); };
+function closeSettings() {
+  $("settingsModal").classList.remove("open");
+  // 重置 tab 到通用，确保下次打开状态干净
+  document.querySelectorAll(".set-tab").forEach(b => b.classList.toggle("active", b.dataset.settab === "general"));
+  $("setBody").style.display = "";
+  $("setBodyKbd").classList.remove("active");
+}
+$("setClose").onclick = closeSettings;
+$("settingsModal").onclick = (e) => { if (e.target.id === "settingsModal") closeSettings(); };
 $("setSave").onclick = async () => {
   const r = await window.api.setConfig({
     systemPromptAppend: $("setPrompt").value,
@@ -4004,7 +4140,7 @@ $("setSave").onclick = async () => {
   });
   if (r && r.ok) {
     $("setMsg").textContent = tr("✅ 已保存（下一轮对话生效）");
-    setTimeout(() => $("settingsModal").classList.remove("open"), 600);
+    setTimeout(closeSettings, 600);
   } else {
     toast(tr("保存失败：") + (r?.error || tr("未知")), "error");
   }
