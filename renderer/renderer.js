@@ -2279,7 +2279,15 @@ setupDropZone($("inputbar"), addAttachment);
 
 async function send(light = false) {
   const input = $("input");
-  const text = input.value.trim();
+  let text = input.value.trim();
+  // 内置 /review：取 staged diff 拼成代码审查 prompt
+  if (/^\/review\s*$/i.test(text)) {
+    if (!activeRepo) { toast(tr("未选择仓库，无法执行 /review"), "error"); return; }
+    const r = await window.api.gitStagedDiff(activeRepo);
+    if (r.error) { toast(tr("获取 diff 失败：") + r.error, "error"); return; }
+    text = `请审查以下 git diff，列出 bug 和改进点：\n\`\`\`diff\n${r.diff}\n\`\`\``;
+    input.value = text;
+  }
   const atts = pendingAttachments.slice();
   if ((!text && !atts.length) || !activeConv) return;
   const conv = activeConv;
@@ -5205,6 +5213,10 @@ $("plibSearch").oninput = () => renderPromptLib($("plibSearch").value.trim());
 let slashCommands = []; // [{ name, kind: 'command'|'skill'|'agent' }]
 let slashMatches = [];
 let slashSel = 0;
+// 内置指令：始终出现在补全列表中，不依赖 server 推送
+const BUILTIN_SLASH = [
+  { name: "review", kind: "builtin", desc: "审查当前 staged diff，列出 bug 和改进点" },
+];
 // 兼容旧版（纯字符串数组）与对象数组，并接受名字字符串或 {name}
 function normSlash(arr, kind = "command") {
   return (Array.isArray(arr) ? arr : [])
@@ -5215,16 +5227,22 @@ try {
   slashCommands = normSlash(JSON.parse(localStorage.getItem("claudeTools.cmds") || "[]"));
 } catch {}
 
+function allSlashCmds() {
+  // 内置命令排最前，去重（避免 server 也推了同名）
+  const seen = new Set(BUILTIN_SLASH.map((c) => c.name));
+  return [...BUILTIN_SLASH, ...slashCommands.filter((c) => !seen.has(c.name))];
+}
+
 function updateSlash() {
   const popup = $("slashPopup");
   const v = $("input").value;
   const m = /^\/(\S*)$/.exec(v); // 仅当以 / 开头且首词未输完（无空格）
-  if (!m || !slashCommands.length) {
+  if (!m) {
     popup.classList.remove("open");
     return;
   }
   const q = m[1].toLowerCase();
-  slashMatches = slashCommands
+  slashMatches = allSlashCmds()
     .filter((c) => c.name.toLowerCase().includes(q))
     .sort((a, b) => a.name.toLowerCase().indexOf(q) - b.name.toLowerCase().indexOf(q))
     .slice(0, 50);
@@ -5239,7 +5257,7 @@ function updateSlash() {
     el.className = "slash-item";
     el.innerHTML =
       `<span class="cmd">/${esc(c.name)}</span>` +
-      (c.kind !== "command" ? `<span class="kind">${esc(c.kind)}</span>` : "");
+      (c.desc ? `<span class="kind">${esc(c.desc)}</span>` : c.kind !== "command" ? `<span class="kind">${esc(c.kind)}</span>` : "");
     el.onmousedown = (e) => {
       e.preventDefault();
       pickSlash(c);

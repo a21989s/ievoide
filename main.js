@@ -2495,6 +2495,18 @@ ipcMain.handle("gitDiff", async (_e, repo, file, staged) => {
 ipcMain.handle("gitCommit", (_e, repo, message) =>
   gitOp(repo, ["commit", "-m", message])
 );
+// 返回全部 staged diff（无则 fallback 到全部未提交 diff），供 /review 指令使用
+ipcMain.handle("gitStagedDiff", async (_e, repo) => {
+  if (!repo) return { error: "未指定仓库" };
+  try {
+    let { stdout: diff } = await git(["diff", "--cached"], repo);
+    if (!diff.trim())
+      ({ stdout: diff } = await git(["diff", "HEAD"], repo).catch(() => git(["diff"], repo)));
+    return { diff: diff.trim() || "(暂无改动)" };
+  } catch (err) {
+    return { error: String(err?.stderr || err?.message || err).trim() };
+  }
+});
 
 // ── AI 生成提交信息：取 staged diff（无则取全部未提交 diff），SDK 单轮生成一句中文提交信息 ──
 ipcMain.handle("gitGenCommitMsg", async (_e, repo) => {
