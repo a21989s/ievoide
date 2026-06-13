@@ -1159,15 +1159,13 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
   let chatModel = "";    // 本轮实际模型
   const run = async (resumeId) => {
     const CHAT_STREAM_TIMEOUT_MS = (appConfig.chatStreamTimeoutSec ?? 120) * 1000;
-    let watchdog;
-    const resetWatchdog = () => {
-      clearTimeout(watchdog);
-      watchdog = setTimeout(() => {
+    let lastChunkTime = Date.now();
+    const watchdog = setInterval(() => {
+      if (Date.now() - lastChunkTime > CHAT_STREAM_TIMEOUT_MS) {
         timedOut = true;
         try { abort.abort(); } catch {}
-      }, CHAT_STREAM_TIMEOUT_MS);
-    };
-    resetWatchdog();
+      }
+    }, CHAT_STREAM_TIMEOUT_MS);
     const response = query({
       prompt,
       options: {
@@ -1191,7 +1189,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
       },
     });
     try { for await (const msg of response) {
-      resetWatchdog();
+      lastChunkTime = Date.now();
       if (stopped) break; // 已停止：不再转发后续事件（含 chat:done），避免界面被重新锁回忙碌
       if (msg.type === "system" && msg.subtype === "init") {
         lastMcpStatus = msg.mcp_servers || []; // 缓存连接状态供 MCP 面板显示
@@ -1267,7 +1265,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
           checkpoint,
         });
       }
-    } } finally { clearTimeout(watchdog); }
+    } } finally { clearInterval(watchdog); }
   };
 
   try {
