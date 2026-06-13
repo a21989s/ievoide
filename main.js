@@ -599,6 +599,50 @@ const SKIP_DIRS = new Set([
   "node_modules", ".git", "dist", "build", ".next", "__pycache__",
   ".nuxt", ".turbo", ".parcel-cache", "coverage", "out", "target", ".venv", "venv",
 ]);
+
+// ── .aiignore 支持（gitignore 语法子集）──────────────────────
+// 将一条 gitignore 模式编译成 RegExp，供 matchAiIgnore 使用。
+// 支持：前导 / 锚定根目录、** 任意深度、* 同层通配、? 单字符通配、取反 !。
+function compileAiIgnorePattern(rawPattern) {
+  const pattern = rawPattern.trim();
+  if (!pattern || pattern.startsWith("#")) return null;
+  const negate = pattern.startsWith("!");
+  let p = negate ? pattern.slice(1) : pattern;
+  // 末尾 / 表示只匹配目录，去掉斜杠后依然有效（walk 里目录路径不带尾斜杠）
+  if (p.endsWith("/")) p = p.slice(0, -1);
+  // 前导 / 锚定到仓库根；无前导 / 则任意层级均可匹配
+  const anchored = p.startsWith("/");
+  if (anchored) p = p.slice(1);
+  // 将 glob 特殊字符转义后转正则
+  let re = p
+    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // 先转义正则元字符（不含 * ?）
+    .replace(/\\\*\\\*/g, "§DSTAR§")       // 暂存 **
+    .replace(/\*/g, "[^/]*")               // * 匹配同层
+    .replace(/§DSTAR§/g, ".*")            // ** 匹配任意深度
+    .replace(/\?/g, "[^/]");              // ? 匹配单个非斜杠字符
+  re = anchored ? `^${re}(/.*)?$` : `(^|/)${re}(/.*)?$`;
+  try {
+    return { negate, re: new RegExp(re) };
+  } catch {
+    return null;
+  }
+}
+
+// 加载 workdir 下的 .aiignore，返回编译好的规则数组（随文件树缓存同步失效）。
+let aiIgnoreRules = null; // { dir, rules }
+async function loadAiIgnoreRules(dir) {
+  if (aiIgnoreRules && aiIgnoreRules.dir === dir) return aiIgnoreRules.rules;
+  const ignPath = path.join(dir, ".aiignore");
+  let rules = [];
+  try {
+    const text = await fs.readFile(ignPath, "utf8");
+    rules = text.split(/\r?\n/).map(compileAiIgnorePattern).filter(Boolean);
+  } catch {
+    // 没有 .aiignore 文件，直接用空规则
+  }
+  aiIgnoreRules = { dir, rules };
+  return rules;
+}
 ipcMain.handle("listDir", async (_e, dirPath) => {
   const target = dirPath || workdir;
   if (!target) return [];
@@ -640,6 +684,18 @@ async function listWorkdirFiles() {
   fileCache.dirs = null;
   contentCache = new Map(); // 文件树重建时一并失效内容缓存
   contentCacheBytes = 0;
+  // 重建时同步失效 .aiignore 缓存，使规则随文件树刷新
+  if (aiIgnoreRules && aiIgnoreRules.dir !== workdir) aiIgnoreRules = null;
+  const ignRules = await loadAiIgnoreRules(workdir);
+  // 判断相对路径是否被 .aiignore 排除（后声明规则优先，取反规则可重新纳入）
+  function isAiIgnored(rel) {
+    if (!ignRules.length) return false;
+    let ignored = false;
+    for (const { negate, re } of ignRules) {
+      if (re.test(rel)) ignored = !negate;
+    }
+    return ignored;
+  }
   const all = [];
   const dirs = []; // 目录条目，供 @ 补全把整个目录纳入上下文
   const visited = new Set(); // 已访问目录的真实路径，防符号链接自指/环路重复遍历
@@ -665,13 +721,13 @@ async function listWorkdirFiles() {
       if (all.length >= FILE_CACHE_MAX) return;
       if (IGNORE.has(d.name)) continue;
       const full = path.join(dir, d.name);
+      const rel = path.relative(workdir, full).replace(/\\/g, "/");
+      if (isAiIgnored(rel)) continue;
       if (d.isDirectory()) {
         if (SKIP_DIRS.has(d.name)) continue;
-        const rel = path.relative(workdir, full).replace(/\\/g, "/");
         dirs.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
         await walk(full, depth + 1);
       } else {
-        const rel = path.relative(workdir, full).replace(/\\/g, "/");
         all.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
       }
     }
