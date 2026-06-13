@@ -1561,6 +1561,7 @@ function archiveConv(conv) {
     id: conv.id,
     title: conv.title || "新对话",
     sessionId: conv.sessionId || null,
+    cwd: conv.cwd || null,
     html,
     archivedAt: Date.now(),
   });
@@ -1569,7 +1570,8 @@ function archiveConv(conv) {
 function openHistory() {
   $("historyModal").classList.add("open");
   $("histSearch").value = "";
-  renderHistory("");
+  $("histCwdFilter").classList.toggle("active", false);
+  renderHistory("", false);
   $("histSearch").focus();
 }
 function closeHistory() { $("historyModal").classList.remove("open"); }
@@ -1595,13 +1597,22 @@ function histSnippet(text, q) {
     esc(text.slice(start, idx)) + `<mark>${esc(text.slice(idx, idx + q.length))}</mark>` + esc(text.slice(idx + q.length, end)) +
     (end < text.length ? "…" : "");
 }
-function renderHistory(filter) {
+function histShortCwd(cwd) {
+  if (!cwd) return "";
+  // 取最后两段路径作短路径，跨平台兼容 / 和 \
+  const parts = cwd.replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts.length <= 2 ? parts.join("/") : parts.slice(-2).join("/");
+}
+function renderHistory(filter, cwdOnly) {
   const box = $("histList");
   box.innerHTML = "";
   const q = (filter || "").toLowerCase();
-  const items = archived.filter((h) => !q || (h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q) || histPlainText(h).toLowerCase().includes(q));
+  let items = archived.filter((h) => !q || (h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q) || histPlainText(h).toLowerCase().includes(q));
+  if (cwdOnly && currentFolder) {
+    items = items.filter((h) => h.cwd && h.cwd === currentFolder);
+  }
   if (!items.length) {
-    box.innerHTML = `<div class="hist-empty">${q ? tr("无匹配历史") : tr("暂无历史记录")}</div>`;
+    box.innerHTML = `<div class="hist-empty">${cwdOnly ? tr("当前目录无历史记录") : (q ? tr("无匹配历史") : tr("暂无历史记录"))}</div>`;
     return;
   }
   for (const h of items) {
@@ -1611,9 +1622,10 @@ function renderHistory(filter) {
     // 仅正文命中（标题/时间未命中）时展示上下文摘要，帮用户确认是哪段对话
     const titleHit = q && ((h.title || "").toLowerCase().includes(q) || fmtTime(h.archivedAt).toLowerCase().includes(q));
     const snippet = q && !titleHit ? histSnippet(histPlainText(h), q) : "";
+    const cwdPart = h.cwd ? `<span class="hist-cwd" title="${esc(h.cwd)}">${esc(histShortCwd(h.cwd))}</span>` : "";
     row.innerHTML =
       `<div class="hist-main"><div class="hist-title">${title}</div>` +
-      `<div class="hist-meta">${fmtTime(h.archivedAt)}${h.sessionId ? `<span class="hist-badge">${tr("可续聊")}</span>` : ""}</div>` +
+      `<div class="hist-meta">${fmtTime(h.archivedAt)}${cwdPart}${h.sessionId ? `<span class="hist-badge">${tr("可续聊")}</span>` : ""}</div>` +
       (snippet ? `<div class="hist-snippet">${snippet}</div>` : "") + `</div>` +
       `<button class="hist-open">${tr("打开")}</button><button class="hist-del" title="${tr("删除")}">×</button>`;
     row.querySelector(".hist-open").onclick = () => restoreFromHistory(h.id);
@@ -1639,7 +1651,7 @@ function deleteFromHistory(id) {
   histTextCache.delete(id);
   removedIds.add(id); // 防止从共享文件合并复活
   persistConvs();
-  renderHistory($("histSearch").value || "");
+  renderHistory($("histSearch").value || "", $("histCwdFilter").classList.contains("active"));
 }
 
 // 紧凑显示 token 数：1234→1.2k、1234567→1.2M
@@ -3147,7 +3159,11 @@ $("setSave").onclick = async () => {
 $("historyBtn").onclick = openHistory;
 $("histClose").onclick = closeHistory;
 $("historyModal").onclick = (e) => { if (e.target.id === "historyModal") closeHistory(); };
-$("histSearch").oninput = (e) => renderHistory(e.target.value);
+$("histSearch").oninput = (e) => renderHistory(e.target.value, $("histCwdFilter").classList.contains("active"));
+$("histCwdFilter").onclick = () => {
+  $("histCwdFilter").classList.toggle("active");
+  renderHistory($("histSearch").value || "", $("histCwdFilter").classList.contains("active"));
+};
 $("mobToggle").onclick = async () => {
   const cur = await window.api.mobileStatus();
   $("mobToggle").disabled = true;

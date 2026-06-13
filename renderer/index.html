@@ -500,13 +500,17 @@
       #historyModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
       #historyModal.open { display: flex; }
       #historyModal .box { width: 560px; max-width: 92vw; height: 72%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; display: flex; flex-direction: column; }
-      #histSearch { margin: 10px 12px 6px; padding: 7px 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; outline: none; }
+      #histToolbar { display: flex; align-items: center; gap: 6px; margin: 10px 12px 6px; }
+      #histSearch { flex: 1; padding: 7px 10px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; outline: none; }
+      #histCwdFilter { padding: 5px 10px; font-size: 12px; background: var(--bg); color: var(--muted); border: 1px solid var(--border); border-radius: 6px; cursor: pointer; white-space: nowrap; }
+      #histCwdFilter.active { background: var(--accent, #4a9eff22); color: var(--fg); border-color: var(--accent, #4a9eff); }
       #histList { flex: 1; overflow-y: auto; padding: 4px 8px 10px; }
       .hist-row { display: flex; align-items: center; gap: 8px; padding: 8px 8px; border-radius: 6px; border-bottom: 1px solid var(--border); }
       .hist-row:hover { background: rgba(127,127,127,.08); }
       .hist-main { flex: 1; min-width: 0; }
       .hist-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .hist-meta { font-size: 12px; opacity: .6; margin-top: 2px; }
+      .hist-meta { font-size: 12px; opacity: .6; margin-top: 2px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+      .hist-cwd { font-family: monospace; background: rgba(127,127,127,.12); border-radius: 3px; padding: 0 4px; max-width: 180px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .hist-badge { display: inline-block; margin-left: 6px; padding: 0 6px; font-size: 11px; border-radius: 8px; background: rgba(80,160,90,.18); color: #4caf50; opacity: 1; }
       .hist-snippet { font-size: 12px; opacity: .7; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .hist-snippet mark { background: rgba(230,180,60,.35); color: inherit; border-radius: 2px; padding: 0 1px; }
@@ -948,7 +952,10 @@
     <div id="historyModal">
       <div class="box">
         <div class="vhead"><span data-i18n="🕘 对话历史">🕘 对话历史</span><button id="histClose" data-i18n-title="关闭" title="关闭">✕</button></div>
-        <input id="histSearch" data-i18n-ph="搜索标题或时间…" placeholder="搜索标题或时间…" />
+        <div id="histToolbar">
+          <input id="histSearch" data-i18n-ph="搜索标题或时间…" placeholder="搜索标题或时间…" />
+          <button id="histCwdFilter" data-i18n="当前目录" title="仅显示当前工作目录的对话">当前目录</button>
+        </div>
         <div id="histList"></div>
       </div>
     </div>
