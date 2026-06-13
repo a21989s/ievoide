@@ -2670,6 +2670,12 @@ document.addEventListener("keydown", (e) => {
     const t = e.target, typing = t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
     if (!typing) { e.preventDefault(); toggleKbdHelp(); return; }
   }
+  // Ctrl/Cmd+N：新建对话
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "n") {
+    e.preventDefault();
+    newConversation();
+    return;
+  }
   // Ctrl/Cmd+K：唤起命令面板（集中入口，全局可用，含输入框内）
   // Ctrl/Cmd+P：同一面板（VSCode 肌肉记忆：输入即检索文件名快速打开）
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && (e.key.toLowerCase() === "k" || e.key.toLowerCase() === "p")) {
@@ -2710,6 +2716,7 @@ const KBD_MOD = navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl
 const KBD_SHORTCUTS = [
   ["全局", [
     [["?"], "打开本速查面板"],
+    [[KBD_MOD, "N"], "新建对话"],
     [[KBD_MOD, "K"], "打开命令面板（搜索动作 / 文件 / 快捷技能）"],
     [[KBD_MOD, "P"], "快速打开文件（命令面板）"],
     [[KBD_MOD, "Shift", "F"], "全文搜索文件内容"],
