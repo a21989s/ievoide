@@ -730,6 +730,7 @@ ipcMain.handle("grepFiles", async (_e, query) => {
 // ── 保存粘贴/拖入的附件，返回绝对路径（供对话引用，让 Claude 读取）──
 ipcMain.handle("saveAttachment", async (_e, { name, base64 }) => {
   try {
+    if (base64.length > 80_000_000) return { error: '附件超过约 60 MB 上限，请精简后再上传' };
     const dir = path.join(app.getPath("userData"), "attachments");
     await fs.mkdir(dir, { recursive: true });
     const safe = (name || "file").replace(/[^\w.\-]+/g, "_").slice(-80);
