@@ -35,6 +35,20 @@ function toast(msg, type = "info") {
   const el = document.createElement("div");
   el.className = "toast " + type;
   el.textContent = msg;
+  if (type === "error") {
+    const btn = document.createElement("button");
+    btn.textContent = "复制";
+    btn.style.cssText = "margin-left:8px;padding:1px 6px;font-size:11px;cursor:pointer;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.35);border-radius:3px;color:inherit;flex-shrink:0;";
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      try { await navigator.clipboard.writeText(msg); } catch {}
+      btn.textContent = "✓";
+      setTimeout(() => { btn.textContent = "复制"; }, 1500);
+    };
+    el.style.display = "flex";
+    el.style.alignItems = "center";
+    el.appendChild(btn);
+  }
   box.appendChild(el);
   requestAnimationFrame(() => el.classList.add("show"));
   setTimeout(() => {
