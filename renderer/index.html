@@ -718,12 +718,25 @@
       #modalDialog .md-btns { display: flex; justify-content: flex-end; gap: 8px; }
       #modalDialog .md-btns button { font-size: 13px; padding: 7px 16px; }
       #modalDialog .md-cancel { background: #3a3a3a; color: var(--fg); }
+      /* 最近目录下拉 */
+      #pickWrap { position: relative; display: inline-flex; align-items: center; -webkit-app-region: no-drag; }
+      #pickDropBtn { background: var(--panel); border: 1px solid var(--border); color: var(--muted); padding: 3px 5px; border-radius: 0 4px 4px 0; cursor: pointer; font-size: 10px; line-height: 1; height: 100%; }
+      #pickDropBtn:hover { background: #333; color: var(--fg); }
+      #recentFoldersMenu { position: absolute; top: 100%; left: 0; z-index: 5000; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.5); min-width: 320px; max-width: 520px; overflow: hidden; display: none; }
+      #recentFoldersMenu.open { display: block; }
+      #recentFoldersMenu .rfm-item { padding: 7px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg); display: flex; align-items: center; gap: 8px; }
+      #recentFoldersMenu .rfm-item:hover { background: var(--accent); color: #fff; }
+      #recentFoldersMenu .rfm-item .rfm-del { margin-left: auto; opacity: 0; color: #c33; font-size: 13px; flex-shrink: 0; }
+      #recentFoldersMenu .rfm-item:hover .rfm-del { opacity: 1; }
     </style>
   </head>
   <body>
     <div id="topbar">
       <button id="toggleSidebar" data-i18n-title="折叠/展开左侧栏" title="折叠/展开左侧栏">◧</button>
-      <button id="pick" data-i18n-title="选择文件夹" title="选择文件夹">📁</button>
+      <div id="pickWrap">
+        <button id="pick" data-i18n-title="选择文件夹" title="选择文件夹" style="border-radius:5px 0 0 5px;margin:0">📁</button><button id="pickDropBtn" title="最近目录">▾</button>
+        <div id="recentFoldersMenu"></div>
+      </div>
       <span class="folder" id="folder" data-i18n="未选择目录">未选择目录</span>
       <span class="meta" id="status"></span>
       <span class="usage" id="usage" data-i18n-title="点击刷新用量" title="点击刷新用量">用量…</span>

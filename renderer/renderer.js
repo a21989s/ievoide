@@ -225,10 +225,65 @@ async function openFolderUI(folder) {
   await loadRepos();
 }
 
+// ── 最近目录工具（零 token，纯 localStorage）──────────────────
+const RECENT_FOLDERS_KEY = "claudeTools.recentFolders";
+const RECENT_FOLDERS_MAX = 8;
+function getRecentFolders() {
+  try { return JSON.parse(localStorage.getItem(RECENT_FOLDERS_KEY) || "[]"); } catch { return []; }
+}
+function saveRecentFolder(folder) {
+  const list = getRecentFolders().filter(f => f !== folder);
+  list.unshift(folder);
+  try {
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(list.slice(0, RECENT_FOLDERS_MAX)));
+    localStorage.setItem("claudeTools.folder", folder);
+  } catch {}
+}
+function removeRecentFolder(folder) {
+  const list = getRecentFolders().filter(f => f !== folder);
+  try { localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(list)); } catch {}
+}
+
+function renderRecentFoldersMenu() {
+  const menu = $("recentFoldersMenu");
+  const list = getRecentFolders();
+  if (!list.length) { menu.innerHTML = `<div class="rfm-item" style="color:var(--muted);cursor:default">${tr("暂无最近目录")}</div>`; return; }
+  menu.innerHTML = list.map((f, i) =>
+    `<div class="rfm-item" data-idx="${i}" title="${f}">📂 <span style="flex:1;overflow:hidden;text-overflow:ellipsis">${f}</span><span class="rfm-del" data-del="${i}">✕</span></div>`
+  ).join("");
+  menu.querySelectorAll(".rfm-item").forEach(el => {
+    el.addEventListener("click", async (e) => {
+      const delBtn = e.target.closest("[data-del]");
+      if (delBtn) {
+        e.stopPropagation();
+        const idx = +delBtn.dataset.del;
+        removeRecentFolder(list[idx]);
+        renderRecentFoldersMenu();
+        return;
+      }
+      const idx = +el.dataset.idx;
+      const folder = list[idx];
+      menu.classList.remove("open");
+      const ok = await window.api.setWorkdir(folder);
+      if (ok) { saveRecentFolder(folder); await openFolderUI(folder); }
+      else { removeRecentFolder(folder); toast(tr("目录已不存在：") + folder, "error"); renderRecentFoldersMenu(); }
+    });
+  });
+}
+
+$("pickDropBtn").onclick = (e) => {
+  e.stopPropagation();
+  const menu = $("recentFoldersMenu");
+  const willOpen = !menu.classList.contains("open");
+  menu.classList.toggle("open", willOpen);
+  if (willOpen) renderRecentFoldersMenu();
+};
+document.addEventListener("click", () => $("recentFoldersMenu").classList.remove("open"));
+
 $("pick").onclick = async () => {
   const folder = await window.api.pickFolder();
   if (!folder) return;
-  try { localStorage.setItem("claudeTools.folder", folder); } catch {}
+  saveRecentFolder(folder);
   await openFolderUI(folder);
 };
 
@@ -237,9 +292,9 @@ $("pick").onclick = async () => {
   let folder = null;
   try { folder = localStorage.getItem("claudeTools.folder"); } catch {}
   if (!folder) return;
-  const ok = await window.api.setWorkdir(folder); // 在主进程设回 cwd
+  const ok = await window.api.setWorkdir(folder);
   if (ok) await openFolderUI(folder);
-  else { try { localStorage.removeItem("claudeTools.folder"); } catch {} } // 目录已不存在
+  else { removeRecentFolder(folder); try { localStorage.removeItem("claudeTools.folder"); } catch {} }
 })();
 
 // ── 新建文件 / 新建文件夹：取相对路径，建好后刷新树，.md 自动进编辑 ──
@@ -2636,6 +2691,21 @@ function cmdkBaseCommands() {
     ic: q.icon || "⚡", label: tr(q.label), hint: tr("快捷技能"),
     run: () => runQuickSkill(q),
   }));
+  // 最近目录分组
+  const recentFolders = getRecentFolders();
+  if (recentFolders.length) {
+    cmds.push({ kind: "group", label: tr("最近目录") });
+    recentFolders.forEach((f) => {
+      const short = f.length > 60 ? "…" + f.slice(f.length - 57) : f;
+      cmds.push({ ic: "📂", label: short, hint: tr("切换"), kind: "recent-folder",
+        run: async () => {
+          const ok = await window.api.setWorkdir(f);
+          if (ok) { saveRecentFolder(f); await openFolderUI(f); }
+          else { removeRecentFolder(f); toast(tr("目录已不存在：") + f, "error"); }
+        }
+      });
+    });
+  }
   // 已保存 Prompt 分组
   const saved = getSavedPrompts();
   if (saved.length) {
