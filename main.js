@@ -2031,7 +2031,9 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory })
       push: (text) => {
         steer.queue.push(text);
         log("↳ 调整方向：" + text.split("\n")[0].slice(0, 120));
-        if (steer.wake) { steer.wake(); steer.wake = null; }
+        // 只有 generator 正在 await（wake 非 null）时才唤醒；
+        // 若 wake 为 null 说明 generator 正在运行，queue 里的消息下一轮自然会被消费。
+        if (steer.wake !== null) { const w = steer.wake; steer.wake = null; w(); }
       },
     };
     const inputStream = (async function* () {
