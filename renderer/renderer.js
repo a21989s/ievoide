@@ -3535,6 +3535,47 @@ $("mobileBtn").onclick = async () => {
 $("mobClose").onclick = () => $("mobileModal").classList.remove("open");
 
 // ── 设置面板：把 config.json 的行为项暴露为表单，保存即写回并下一轮生效 ──
+async function renderCostChart7d() {
+  const el = $("costChart7d");
+  if (!el) return;
+  try {
+    const days = await window.api.costStats();
+    const dayKey = (d) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const now = Date.now();
+    const series = [];
+    for (let i = 6; i >= 0; i--) {
+      const key = dayKey(new Date(now - i * 86400000));
+      const rec = days?.[key];
+      series.push({ key, cost: rec ? Object.values(rec).reduce((a, t) => a + t.cost, 0) : 0 });
+    }
+    const maxCost = Math.max(...series.map((s) => s.cost), 0.0001);
+    const W = 220, H = 36, px = 6, py = 4;
+    const pts = series.map((s, i) => ({
+      x: px + i * (W - 2 * px) / 6,
+      y: H - py - (s.cost / maxCost) * (H - 2 * py),
+      cost: s.cost,
+      key: s.key,
+    }));
+    const polyPts = pts.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+    const areaD = `M${pts[0].x.toFixed(1)},${H} ` +
+      pts.map((p) => `L${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") +
+      ` L${pts[pts.length - 1].x.toFixed(1)},${H} Z`;
+    const dots = pts.map((p) =>
+      `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="2.5" fill="${p.cost > 0 ? "#f0a040" : "#444"}">`+
+      `<title>${p.key}: $${p.cost.toFixed(4)}</title></circle>`
+    ).join("");
+    el.innerHTML =
+      `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px;display:block;overflow:visible">` +
+      `<path d="${areaD}" fill="#f0a04018"/>` +
+      `<polyline points="${polyPts}" fill="none" stroke="#f0a040" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>` +
+      dots + `</svg>` +
+      `<div style="display:flex;justify-content:space-between;font-size:10px;color:#555;margin-top:1px;padding:0 2px">` +
+      series.map((s) => `<span title="${s.key}">${s.key.slice(5)}</span>`).join("") +
+      `</div>`;
+  } catch { if ($("costChart7d")) $("costChart7d").innerHTML = ""; }
+}
+
 $("settingsBtn").onclick = async () => {
   try {
     const c = await window.api.getConfig();
@@ -3548,6 +3589,7 @@ $("settingsBtn").onclick = async () => {
   } catch {}
   $("setMsg").textContent = "";
   $("settingsModal").classList.add("open");
+  renderCostChart7d();
 };
 $("setClose").onclick = () => $("settingsModal").classList.remove("open");
 $("settingsModal").onclick = (e) => { if (e.target.id === "settingsModal") $("settingsModal").classList.remove("open"); };

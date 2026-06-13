@@ -1013,6 +1013,8 @@
           <input id="setBudget" type="number" min="0" step="0.5" placeholder="如 5" />
           <label class="set-label" data-i18n="每日消费硬上限（美元，超出则拦截发送不消耗 token；留空=不限制）">每日消费硬上限（美元，超出则拦截发送不消耗 token；留空=不限制）</label>
           <input id="setMaxSpend" type="number" min="0" step="0.5" placeholder="如 10" />
+          <label class="set-label" data-i18n="近 7 天消费趋势（$）">近 7 天消费趋势（$）</label>
+          <div id="costChart7d" style="padding:6px 8px;background:#1a1200;border:1px solid #3a2800;border-radius:4px;min-height:44px"></div>
           <label class="set-row"><input type="checkbox" id="setAutoRestart" /><span data-i18n="自进化改完后自动重启/重载以生效">自进化改完后自动重启/重载以生效</span></label>
           <div class="set-actions"><span id="setMsg" class="meta"></span><button id="setSave" data-i18n="保存">保存</button></div>
         </div>
