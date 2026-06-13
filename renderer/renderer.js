@@ -1063,7 +1063,15 @@ window.api.on("git:changed", (repo) => { if (repo === activeRepo) scAutoRefresh(
 // 低频轮询兜底（监听漏报 / 远端 ahead-behind 变化）
 if (window._scAutoRefreshTimer) clearInterval(window._scAutoRefreshTimer);
 window._scAutoRefreshTimer = setInterval(scAutoRefresh, 10000);
-window.addEventListener("beforeunload", () => clearInterval(window._scAutoRefreshTimer), { once: true });
+window.addEventListener("beforeunload", () => {
+  clearInterval(window._scAutoRefreshTimer);
+  [
+    "git:changed", "convs:changed", "mcp:status", "evolve:backlog", "budget:exceeded",
+    "evolve:log", "evolve:usage", "evolve:done", "evolve:rolledback", "issues:update",
+    "chat:init", "chat:chunk", "chat:tool", "chat:toolresult", "chat:done",
+    "chat:stopped", "chat:error",
+  ].forEach((ch) => window.api.off(ch));
+}, { once: true });
 // 窗口重新获得焦点 / 标签页变可见时立即刷新（切回应用马上同步）
 window.addEventListener("focus", scAutoRefresh);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) scAutoRefresh(); });

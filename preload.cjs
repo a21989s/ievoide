@@ -94,4 +94,5 @@ contextBridge.exposeInMainWorld("api", {
   gitCheckoutCommit: (repo, sha) => ipcRenderer.invoke("gitCheckoutCommit", repo, sha),
   convAutoTitle: (text) => ipcRenderer.invoke("convAutoTitle", text),
   on: (channel, cb) => ipcRenderer.on(channel, (_e, data) => cb(data)),
+  off: (channel) => ipcRenderer.removeAllListeners(channel),
 });
