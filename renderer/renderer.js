@@ -120,6 +120,7 @@ function modalTextarea(title, def = "") {
     ta.style.cssText = "width:100%;min-height:80px;resize:vertical;font-size:13px;padding:6px;box-sizing:border-box;";
     ta.value = def;
     box.appendChild(ta);
+    setTimeout(() => ta.focus(), 50);
     const btns = document.createElement("div");
     btns.className = "md-btns";
     const cancel = document.createElement("button");
