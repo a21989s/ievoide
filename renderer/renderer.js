@@ -3142,7 +3142,7 @@ function cmdkBaseCommands() {
     filtered.forEach((p) => {
       const short = p.text.length > 60 ? p.text.slice(0, 57) + "…" : p.text;
       const tagBadge = p.tag ? ` [${p.tag}]` : "";
-      cmds.push({ ic: "⭐", label: short + tagBadge, hint: tr("插入"), kind: "saved",
+      cmds.push({ ic: "⭐", label: short + tagBadge, hint: tr("插入"), kind: "saved", _promptText: p.text,
         run: () => { $("input").value = p.text; $("input").focus(); $("input").dispatchEvent(new Event("input")); }
       });
       cmds.push({ ic: "🗑", label: short, hint: tr("删除"), kind: "saved-del",
@@ -3163,7 +3163,12 @@ function openCmdk() {
   renderCmdk("");
   $("cmdkInput").focus();
 }
-function closeCmdk() { $("cmdkModal").classList.remove("open"); }
+function closeCmdk() {
+  $("cmdkModal").classList.remove("open");
+  $("cmdkInput").style.display = "";
+  $("cmdkList").style.display = "";
+  const f = $("cmdkVarForm"); f.className = ""; f.innerHTML = "";
+}
 function renderCmdk(q) {
   const ql = q.trim().toLowerCase();
   // 子序列模糊匹配：依次命中查询字符即算匹配
@@ -3245,8 +3250,66 @@ function runCmdk(i, insertOnly = false) {
   const selectables = cmdkItems.filter(it => it.kind !== "group");
   const it = selectables[i];
   if (!it) return;
+  // 变量占位符检测：仅对 saved prompt（插入动作）拦截
+  if (it.kind === "saved" && it._promptText) {
+    const vars = [...new Set([...it._promptText.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1].trim()))];
+    if (vars.length) { showCmdkVarForm(it._promptText, vars); return; }
+  }
   closeCmdk();
   try { it.run(insertOnly); } catch (e) { console.error(e); }
+}
+function showCmdkVarForm(template, vars) {
+  $("cmdkInput").style.display = "none";
+  $("cmdkList").style.display = "none";
+  const form = $("cmdkVarForm");
+  form.innerHTML = "";
+  form.className = "open";
+  const title = document.createElement("div");
+  title.className = "cmdk-var-title";
+  title.textContent = template.length > 80 ? template.slice(0, 77) + "…" : template;
+  form.appendChild(title);
+  const inputs = {};
+  vars.forEach(v => {
+    const row = document.createElement("div");
+    row.className = "cmdk-var-row";
+    const lbl = document.createElement("label");
+    lbl.textContent = v;
+    const inp = document.createElement("input");
+    inp.type = "text"; inp.placeholder = v; inp.autocomplete = "off";
+    row.appendChild(lbl); row.appendChild(inp);
+    form.appendChild(row);
+    inputs[v] = inp;
+  });
+  const actions = document.createElement("div");
+  actions.className = "cmdk-var-actions";
+  const cancelBtn = document.createElement("button");
+  cancelBtn.textContent = tr("取消");
+  cancelBtn.type = "button";
+  cancelBtn.onclick = () => closeCmdk();
+  const confirmBtn = document.createElement("button");
+  confirmBtn.textContent = tr("插入");
+  confirmBtn.type = "button";
+  confirmBtn.className = "primary";
+  const doInsert = () => {
+    let result = template;
+    vars.forEach(v => { result = result.replaceAll(`{{${v}}}`, inputs[v].value); });
+    closeCmdk();
+    $("input").value = result;
+    $("input").focus();
+    $("input").dispatchEvent(new Event("input"));
+  };
+  confirmBtn.onclick = doInsert;
+  actions.appendChild(cancelBtn); actions.appendChild(confirmBtn);
+  form.appendChild(actions);
+  // 首个输入框聚焦；Enter on last → 插入
+  const inpEls = vars.map(v => inputs[v]);
+  inpEls.forEach((el, idx) => {
+    el.addEventListener("keydown", e => {
+      if (e.key === "Enter") { e.preventDefault(); idx < inpEls.length - 1 ? inpEls[idx + 1].focus() : doInsert(); }
+      if (e.key === "Escape") { e.preventDefault(); closeCmdk(); }
+    });
+  });
+  inpEls[0]?.focus();
 }
 $("cmdkInput").addEventListener("input", (e) => renderCmdk(e.target.value));
 $("cmdkInput").addEventListener("keydown", (e) => {

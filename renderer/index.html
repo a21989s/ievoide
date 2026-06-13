@@ -85,6 +85,17 @@
       .sp-chip:hover { background: rgba(255,255,255,.14); color: var(--fg); }
       .sp-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
       .cmdk-tag-filter { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 12px 6px; }
+      /* 变量填充表单（Saved Prompt 含 {{}} 时内联弹出） */
+      #cmdkVarForm { display: none; flex-direction: column; padding: 14px 16px 12px; gap: 10px; overflow-y: auto; }
+      #cmdkVarForm.open { display: flex; }
+      .cmdk-var-title { font-size: 12px; color: var(--muted); margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .cmdk-var-row { display: flex; flex-direction: column; gap: 4px; }
+      .cmdk-var-row label { font-size: 12px; color: var(--muted); }
+      .cmdk-var-row input { background: rgba(255,255,255,.06); border: 1px solid var(--border); border-radius: 6px; color: var(--fg); font: inherit; font-size: 13px; padding: 7px 10px; outline: none; }
+      .cmdk-var-row input:focus { border-color: var(--accent); }
+      .cmdk-var-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+      .cmdk-var-actions button { font: inherit; font-size: 13px; padding: 6px 14px; border-radius: 6px; cursor: pointer; border: 1px solid var(--border); background: rgba(255,255,255,.06); color: var(--fg); }
+      .cmdk-var-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
       /* VSCode 式底部状态栏：分支/同步/改动一目了然，点击直达对应操作 */
       #statusbar { display: flex; align-items: center; height: 24px; padding: 0 4px; background: var(--panel); border-top: 1px solid var(--border); font-size: 11px; color: #9a9a9a; flex: none; user-select: none; }
       #statusbar .sb-item { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 100%; cursor: pointer; white-space: nowrap; }
@@ -1062,6 +1073,7 @@
       <div class="box">
         <input id="cmdkInput" type="text" autocomplete="off" spellcheck="false" data-i18n-ph="搜索动作、文件、快捷技能…（Esc 关闭）" placeholder="搜索动作、文件、快捷技能…（Esc 关闭）" />
         <div id="cmdkList"></div>
+        <div id="cmdkVarForm"></div>
       </div>
     </div>
     <div id="evolveModal">
