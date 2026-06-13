@@ -2878,22 +2878,69 @@ function cmdkSwitchView(view) {
 // ── Saved Prompts（localStorage，零 token）─────────────────────────────
 const SAVED_PROMPTS_KEY = "savedPrompts";
 function getSavedPrompts() {
-  try { return JSON.parse(localStorage.getItem(SAVED_PROMPTS_KEY) || "[]"); } catch { return []; }
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVED_PROMPTS_KEY) || "[]");
+    return raw.map(p => typeof p === "string" ? { text: p, tag: "" } : p);
+  } catch { return []; }
 }
-function savePrompt(text) {
+function savePrompt(text, tag = "") {
   const t = text.trim();
   if (!t) return false;
-  const list = getSavedPrompts().filter(p => p !== t);
-  list.unshift(t);
+  const list = getSavedPrompts().filter(p => p.text !== t);
+  list.unshift({ text: t, tag: (tag || "").trim() });
   localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(list.slice(0, 50)));
   return true;
 }
 function deletePrompt(text) {
-  localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(getSavedPrompts().filter(p => p !== text)));
+  localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(getSavedPrompts().filter(p => p.text !== text)));
 }
-$("savePromptBtn").onclick = () => {
-  const val = $("input").value;
-  if (savePrompt(val)) {
+function savePromptDialog(prefillText) {
+  return new Promise((resolve) => {
+    let ov = $("modalDialog");
+    if (!ov) { ov = document.createElement("div"); ov.id = "modalDialog"; (document.body || document.documentElement).appendChild(ov); }
+    const box = document.createElement("div");
+    box.className = "box";
+    const preview = document.createElement("div");
+    preview.className = "md-msg";
+    preview.style.cssText = "font-size:12px;opacity:.65;margin-bottom:10px;max-height:56px;overflow:hidden;white-space:pre-wrap;word-break:break-all";
+    preview.textContent = prefillText.length > 120 ? prefillText.slice(0, 117) + "…" : prefillText;
+    box.appendChild(preview);
+    const tagInput = document.createElement("input");
+    tagInput.className = "md-input";
+    tagInput.placeholder = tr("标签（可留空，如：代码、文档、进化）");
+    const chipsRow = document.createElement("div");
+    chipsRow.style.cssText = "display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 10px";
+    ["代码", "文档", "进化", "测试", "通用"].forEach(t => {
+      const c = document.createElement("button");
+      c.type = "button"; c.className = "sp-chip"; c.textContent = t;
+      c.onclick = () => {
+        tagInput.value = tagInput.value === t ? "" : t;
+        chipsRow.querySelectorAll(".sp-chip").forEach(x => x.classList.toggle("active", x.textContent === tagInput.value && tagInput.value));
+      };
+      chipsRow.appendChild(c);
+    });
+    tagInput.oninput = () => chipsRow.querySelectorAll(".sp-chip").forEach(x => x.classList.toggle("active", x.textContent === tagInput.value && tagInput.value));
+    box.appendChild(tagInput); box.appendChild(chipsRow);
+    const btns = document.createElement("div"); btns.className = "md-btns";
+    const cancel = document.createElement("button"); cancel.className = "md-cancel"; cancel.textContent = tr("取消");
+    const ok = document.createElement("button"); ok.textContent = tr("保存");
+    btns.appendChild(cancel); btns.appendChild(ok); box.appendChild(btns);
+    const close = (val) => { document.removeEventListener("keydown", onKey, true); ov.classList.remove("open"); ov.innerHTML = ""; resolve(val); };
+    cancel.onclick = () => close(null);
+    ok.onclick = () => close(tagInput.value);
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); cancel.click(); } else if (e.key === "Enter") { e.preventDefault(); ok.click(); } };
+    document.addEventListener("keydown", onKey, true);
+    ov.innerHTML = ""; ov.appendChild(box); ov.classList.add("open");
+    tagInput.focus();
+  });
+}
+let savedPromptsTagFilter = "";
+$("savePromptBtn").onclick = async () => {
+  const val = $("input").value.trim();
+  if (!val) return;
+  const tag = await savePromptDialog(val);
+  if (tag === null) return;
+  if (savePrompt(val, tag)) {
     const btn = $("savePromptBtn");
     btn.textContent = "★"; btn.style.color = "#f5c518";
     setTimeout(() => { btn.textContent = "⭐"; btn.style.color = ""; }, 1200);
@@ -2943,13 +2990,17 @@ function cmdkBaseCommands() {
   const saved = getSavedPrompts();
   if (saved.length) {
     cmds.push({ kind: "group", label: tr("已保存 Prompt") });
-    saved.forEach((p) => {
-      const short = p.length > 60 ? p.slice(0, 57) + "…" : p;
-      cmds.push({ ic: "⭐", label: short, hint: tr("插入"), kind: "saved",
-        run: () => { $("input").value = p; $("input").focus(); $("input").dispatchEvent(new Event("input")); }
+    const tags = [...new Set(saved.map(p => p.tag).filter(Boolean))];
+    if (tags.length) cmds.push({ kind: "tag-filter", tags });
+    const filtered = savedPromptsTagFilter ? saved.filter(p => p.tag === savedPromptsTagFilter) : saved;
+    filtered.forEach((p) => {
+      const short = p.text.length > 60 ? p.text.slice(0, 57) + "…" : p.text;
+      const tagBadge = p.tag ? ` [${p.tag}]` : "";
+      cmds.push({ ic: "⭐", label: short + tagBadge, hint: tr("插入"), kind: "saved",
+        run: () => { $("input").value = p.text; $("input").focus(); $("input").dispatchEvent(new Event("input")); }
       });
       cmds.push({ ic: "🗑", label: short, hint: tr("删除"), kind: "saved-del",
-        run: () => { deletePrompt(p); }
+        run: () => { deletePrompt(p.text); }
       });
     });
   }
@@ -3011,6 +3062,24 @@ function drawCmdk() {
       const el = document.createElement("div");
       el.className = "cmdk-group";
       el.textContent = it.label;
+      list.appendChild(el);
+      return;
+    }
+    if (it.kind === "tag-filter") {
+      const el = document.createElement("div");
+      el.className = "cmdk-tag-filter";
+      const allChip = document.createElement("button");
+      allChip.type = "button"; allChip.className = "sp-chip" + (!savedPromptsTagFilter ? " active" : "");
+      allChip.textContent = tr("全部");
+      allChip.onclick = (e) => { e.stopPropagation(); savedPromptsTagFilter = ""; renderCmdk($("cmdkInput").value); };
+      el.appendChild(allChip);
+      it.tags.forEach(tag => {
+        const c = document.createElement("button");
+        c.type = "button"; c.className = "sp-chip" + (savedPromptsTagFilter === tag ? " active" : "");
+        c.textContent = tag;
+        c.onclick = (e) => { e.stopPropagation(); savedPromptsTagFilter = savedPromptsTagFilter === tag ? "" : tag; renderCmdk($("cmdkInput").value); };
+        el.appendChild(c);
+      });
       list.appendChild(el);
       return;
     }

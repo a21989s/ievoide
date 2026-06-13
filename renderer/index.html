@@ -81,6 +81,10 @@
       .cmdk-group { padding: 4px 12px 2px; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); opacity: .7; user-select: none; margin-top: 4px; }
       #savePromptBtn { position: absolute; right: 6px; bottom: 7px; background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted); padding: 2px 4px; border-radius: 4px; line-height: 1; z-index: 1; }
       #savePromptBtn:hover { color: #f5c518; background: rgba(255,255,255,.06); }
+      .sp-chip { background: rgba(255,255,255,.07); border: 1px solid var(--border); border-radius: 12px; padding: 2px 10px; font-size: 12px; color: var(--muted); cursor: pointer; transition: background .15s, color .15s; white-space: nowrap; }
+      .sp-chip:hover { background: rgba(255,255,255,.14); color: var(--fg); }
+      .sp-chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .cmdk-tag-filter { display: flex; gap: 6px; flex-wrap: wrap; padding: 4px 12px 6px; }
       /* VSCode 式底部状态栏：分支/同步/改动一目了然，点击直达对应操作 */
       #statusbar { display: flex; align-items: center; height: 24px; padding: 0 4px; background: var(--panel); border-top: 1px solid var(--border); font-size: 11px; color: #9a9a9a; flex: none; user-select: none; }
       #statusbar .sb-item { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 100%; cursor: pointer; white-space: nowrap; }
