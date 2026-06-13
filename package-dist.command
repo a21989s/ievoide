@@ -6,8 +6,9 @@ cd "$(dirname "$0")" || exit 1
 NAME="claude-tools-$(date +%Y%m%d-%H%M%S).zip"
 OUT="$HOME/Desktop/$NAME"
 rm -f "$OUT"
+# cloud/ 是闭源的进化大脑云服务（提示词/需求池/key），绝不随分发包外发
 zip -r -q "$OUT" . \
-  -x "node_modules/*" "data/*" "*.log" ".DS_Store" "**/.DS_Store" \
+  -x "node_modules/*" "data/*" "cloud/*" "*.log" ".DS_Store" "**/.DS_Store" \
   || { echo "打包失败"; read -r; exit 1; }
 echo "✅ 已打包到：$OUT"
 echo

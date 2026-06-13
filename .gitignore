@@ -4,3 +4,5 @@ node_modules/
 dist/
 out/
 data/
+cloud/data/
+cloud/keys.json

@@ -1,0 +1,38 @@
+[
+  {
+    "id": 1,
+    "title": "集成终端（应用内跑测试/构建）",
+    "requirement": "在 App 内增加一个终端面板：能执行任意 shell 命令并实时看到 stdout/stderr，与当前对话同屏，命令历史可回溯。来源：https://paddo.dev/blog/claude-code-21-pain-points-addressed/",
+    "severity": "high",
+    "status": "open",
+    "applied": 0,
+    "failed": 0
+  },
+  {
+    "id": 2,
+    "title": "上下文用量可视化指示器",
+    "requirement": "每个对话顶部显示当前上下文占用（token 数 / 占窗口百分比），接近上限时变色提醒，让用户在输出质量劣化前主动压缩或开新会话。来源：https://www.mindstudio.ai/blog/claude-code-desktop-app-features",
+    "severity": "high",
+    "status": "open",
+    "applied": 0,
+    "failed": 0
+  },
+  {
+    "id": 3,
+    "title": "Token 用量与成本透明",
+    "requirement": "每个对话/每轮显示 input/output token 与估算成本，并可查看「本次会话 token 去向」明细（按工具调用/消息拆分）。来源：https://www.faros.ai/blog/best-ai-coding-agents-2026",
+    "severity": "high",
+    "status": "open",
+    "applied": 0,
+    "failed": 0
+  },
+  {
+    "id": 4,
+    "title": "代码块语法高亮",
+    "requirement": "对话里的代码块按语言做语法高亮（轻量实现，避免引重依赖），提升可读性。",
+    "severity": "medium",
+    "status": "open",
+    "applied": 0,
+    "failed": 0
+  }
+]

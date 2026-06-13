@@ -10,6 +10,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { brainEvolveAppend } from "./brain-client.mjs";
 
 const execFileAsync = promisify(execFile);
 const git = (args, cwd) => execFileAsync("git", args, { cwd, maxBuffer: 8 * 1024 * 1024 });
@@ -70,10 +71,9 @@ const authed = (req, url) => (url.searchParams.get("token") || req.headers["x-to
 const convFile = path.join(__dirname, "data", "claude-tools-conversations.json");
 const escHtml = (s) => String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c]));
 
-// 自进化：同一时刻只允许一个进化会话（与桌面端互不串台，各自进程内串行即可）
+// 自进化：同一时刻只允许一个进化会话（与桌面端互不串台，各自进程内串行即可）。
+// 进化提示词不再内置：由大脑服务下发（brain-client，含离线缓存兜底），与桌面端同源。
 let evolving = false;
-const EVOLVE_APPEND =
-  "你正在改进你自己所在的「自进化 dev Tool」，源码就在当前工作目录。结构：main.js=Electron 主进程(所有 IPC/git/SDK 调用)；server.mjs=手机/远程端服务器(SSE 流式)；preload.cjs=contextBridge 暴露 window.api；renderer/index.html+renderer.js=桌面界面；renderer/mobile.html=手机界面；renderer/pdfeditor.js=PDF 编辑器。本产品定位是面向开发与日常文档维护的工具集，进化的总目标是让它更【易用、易组装搭配、简洁】，并且【让程序员的工作越方便越好、越省钱越好】（省钱=减少不必要的 token/API 消耗）。务必：① 改完保证应用能正常启动与加载、不破坏现有功能；② 只改必要文件、与周围代码风格一致；③ 不要运行 npm start 或重启应用（宿主会自动重载/重启并自检）。最后用简体中文一句话说明你改了什么。";
 // 合并客户端快照(incoming)与磁盘当前(disk)，避免 stale 客户端整份覆盖。
 // 规则：磁盘上 running 的对话以磁盘为准（服务器正在流式落盘，客户端没有这部分进度）；
 // 其余 id 取客户端版本；磁盘独有的对话保留下来（别端新开的不丢）。history 取并集。
@@ -500,7 +500,15 @@ const server = http.createServer(async (req, res) => {
           systemPrompt: {
             type: "preset",
             preset: "claude_code",
-            append: cfg.systemPromptAppend || "始终用简体中文回答，除非用户明确要求其他语言。",
+            append: cfg.systemPromptAppend || [
+              "始终用简体中文回答，除非用户明确要求其他语言。",
+              // 行为护栏：以下错误在历史日志里反复发生，每次都白烧一整轮缓存上下文。
+              "改/写文件前必须先 Read；若文件可能被外部改过，先重读再 Edit。",
+              "commit 前先 git status 确认确有改动，不要盲目 git add && git commit。",
+              "引用 commit/文件前先确认其存在，不要凭记忆拼 hash 或路径。",
+              "Windows 下避免 node -e 多行 heredoc（会 reset cwd），改用临时脚本文件或单行。",
+              "调用 gh 前先确认已登录，未登录则停下来告知用户而非反复重试。",
+            ].join("\n"),
           },
           ...(cfg.model ? { model: cfg.model } : {}),
           ...tokenOpts(cfg),
@@ -611,7 +619,17 @@ const server = http.createServer(async (req, res) => {
       const log = (t) => send("log", { text: t });
       if (!requirement) { send("done", { error: "需求为空" }); return res.end(); }
       if (evolving) { send("done", { error: "已有进化在进行中" }); return res.end(); }
-      evolving = true;
+      evolving = true; // 先占锁再取提示词：取词的 await 期间不让第二个进化穿透检查
+      // 进化系统提示词由大脑服务下发，取不到（无缓存）则不开工
+      let evolveAppend;
+      try {
+        const r = await brainEvolveAppend(loadCfg(), "server");
+        evolveAppend = r.evolveAppend;
+        if (r.cached) log("⚠️ 大脑服务不可达，使用本地缓存的提示词");
+      } catch (err) {
+        evolving = false;
+        send("done", { error: String(err?.message || err) }); return res.end();
+      }
       const abort = new AbortController();
       res.on("close", () => abort.abort());
       const gt = (args) => git(args, __dirname).then((r) => (r.stdout || "").toString());
@@ -644,7 +662,7 @@ const server = http.createServer(async (req, res) => {
             cwd: __dirname,
             permissionMode: "bypassPermissions",
             maxTurns: 60,
-            systemPrompt: { type: "preset", preset: "claude_code", append: EVOLVE_APPEND },
+            systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend },
             ...((cfg.evolveModel || cfg.model) ? { model: cfg.evolveModel || cfg.model } : {}),
             ...tokenOpts(cfg),
             ...(resume ? { resume } : {}),

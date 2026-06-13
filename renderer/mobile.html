@@ -110,6 +110,11 @@
       .ev-status.nochange { background:#333; color:#aaa; }
       .ev-status.err { background:#3a1e1e; color:#e57373; }
       .ev-status.stopped { background:#3a3320; color:#e2c08d; }
+      #mquickbar { display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px 0; background:var(--panel); }
+      #mquickbar:empty { display:none; }
+      body.sc-mode #mquickbar, body.req-mode #mquickbar, body.ev-mode #mquickbar { display:none; }
+      #mquickbar .qbtn { background:#333; color:var(--fg); border:1px solid var(--border); border-radius:14px; padding:4px 11px; font-size:12px; line-height:1.4; cursor:pointer; white-space:nowrap; }
+      #mquickbar .qbtn-add { background:transparent; color:var(--muted); border-style:dashed; font-weight:700; }
       #inbar { display:flex; gap:8px; padding:10px; border-top:1px solid var(--border); background:var(--panel); padding-bottom:max(10px,env(safe-area-inset-bottom)); }
       #inp { flex:1; resize:none; background:var(--bg); color:var(--fg); border:1px solid var(--border); border-radius:10px; padding:10px 12px; font:inherit; max-height:120px; }
       #toast { position:fixed; left:50%; bottom:84px; transform:translateX(-50%); background:#000a; color:#fff; padding:8px 14px; border-radius:20px; font-size:13px; opacity:0; transition:opacity .2s; pointer-events:none; }
@@ -189,6 +194,7 @@
     </div>
     <div id="diffModal"><div class="dhead"><span id="dTitle"></span><button class="ghost" id="dClose">关闭</button></div><pre id="dBody"></pre></div>
     <div id="attRow"></div>
+    <div id="mquickbar"></div>
     <div id="inbar">
       <button class="ghost" id="attBtn">📎</button>
       <textarea id="inp" rows="1" placeholder="提需求 / 问问题…"></textarea>
@@ -376,6 +382,48 @@
       }
       $("send").onclick = send;
       $("inp").addEventListener("input", function () { this.style.height = "auto"; this.style.height = Math.min(120, this.scrollHeight) + "px"; });
+
+      // ── 快捷技能：与桌面端 quickbar 对齐，点一下即发对应指令 ──────────
+      const DEFAULT_QUICK_SKILLS = [
+        { icon: "🚀", label: "推送代码", prompt: "/git-sync" },
+        { icon: "🔍", label: "Copilot Review", prompt: "/code-review" },
+        { icon: "🧪", label: "运行测试", prompt: "运行本项目的测试用例，并把结果汇报给我" },
+        { icon: "🔀", label: "建 PR", prompt: "/pr" },
+        { icon: "🗺", label: "生成代码地图", prompt: "为本项目生成一份代码地图（模块结构、关键文件与职责）" },
+      ];
+      let QUICK_SKILLS;
+      try { const s = JSON.parse(localStorage.getItem("claudeTools.quickSkills") || "null"); QUICK_SKILLS = Array.isArray(s) ? s : DEFAULT_QUICK_SKILLS.slice(); }
+      catch { QUICK_SKILLS = DEFAULT_QUICK_SKILLS.slice(); }
+      function persistQuickSkills() { try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {} }
+      function runQuickSkill(q) {
+        if (busy) return;
+        let p = q.prompt; if (p.startsWith("action:")) return; // 桌面端内置动作在手机端不可用，已在默认项里换成等价 prompt
+        $("inp").value = p; send();
+      }
+      function editQuickSkill(idx) {
+        const cur = idx >= 0 ? QUICK_SKILLS[idx] : { icon: "", label: "", prompt: "" };
+        const icon = prompt("图标（emoji，可留空）：", cur.icon); if (icon === null) return;
+        const label = prompt("名称：", cur.label); if (label === null) return;
+        const p = prompt("要发送的 prompt / 斜杠命令：", cur.prompt); if (p === null) return;
+        if (!label.trim() && !p.trim()) { if (idx >= 0) { QUICK_SKILLS.splice(idx, 1); persistQuickSkills(); renderQuickbar(); } return; }
+        const item = { icon: icon.trim(), label: label.trim(), prompt: p.trim() };
+        if (idx >= 0) QUICK_SKILLS[idx] = item; else QUICK_SKILLS.push(item);
+        persistQuickSkills(); renderQuickbar();
+      }
+      function renderQuickbar() {
+        const bar = $("mquickbar"); if (!bar) return; bar.innerHTML = "";
+        QUICK_SKILLS.forEach((q, i) => {
+          const b = document.createElement("button"); b.className = "qbtn"; b.type = "button";
+          b.textContent = `${q.icon ? q.icon + " " : ""}${q.label}`; b.title = q.prompt;
+          b.onclick = () => runQuickSkill(q);
+          b.oncontextmenu = (e) => { e.preventDefault(); editQuickSkill(i); };
+          bar.appendChild(b);
+        });
+        const add = document.createElement("button"); add.className = "qbtn qbtn-add"; add.type = "button";
+        add.textContent = "＋"; add.title = "新增快捷按钮"; add.onclick = () => editQuickSkill(-1);
+        bar.appendChild(add);
+      }
+      renderQuickbar();
 
       // ── 文件夹选择 ───────────────────────────────────────────
       async function browse(dir) {
