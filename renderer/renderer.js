@@ -100,6 +100,57 @@ function modalDialog(text, def) {
 const modalPrompt = (title, def = "") => modalDialog(title, def == null ? "" : def);
 const modalConfirm = (msg) => modalDialog(msg, null);
 
+// 可编辑多行文本框确认弹窗（用于提交信息预览/修改）
+function modalTextarea(title, def = "") {
+  return new Promise((resolve) => {
+    let ov = $("modalDialog");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "modalDialog";
+      (document.body || document.documentElement).appendChild(ov);
+    }
+    const box = document.createElement("div");
+    box.className = "box";
+    const msg = document.createElement("div");
+    msg.className = "md-msg";
+    msg.textContent = title;
+    box.appendChild(msg);
+    const ta = document.createElement("textarea");
+    ta.className = "md-input";
+    ta.style.cssText = "width:100%;min-height:80px;resize:vertical;font-size:13px;padding:6px;box-sizing:border-box;";
+    ta.value = def;
+    box.appendChild(ta);
+    const btns = document.createElement("div");
+    btns.className = "md-btns";
+    const cancel = document.createElement("button");
+    cancel.className = "md-cancel";
+    cancel.textContent = tr("取消");
+    const ok = document.createElement("button");
+    ok.textContent = tr("确定提交");
+    btns.appendChild(cancel);
+    btns.appendChild(ok);
+    box.appendChild(btns);
+    const close = (val) => {
+      document.removeEventListener("keydown", onKey, true);
+      ov.classList.remove("open");
+      ov.innerHTML = "";
+      resolve(val);
+    };
+    cancel.onclick = () => close(null);
+    ok.onclick = () => close(ta.value.trim() || null);
+    const onKey = (e) => {
+      if (e.key === "Escape") { e.preventDefault(); cancel.click(); }
+      else if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); ok.click(); }
+    };
+    document.addEventListener("keydown", onKey, true);
+    ov.innerHTML = "";
+    ov.appendChild(box);
+    ov.classList.add("open");
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+  });
+}
+
 // 自进化健康心跳：渲染层成功加载即上报，宿主据此确认进化后的版本健康（否则自动回滚）
 try { window.api.evolveAlive(); } catch {}
 
@@ -1205,8 +1256,13 @@ $("scGenMsg").onclick = async () => {
   btn.textContent = "⟳";
   try {
     const r = await window.api.gitGenCommitMsg(activeRepo);
-    if (r && r.message) { $("scMsg").value = r.message; $("scMsg").focus(); }
-    else toast(tr("生成提交信息失败：") + tr(r?.error || ""), "error");
+    if (r && r.message) {
+      const confirmed = await modalTextarea(tr("确认提交信息（Ctrl+Enter 提交，Esc 取消）"), r.message);
+      if (confirmed) {
+        await doGit(() => window.api.gitCommit(activeRepo, confirmed), tr("已提交"));
+        $("scMsg").value = "";
+      }
+    } else toast(tr("生成提交信息失败：") + tr(r?.error || ""), "error");
   } finally {
     btn.classList.remove("busy");
     btn.textContent = "✨";
