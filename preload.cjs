@@ -93,6 +93,6 @@ contextBridge.exposeInMainWorld("api", {
   gitResetSoft: (repo, sha) => ipcRenderer.invoke("gitResetSoft", repo, sha),
   gitCheckoutCommit: (repo, sha) => ipcRenderer.invoke("gitCheckoutCommit", repo, sha),
   convAutoTitle: (text) => ipcRenderer.invoke("convAutoTitle", text),
-  on: (channel, cb) => ipcRenderer.on(channel, (_e, data) => cb(data)),
+  on: (channel, cb) => { ipcRenderer.removeAllListeners(channel); ipcRenderer.on(channel, (_e, data) => cb(data)); },
   off: (channel) => ipcRenderer.removeAllListeners(channel),
 });
