@@ -1627,8 +1627,9 @@ function renderHistory(filter, cwdOnly) {
       `<div class="hist-main"><div class="hist-title">${title}</div>` +
       `<div class="hist-meta">${fmtTime(h.archivedAt)}${cwdPart}${h.sessionId ? `<span class="hist-badge">${tr("可续聊")}</span>` : ""}</div>` +
       (snippet ? `<div class="hist-snippet">${snippet}</div>` : "") + `</div>` +
-      `<button class="hist-open">${tr("打开")}</button><button class="hist-del" title="${tr("删除")}">×</button>`;
+      `<button class="hist-open">${tr("打开")}</button><button class="hist-export" title="${tr("导出 .md")}">↓md</button><button class="hist-del" title="${tr("删除")}">×</button>`;
     row.querySelector(".hist-open").onclick = () => restoreFromHistory(h.id);
+    row.querySelector(".hist-export").onclick = (e) => { e.stopPropagation(); exportHistoryMd(h); };
     row.querySelector(".hist-del").onclick = (e) => { e.stopPropagation(); deleteFromHistory(h.id); };
     box.appendChild(row);
   }
@@ -1652,6 +1653,61 @@ function deleteFromHistory(id) {
   removedIds.add(id); // 防止从共享文件合并复活
   persistConvs();
   renderHistory($("histSearch").value || "", $("histCwdFilter").classList.contains("active"));
+}
+
+// HTML 对话快照 → Markdown（保留代码块、段落，去掉高亮 DOM 标签）
+function htmlToMd(html, title) {
+  const tmp = document.createElement("div");
+  tmp.innerHTML = html;
+  const lines = [title ? `# ${title}\n` : ""];
+  const msgs = tmp.querySelectorAll(".msg");
+  msgs.forEach((msg) => {
+    const isUser = msg.classList.contains("user");
+    const role = isUser ? "**You**" : "**Claude**";
+    const bubble = msg.querySelector(".bubble");
+    if (!bubble) return;
+    lines.push(`${role}\n`);
+    // 遍历 bubble 子节点，区分代码块与普通文本
+    const parts = [];
+    bubble.childNodes.forEach((node) => {
+      if (node.nodeType === Node.TEXT_NODE) {
+        const t = node.textContent.trim();
+        if (t) parts.push(t);
+      } else if (node.nodeName === "PRE") {
+        const codeEl = node.querySelector("code");
+        const lang = (codeEl && [...(codeEl.classList || [])].map((c) => c.replace("language-", "")).find((c) => c !== "hljs") ) || "";
+        parts.push("```" + lang + "\n" + (codeEl ? codeEl.textContent : node.textContent) + "\n```");
+      } else if (node.nodeName === "P") {
+        const t = node.textContent.trim();
+        if (t) parts.push(t);
+      } else if (node.nodeName === "UL" || node.nodeName === "OL") {
+        node.querySelectorAll("li").forEach((li, i) => {
+          parts.push((node.nodeName === "OL" ? `${i + 1}. ` : "- ") + li.textContent.trim());
+        });
+      } else if (/^H[1-6]$/.test(node.nodeName)) {
+        const lvl = "#".repeat(Number(node.nodeName[1]));
+        parts.push(`${lvl} ${node.textContent.trim()}`);
+      } else {
+        const t = node.textContent.trim();
+        if (t) parts.push(t);
+      }
+    });
+    // bubble 无子元素节点时直接用 textContent
+    if (!parts.length) {
+      const t = bubble.textContent.trim();
+      if (t) parts.push(t);
+    }
+    lines.push(parts.join("\n\n") + "\n");
+    lines.push("---\n");
+  });
+  return lines.join("\n");
+}
+async function exportHistoryMd(h) {
+  if (!h.html) { alert(tr("该对话无内容可导出")); return; }
+  const md = htmlToMd(h.html, h.title || tr("对话记录"));
+  const safeTitle = (h.title || "conversation").replace(/[\\/:*?"<>|]/g, "_").slice(0, 60);
+  const result = await window.api.saveTextFile({ defaultName: safeTitle + ".md", content: md });
+  if (result && result.error) alert(tr("导出失败：") + result.error);
 }
 
 // 紧凑显示 token 数：1234→1.2k、1234567→1.2M
