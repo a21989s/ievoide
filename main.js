@@ -1046,6 +1046,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
   // lastCtx：本轮最后一次 API 请求的输入侧 token（输入+缓存读写）≈ 当前会话上下文规模。
   // result.usage 是整轮累加值（含工具循环的多次请求），用它估上下文会虚高，故单独取最后一次。
   let lastCtx = 0;
+  let chatToolCalls = 0; // 本轮工具调用次数，供活动日志分析效率
+  let chatModel = "";    // 本轮实际模型
   const run = async (resumeId) => {
     const response = query({
       prompt,
@@ -1074,6 +1076,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
       if (msg.type === "system" && msg.subtype === "init") {
         lastMcpStatus = msg.mcp_servers || []; // 缓存连接状态供 MCP 面板显示
         if (win && !win.isDestroyed()) win.webContents.send("mcp:status", lastMcpStatus);
+        chatModel = msg.model || "";
         send("chat:init", {
           model: msg.model,
           tools: msg.tools || [],
@@ -1092,8 +1095,10 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
           lastCtx =
             (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0);
         for (const block of msg.message.content) {
-          if (block.type === "tool_use")
+          if (block.type === "tool_use") {
+            chatToolCalls++;
             send("chat:tool", { id: block.id, name: block.name, input: block.input });
+          }
         }
       } else if (msg.type === "user") {
         const content = msg.message?.content;
@@ -1120,6 +1125,18 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
           } catch {}
         }
         recordCost("chat", msg.usage, msg.total_cost_usd); // 本地费用台账（按日聚合，关掉对话不丢）
+        appendActivity({
+          source: "chat",
+          model: chatModel,
+          usage: msg.usage || null,
+          cost_usd: msg.total_cost_usd || 0,
+          duration_ms: msg.duration_ms || 0,
+          ctx_tokens: lastCtx,
+          tool_calls: chatToolCalls,
+          prompt_chars: typeof prompt === "string" ? prompt.length : 0,
+          cwd_base: path.basename(cwd || ""),
+          status: "done",
+        });
         send("chat:done", {
           cost: msg.total_cost_usd,
           ms: msg.duration_ms,
@@ -1277,6 +1294,54 @@ function recordCost(source, usage, costUsd) {
   costSaveTimer = setTimeout(() => { fs.writeFile(costStatsPath(), JSON.stringify(s)).catch(() => {}); }, 1500);
 }
 ipcMain.handle("costStats", () => loadCostStats().days);
+
+// ── 活动日志：按轮次记录详细执行信息，用于分析 token 效率与工具使用模式 ──────
+// 格式：JSONL（每行一条 JSON），保留最近 90 天，最多 10000 条；零额外 token 消耗。
+// 字段：ts/source/model/usage/cost_usd/duration_ms/ctx_tokens/tool_calls/prompt_chars/cwd_base/status
+const activityLogPath = () => path.join(app.getPath("userData"), "activity.log");
+const ACTIVITY_MAX_LINES = 10000;
+const ACTIVITY_KEEP_DAYS = 90;
+let activityWritePending = false;
+let activityQueue = []; // 未落盘的条目缓冲
+
+function appendActivity(entry) {
+  entry.ts = new Date().toISOString();
+  activityQueue.push(JSON.stringify(entry));
+  if (activityWritePending) return;
+  activityWritePending = true;
+  setImmediate(async () => {
+    activityWritePending = false;
+    const lines = activityQueue.splice(0);
+    if (!lines.length) return;
+    try {
+      const p = activityLogPath();
+      let existing = "";
+      try { existing = await fs.readFile(p, "utf8"); } catch {}
+      const cutoff = new Date(Date.now() - ACTIVITY_KEEP_DAYS * 86400000).toISOString();
+      const kept = existing
+        .split("\n")
+        .filter((l) => { if (!l.trim()) return false; try { return JSON.parse(l).ts >= cutoff; } catch { return false; } });
+      const merged = [...kept, ...lines];
+      const trimmed = merged.slice(-ACTIVITY_MAX_LINES);
+      await fs.writeFile(p, trimmed.join("\n") + "\n");
+    } catch {}
+  });
+}
+
+ipcMain.handle("getActivityLog", async (_e, { days = 7 } = {}) => {
+  try {
+    const raw = await fs.readFile(activityLogPath(), "utf8");
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString();
+    return raw
+      .split("\n")
+      .filter((l) => l.trim())
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+      .filter((e) => e && e.ts >= cutoff);
+  } catch { return []; }
+});
+ipcMain.handle("clearActivityLog", async () => {
+  try { await fs.writeFile(activityLogPath(), ""); return { ok: true }; } catch (e) { return { error: String(e) }; }
+});
 
 // ── 模型切换 ─────────────────────────────────────────────────
 // 读/写当前模型（空=用账号默认）。setModel 写回 tools/config.json 并更新内存中的
@@ -1807,18 +1872,33 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
     });
     let summary = "";
     let prevCost = 0, prevUsage = {}; // result 的费用/用量是会话累计值，steer 多轮会出多个 result，记增量防重复计数
+    let evolveToolCalls = 0, evolveModel = appConfig.evolveModel || appConfig.model || "";
     for await (const msg of response) {
       if (msg.type === "assistant")
         for (const b of msg.message.content) {
           if (b.type === "text") { summary += b.text; log(b.text); }
-          else if (b.type === "tool_use") log(`🔧 ${b.name}`);
+          else if (b.type === "tool_use") { evolveToolCalls++; log(`🔧 ${b.name}`); }
         }
       else if (msg.type === "result") {
         const u = msg.usage || {};
         const du = {};
         for (const k of ["input_tokens", "output_tokens", "cache_creation_input_tokens", "cache_read_input_tokens"])
           du[k] = Math.max(0, (u[k] || 0) - (prevUsage[k] || 0));
-        recordCost("evolve", du, Math.max(0, (msg.total_cost_usd || 0) - prevCost));
+        const dCost = Math.max(0, (msg.total_cost_usd || 0) - prevCost);
+        recordCost("evolve", du, dCost);
+        appendActivity({
+          source: "evolve",
+          model: evolveModel,
+          usage: du,
+          cost_usd: dCost,
+          duration_ms: msg.duration_ms || 0,
+          ctx_tokens: (u.input_tokens || 0) + (u.cache_creation_input_tokens || 0) + (u.cache_read_input_tokens || 0),
+          tool_calls: evolveToolCalls,
+          prompt_chars: typeof requirement === "string" ? requirement.length : 0,
+          cwd_base: path.basename(TOOLS_DIR),
+          status: "done",
+        });
+        evolveToolCalls = 0; // 重置，避免 steer 多轮累加
         prevCost = Math.max(prevCost, msg.total_cost_usd || 0);
         prevUsage = u;
         // 本轮结束：没有待追加的调整消息则收尾结束输入流；否则继续下一轮

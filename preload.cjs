@@ -31,6 +31,8 @@ contextBridge.exposeInMainWorld("api", {
   stop: (convId) => ipcRenderer.send("stop", { convId }),
   getUsage: (opts) => ipcRenderer.invoke("getUsage", opts),
   costStats: () => ipcRenderer.invoke("costStats"),
+  getActivityLog: (opts) => ipcRenderer.invoke("getActivityLog", opts),
+  clearActivityLog: () => ipcRenderer.invoke("clearActivityLog"),
   getModel: () => ipcRenderer.invoke("getModel"),
   setModel: (model) => ipcRenderer.invoke("setModel", model),
   getEffort: () => ipcRenderer.invoke("getEffort"),
