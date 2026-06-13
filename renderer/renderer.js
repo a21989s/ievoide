@@ -4054,6 +4054,17 @@ async function solveBacklogItem(it) {
   const solved = r && !r.error && !r.stopped;
   await window.api.updateEvolveBacklog(it.id, { status: solved ? "done" : "skipped" });
   loadBacklog();
+  // 自动连续执行：成功后自动取下一条 open 任务
+  if (solved && $("evBatchRun")?.checked) {
+    const list = (await window.api.getEvolveBacklog()) || [];
+    const next = pickNextBacklog(list);
+    if (next) {
+      evLog(tr("⏭ 自动连续执行：接着解决「") + next.title + "」");
+      setTimeout(() => solveBacklogItem(next), 2000);
+    } else {
+      evLog(tr("✅ 自动连续执行：所有任务已完成"));
+    }
+  }
   return solved;
 }
 $("evAuditBtn").onclick = async () => {
@@ -4131,6 +4142,7 @@ function applyContinuous(initialDelay) {
   }
 }
 $("evContinuous").onchange = () => { applyContinuous(); updateEvolveIndicator(); };
+$("evBatchRun").onchange = () => { try { localStorage.setItem("claudeTools.evBatchRun", $("evBatchRun").checked ? "1" : ""); } catch {} };
 
 // ── 每日预算超支提醒：主进程 recordCost 纯本地判断，当日首次超阈值推送一次 ──
 // toast+系统通知止损，用量标红；若持续进化开着则自动暂停（无人值守循环正是跑飞烧钱的高危场景）
@@ -4377,6 +4389,7 @@ try {
     $("evContinuous").checked = true;
     applyContinuous(15000); // 启动后稍等再续跑，避开启动自检/回滚抢跑
   }
+  if (localStorage.getItem("claudeTools.evBatchRun")) $("evBatchRun").checked = true;
 } catch {}
 applyPeriodic();
 updateEvolveIndicator();
