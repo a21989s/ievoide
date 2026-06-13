@@ -4857,6 +4857,17 @@ function addRewindBtn(wrap, cpId) {
       toast(tr("已恢复到本轮开始前"), "success");
       refreshFileTree(); // 文件已还原 => 同步重建文件树
       if (activeRepo) { loadStatus(activeRepo); loadGraph(activeRepo); } // git 面板若开着则刷新
+      // 把触发本轮的原始用户消息回填到输入框，方便修改后重发
+      const userMsg = wrap.previousElementSibling;
+      if (userMsg && userMsg.classList.contains("user")) {
+        const origText = userMsg.querySelector(".bubble")?.textContent || "";
+        if (origText) {
+          const inp = $("input");
+          inp.value = origText;
+          inp.dispatchEvent(new Event("input"));
+          inp.focus();
+        }
+      }
     } else {
       btn.disabled = false;
       btn.textContent = tr("↩ 撤销本轮改动");
