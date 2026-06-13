@@ -535,12 +535,19 @@ ipcMain.handle("saveConvs", async (_e, data) => {
     const tmp = `${target}.${process.pid}.tmp`;
     try {
       await fs.writeFile(tmp, JSON.stringify(data));
-      await fs.rename(tmp, target);
+      try {
+        await fs.rename(tmp, target);
+      } catch (renameErr) {
+        // Windows 下 rename 到已存在文件可能抛 EPERM，fallback 到 copyFile+unlink
+        await fs.copyFile(tmp, target);
+        await fs.unlink(tmp).catch(() => {});
+      }
     } finally {
       fs.unlink(tmp).catch(() => {});
     }
     return { ok: true };
   } catch (err) {
+    console.error("[saveConvs] failed:", err);
     return { error: String(err) };
   }
 });
