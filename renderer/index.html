@@ -350,6 +350,17 @@
       .conv-del { color: #888; cursor: pointer; padding: 0 3px; border-radius: 3px; flex: none; }
       .conv-del:hover { color: #fff; background: #c33; }
       #chat { flex: 1; overflow: auto; padding: 16px; }
+      #chatSearchBar { display: none; align-items: center; gap: 6px; padding: 5px 10px; background: #1e2023; border-bottom: 1px solid var(--border); font-size: 13px; z-index: 10; }
+      #chatSearchBar.open { display: flex; }
+      #chatSearchInput { flex: 1; background: var(--panel); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 3px 8px; font-size: 13px; outline: none; }
+      #chatSearchInput:focus { border-color: var(--accent); }
+      #chatSearchCount { color: var(--muted); font-size: 12px; min-width: 60px; text-align: center; white-space: nowrap; }
+      .chat-search-nav { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 4px; cursor: pointer; padding: 2px 7px; font-size: 13px; line-height: 1; }
+      .chat-search-nav:hover { color: var(--fg); border-color: var(--accent); }
+      #chatSearchClose { background: transparent; border: 0; color: var(--muted); cursor: pointer; font-size: 16px; padding: 0 4px; line-height: 1; }
+      #chatSearchClose:hover { color: var(--fg); }
+      .chat-search-hit { background: #7d5a00; border-radius: 2px; }
+      .chat-search-hit.current { background: #b38200; outline: 2px solid #f0b429; outline-offset: 1px; }
       .msg { margin-bottom: 14px; max-width: 90%; }
       .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
       .bubble { padding: 9px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
@@ -903,6 +914,13 @@
           <div id="convTabs"></div>
           <button id="exportConv" data-i18n-title="导出当前对话为 Markdown（按住 Shift 含工具调用摘要）" title="导出当前对话为 Markdown（按住 Shift 含工具调用摘要）">📤</button>
           <button id="newconv" data-i18n-title="新对话" title="新对话">＋</button>
+        </div>
+        <div id="chatSearchBar">
+          <input id="chatSearchInput" type="text" placeholder="搜索消息…" autocomplete="off" spellcheck="false">
+          <span id="chatSearchCount"></span>
+          <button class="chat-search-nav" id="chatSearchPrev" title="上一个 (Shift+Enter)">↑</button>
+          <button class="chat-search-nav" id="chatSearchNext" title="下一个 (Enter)">↓</button>
+          <button id="chatSearchClose" title="关闭 (Esc)">✕</button>
         </div>
         <div id="chat"></div>
         <div id="reqMini" class="req-mini hidden"></div>

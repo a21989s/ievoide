@@ -2808,6 +2808,12 @@ document.addEventListener("keydown", (e) => {
     $("csInput").focus();
     return;
   }
+  // Ctrl/Cmd+F：聊天区内搜索浮条
+  if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "f") {
+    e.preventDefault();
+    openChatSearch();
+    return;
+  }
   if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "b") {
     e.preventDefault();
     $("sidebar").classList.toggle("collapsed");
@@ -2815,6 +2821,7 @@ document.addEventListener("keydown", (e) => {
   }
   if (e.key === "Escape") {
     // 按优先级关闭一个浮层（已被 input/evReq 内联处理的补全弹窗在此之前已消费）
+    if ($("chatSearchBar").classList.contains("open")) { closeChatSearch(); return; }
     if ($("cmdkModal").classList.contains("open")) { closeCmdk(); return; }
     if ($("viewer").style.display === "flex") { $("vclose").click(); return; }
     // 停靠态的自进化面板是常驻侧栏（非模态），不被 Esc 关闭
@@ -2829,6 +2836,98 @@ document.addEventListener("keydown", (e) => {
   }
 });
 
+// ── 聊天区消息内搜索 ─────────────────────────────────────────
+let _chatSearchHits = [];
+let _chatSearchCur = -1;
+
+function _clearChatHits() {
+  // 将每个 mark 元素替换回文本节点，然后 normalize 合并相邻文本节点
+  const parents = new Set();
+  _chatSearchHits.forEach(({ node }) => {
+    const p = node.parentNode;
+    if (p) { p.replaceChild(document.createTextNode(node.textContent), node); parents.add(p); }
+  });
+  parents.forEach(p => p.normalize());
+  _chatSearchHits = [];
+  _chatSearchCur = -1;
+}
+
+function _chatSearchJumpTo(idx) {
+  if (!_chatSearchHits.length) return;
+  if (_chatSearchCur >= 0 && _chatSearchCur < _chatSearchHits.length)
+    _chatSearchHits[_chatSearchCur].node.classList.remove("current");
+  _chatSearchCur = (idx + _chatSearchHits.length) % _chatSearchHits.length;
+  const mark = _chatSearchHits[_chatSearchCur].node;
+  mark.classList.add("current");
+  mark.scrollIntoView({ block: "center", inline: "nearest" });
+  $("chatSearchCount").textContent = `${_chatSearchCur + 1} / ${_chatSearchHits.length}`;
+}
+
+function _runChatSearch(q) {
+  _clearChatHits();
+  if (!q || !activeConv?.pane) { $("chatSearchCount").textContent = ""; return; }
+  const lq = q.toLowerCase();
+  const walker = document.createTreeWalker(activeConv.pane, NodeFilter.SHOW_TEXT);
+  const fragments = [];
+  let node;
+  while ((node = walker.nextNode())) {
+    const p = node.parentElement;
+    if (p && (p.tagName === "SCRIPT" || p.tagName === "STYLE")) continue;
+    const txt = node.textContent;
+    if (txt.toLowerCase().includes(lq)) fragments.push({ node, txt });
+  }
+  fragments.forEach(({ node, txt }) => {
+    const lt = txt.toLowerCase();
+    const parent = node.parentNode;
+    if (!parent) return;
+    const frag = document.createDocumentFragment();
+    let last = 0, idx = lt.indexOf(lq, 0);
+    while (idx !== -1) {
+      if (idx > last) frag.appendChild(document.createTextNode(txt.slice(last, idx)));
+      const mark = document.createElement("mark");
+      mark.className = "chat-search-hit";
+      mark.textContent = txt.slice(idx, idx + lq.length);
+      frag.appendChild(mark);
+      _chatSearchHits.push({ node: mark });
+      last = idx + lq.length;
+      idx = lt.indexOf(lq, last);
+    }
+    if (last < txt.length) frag.appendChild(document.createTextNode(txt.slice(last)));
+    parent.replaceChild(frag, node);
+  });
+  $("chatSearchCount").textContent = _chatSearchHits.length ? `1 / ${_chatSearchHits.length}` : "无匹配";
+  if (_chatSearchHits.length) _chatSearchJumpTo(0);
+}
+
+function openChatSearch() {
+  $("chatSearchBar").classList.add("open");
+  const inp = $("chatSearchInput");
+  inp.select();
+  inp.focus();
+  if (inp.value) _runChatSearch(inp.value);
+}
+
+function closeChatSearch() {
+  $("chatSearchBar").classList.remove("open");
+  _clearChatHits();
+  $("chatSearchCount").textContent = "";
+}
+
+{
+  let _debTimer;
+  $("chatSearchInput").addEventListener("input", (e) => {
+    clearTimeout(_debTimer);
+    _debTimer = setTimeout(() => _runChatSearch(e.target.value.trim()), 180);
+  });
+  $("chatSearchInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); _chatSearchJumpTo(e.shiftKey ? _chatSearchCur - 1 : _chatSearchCur + 1); }
+    if (e.key === "Escape") { e.preventDefault(); closeChatSearch(); }
+  });
+  $("chatSearchNext").addEventListener("click", () => _chatSearchJumpTo(_chatSearchCur + 1));
+  $("chatSearchPrev").addEventListener("click", () => _chatSearchJumpTo(_chatSearchCur - 1));
+  $("chatSearchClose").addEventListener("click", closeChatSearch);
+}
+
 // ── 快捷键速查面板 ─────────────────────────────────────────
 const KBD_MOD = navigator.platform.toLowerCase().includes("mac") ? "⌘" : "Ctrl";
 const KBD_SHORTCUTS = [
@@ -2837,6 +2936,7 @@ const KBD_SHORTCUTS = [
     [[KBD_MOD, "N"], "新建对话"],
     [[KBD_MOD, "K"], "打开命令面板（搜索动作 / 文件 / 快捷技能）"],
     [[KBD_MOD, "P"], "快速打开文件（命令面板）"],
+    [[KBD_MOD, "F"], "在当前对话消息中搜索（↑/↓ 或 Enter/Shift+Enter 导航）"],
     [[KBD_MOD, "Shift", "F"], "全文搜索文件内容"],
     [[KBD_MOD, "B"], "折叠 / 展开左侧栏"],
     [["Esc"], "关闭当前弹层（查看器 / 历史 / 菜单等）"],
