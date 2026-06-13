@@ -462,6 +462,12 @@
       .conv-model-sel { max-width: 130px; padding: 2px 6px; }
       #convEstCost { font-size: 11px; color: #8bc34a; white-space: nowrap; }
       .cost-readout { margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; cursor: default; display: flex; align-items: center; gap: 5px; }
+      .conv-model-btn { padding: 2px 8px; font-size: 11px; white-space: nowrap; letter-spacing: 0.01em; }
+      .conv-model-popup { position: fixed; z-index: 9999; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; box-shadow: 0 4px 18px #0009; min-width: 190px; overflow: hidden; }
+      .conv-model-popup .cmp-item { display: flex; justify-content: space-between; align-items: center; padding: 7px 12px; cursor: pointer; font-size: 12px; gap: 14px; }
+      .conv-model-popup .cmp-item:hover { background: var(--hover); }
+      .conv-model-popup .cmp-item.active { color: var(--accent); font-weight: 600; }
+      .conv-model-popup .cmp-price { color: var(--muted); font-size: 11px; flex-shrink: 0; }
       .ctx-bar-wrap { width: 60px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
       .ctx-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .3s, background .3s; }
       .ctx-bar-fill.warn { background: #e8a500; }
@@ -968,12 +974,14 @@
             </div>
             <div class="input-foot">
               <button id="planToggle" type="button" data-i18n-title="计划模式：先给出分步方案待确认，不直接改动" title="计划模式：先给出分步方案待确认，不直接改动">📋 <span data-i18n="计划模式">计划模式</span></button>
-              <select id="convModelSel" class="model-select conv-model-sel" title="本对话模型（不影响全局设置）">
+              <select id="convModelSel" class="model-select conv-model-sel" style="display:none">
                 <option value="">全局默认</option>
                 <option value="claude-haiku-4-5-20251001">Haiku 4.5 · 最省</option>
                 <option value="claude-sonnet-4-6">Sonnet 4.6 · 均衡</option>
                 <option value="claude-opus-4-8">Opus 4.8 · 最强</option>
               </select>
+              <button id="convModelBtn" class="conv-model-btn" title="切换本对话模型（不影响全局设置）">默认</button>
+              <div id="convModelPopup" class="conv-model-popup" style="display:none"></div>
               <span id="costReadout" class="cost-readout"></span>
             </div>
           </div>

@@ -1547,10 +1547,19 @@ const CONV_MODEL_PRICE = {
   "claude-sonnet-4-6": 3.00,
   "claude-opus-4-8": 15.00,
 };
+const CONV_MODEL_LIST = [
+  { value: "", label: "全局默认", sub: "使用设置页模型" },
+  { value: "claude-haiku-4-5-20251001", label: "Haiku 4.5", sub: "$0.80/M · 最省" },
+  { value: "claude-sonnet-4-6", label: "Sonnet 4.6", sub: "$3.00/M · 均衡" },
+  { value: "claude-opus-4-8", label: "Opus 4.8", sub: "$15.00/M · 最强" },
+];
+const CONV_MODEL_SHORT = { "": "默认", "claude-haiku-4-5-20251001": "Haiku", "claude-sonnet-4-6": "Sonnet", "claude-opus-4-8": "Opus" };
 function syncConvModelSel() {
   const sel = $("convModelSel");
-  if (!sel) return;
-  sel.value = (activeConv && activeConv._convModel) || "";
+  const btn = $("convModelBtn");
+  const cur = (activeConv && activeConv._convModel) || "";
+  if (sel) sel.value = cur;
+  if (btn) btn.textContent = CONV_MODEL_SHORT[cur] || "默认";
   updateConvEstCost();
 }
 function updateConvEstCost() {
@@ -5299,6 +5308,54 @@ $("input").addEventListener("input", () => {
   sel.addEventListener("change", () => {
     if (activeConv) activeConv._convModel = sel.value || null;
     updateConvEstCost();
+  });
+})();
+
+// 模型档位弹窗：点击 convModelBtn 显示带价格的选项列表
+(function () {
+  const btn = $("convModelBtn");
+  const popup = $("convModelPopup");
+  const sel = $("convModelSel");
+  if (!btn || !popup) return;
+
+  function buildPopup() {
+    const cur = (activeConv && activeConv._convModel) || "";
+    popup.innerHTML = CONV_MODEL_LIST.map(m =>
+      `<div class="cmp-item${m.value === cur ? ' active' : ''}" data-val="${m.value}">` +
+        `<span>${m.label}</span><span class="cmp-price">${m.sub}</span>` +
+      `</div>`
+    ).join('');
+    popup.querySelectorAll('.cmp-item').forEach(el => {
+      el.addEventListener('click', () => {
+        const v = el.dataset.val;
+        if (activeConv) activeConv._convModel = v || null;
+        if (sel) sel.value = v;
+        syncConvModelSel();
+        closePopup();
+      });
+    });
+  }
+
+  function openPopup() {
+    buildPopup();
+    popup.style.display = 'block';
+    const r = btn.getBoundingClientRect();
+    const ph = popup.offsetHeight;
+    popup.style.left = r.left + 'px';
+    popup.style.top = (r.top - ph - 4) + 'px';
+  }
+
+  function closePopup() {
+    popup.style.display = 'none';
+  }
+
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    popup.style.display === 'none' ? openPopup() : closePopup();
+  });
+
+  document.addEventListener('click', e => {
+    if (!popup.contains(e.target) && e.target !== btn) closePopup();
   });
 })();
 
