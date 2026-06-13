@@ -1842,16 +1842,29 @@ function openHistory() {
   $("histSearch").focus();
 }
 function closeHistory() { $("historyModal").classList.remove("open"); }
-// 历史条目正文纯文本缓存：id -> { html, text }（html 变了才重新解析，避免每次搜索都建 DOM）
+// 历史条目正文纯文本缓存：id -> { html, text }，LRU 上限 50 条
+const HIST_TEXT_CACHE_LIMIT = 50;
 const histTextCache = new Map();
+function histTextCacheSet(id, value) {
+  if (histTextCache.has(id)) histTextCache.delete(id);
+  histTextCache.set(id, value);
+  if (histTextCache.size > HIST_TEXT_CACHE_LIMIT) {
+    histTextCache.delete(histTextCache.keys().next().value);
+  }
+}
 function histPlainText(h) {
   if (!h.html) return "";
   const c = histTextCache.get(h.id);
-  if (c && c.html === h.html) return c.text;
+  if (c && c.html === h.html) {
+    // 刷新 LRU 顺序
+    histTextCache.delete(h.id);
+    histTextCache.set(h.id, c);
+    return c.text;
+  }
   const tmp = document.createElement("div");
   tmp.innerHTML = h.html;
   const text = (tmp.textContent || "").replace(/\s+/g, " ").trim();
-  histTextCache.set(h.id, { html: h.html, text });
+  histTextCacheSet(h.id, { html: h.html, text });
   return text;
 }
 // 取关键词命中处约 80 字符的上下文摘要，命中词用 <mark> 高亮
