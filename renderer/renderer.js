@@ -2823,9 +2823,11 @@ function renderCmdk(q) {
   cmdkItems = actions;
   cmdkSel = 0;
   drawCmdk();
-  // 有查询时异步并入文件名匹配结果（打开文件 / PDF 编辑器）
+  // 有查询时异步并入文件名匹配结果（打开文件 / PDF 编辑器），250ms 防抖
   if (ql) {
     const token = ++cmdkFileToken;
+    setTimeout(() => {
+    if (token !== cmdkFileToken) return;
     window.api.searchFiles(ql).then((files) => {
       if (token !== cmdkFileToken || !$("cmdkModal").classList.contains("open")) return;
       const fileItems = (files || []).filter((f) => !f.dir).slice(0, 8).map((f) => ({
@@ -2835,6 +2837,7 @@ function renderCmdk(q) {
       cmdkItems = actions.concat(fileItems);
       drawCmdk();
     }).catch(() => {});
+    }, 250);
   }
 }
 function drawCmdk() {
