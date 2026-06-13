@@ -274,6 +274,18 @@ async function openFolderUI(folder) {
   $("tree").innerHTML = "";
   await renderChildren($("tree"), folder, 0);
   await loadRepos();
+  // 自动注入 CLAUDE.md 到项目记忆
+  try {
+    const md = await window.api.readWorkdirFile("CLAUDE.md");
+    if (md && !md.startsWith("(")) {
+      const ta = $("projectMemory");
+      const existing = ta.value.trim();
+      const sep = existing ? "\n\n" : "";
+      ta.value = existing + sep + md.trim();
+      localStorage.setItem("claudeTools.projectMemory", ta.value);
+      toast("检测到 CLAUDE.md，已追加到项目记忆", "info");
+    }
+  } catch {}
 }
 
 // ── 最近目录工具（零 token，纯 localStorage）──────────────────
