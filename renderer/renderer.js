@@ -1591,7 +1591,7 @@ function persistConvs() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     _saveTimer = null;
-    window.api.saveConvs(buildConvState());
+    window.api.saveConvs(buildConvState()).then(r => { if (r?.error) toast('对话保存失败：' + r.error, 'error'); });
   }, 400);
 }
 // 关闭/刷新前立即落盘，补上 debounce 窗口内可能丢失的最后改动
