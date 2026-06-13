@@ -293,18 +293,18 @@ async function openFolderUI(folder) {
   $("tree").innerHTML = "";
   await renderChildren($("tree"), folder, 0);
   await loadRepos();
-  // 自动注入 CLAUDE.md 到项目记忆
-  try {
-    const md = await window.api.readWorkdirFile("CLAUDE.md");
-    if (md && !md.startsWith("(")) {
-      const ta = $("projectMemory");
-      const existing = ta.value.trim();
-      const sep = existing ? "\n\n" : "";
-      ta.value = existing + sep + md.trim();
-      safeLocalSet("claudeTools.projectMemory", ta.value);
-      toast("检测到 CLAUDE.md，已追加到项目记忆", "info");
-    }
-  } catch {}
+  // 加载该 workdir 对应的项目记忆
+  loadProjectMemoryUI();
+  // 若该 workdir 尚无记忆，尝试自动注入 CLAUDE.md
+  if (!getProjectMemory()) {
+    try {
+      const md = await window.api.readWorkdirFile("CLAUDE.md");
+      if (md && !md.startsWith("(")) {
+        appendToProjectMemory(md);
+        toast("检测到 CLAUDE.md，已写入项目记忆", "info");
+      }
+    } catch {}
+  }
 }
 
 // ── 最近目录工具（零 token，纯 localStorage）──────────────────
@@ -1009,6 +1009,17 @@ chat.addEventListener("click", (e) => {
   if (replyBtn) {
     const wrap = replyBtn.closest(".msg.assistant");
     return copyToClipboard(wrap ? bubbleText(wrap) : "", replyBtn);
+  }
+  const saveMemBtn = e.target.closest(".reply-save-mem");
+  if (saveMemBtn) {
+    const wrap = saveMemBtn.closest(".msg.assistant");
+    const text = wrap ? bubbleText(wrap) : "";
+    if (!text) return;
+    appendToProjectMemory(text);
+    const orig = saveMemBtn.textContent;
+    saveMemBtn.textContent = "✓";
+    setTimeout(() => { saveMemBtn.textContent = orig; }, 1200);
+    return;
   }
 });
 
@@ -2455,7 +2466,7 @@ function startTurn(conv, text, opts) {
   conv.todoCard = null; // 新一轮重新建卡，避免跨轮原位覆盖旧清单
   const wrap = document.createElement("div");
   wrap.className = "msg assistant";
-  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}" data-copied="✓">📋</button></div>`;
+  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}" data-copied="✓">📋</button><button type="button" class="reply-save-mem" title="${tr("保存到项目记忆")}">📌</button></div>`;
   conv.pane.appendChild(wrap);
   conv.currentBubble = wrap;
   conv.busy = true;
@@ -4706,10 +4717,28 @@ document.querySelectorAll("#activitybar .act-btn[data-view]").forEach((tab) => {
   };
 });
 
-// ── 项目记忆：持久化到 localStorage，自动追加到每次 chat/evolve 的系统提示词前缀 ──
-const MEM_KEY = "claudeTools.projectMemory";
+// ── 项目记忆：per-workdir 存储，key = claudeTools.projectMemory.<folder> ──
+function memKey() {
+  return "claudeTools.projectMemory." + (currentFolder || "__global__");
+}
 function getProjectMemory() {
-  return localStorage.getItem(MEM_KEY) || "";
+  return localStorage.getItem(memKey()) || "";
+}
+function appendToProjectMemory(text) {
+  if (!text) return;
+  const ta = $("projectMemory");
+  const existing = ta.value.trim();
+  ta.value = existing ? existing + "\n\n" + text.trim() : text.trim();
+  safeLocalSet(memKey(), ta.value);
+  $("memSaveHint").textContent = "✓ 已保存";
+  setTimeout(() => { $("memSaveHint").textContent = ""; }, 1500);
+  // 展开记忆面板让用户看到结果
+  $("sidebar").classList.remove("collapsed");
+  $("sidebar").classList.remove("req-mode");
+  $("sidebar").classList.add("mem-mode");
+}
+function loadProjectMemoryUI() {
+  $("projectMemory").value = getProjectMemory();
 }
 {
   const ta = $("projectMemory");
@@ -4719,7 +4748,7 @@ function getProjectMemory() {
     clearTimeout(saveTimer);
     $("memSaveHint").textContent = "";
     saveTimer = setTimeout(() => {
-      safeLocalSet(MEM_KEY, ta.value);
+      safeLocalSet(memKey(), ta.value);
       $("memSaveHint").textContent = "✓ 已保存";
       setTimeout(() => { $("memSaveHint").textContent = ""; }, 1500);
     }, 600);
