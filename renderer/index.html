@@ -78,6 +78,9 @@
       .cmdk-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .cmdk-hint { flex: none; font-size: 11px; opacity: .6; }
       .cmdk-empty { padding: 16px; text-align: center; color: var(--muted); font-size: 13px; }
+      .cmdk-group { padding: 4px 12px 2px; font-size: 10px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); opacity: .7; user-select: none; margin-top: 4px; }
+      #savePromptBtn { position: absolute; right: 6px; bottom: 7px; background: none; border: none; cursor: pointer; font-size: 15px; color: var(--muted); padding: 2px 4px; border-radius: 4px; line-height: 1; z-index: 1; }
+      #savePromptBtn:hover { color: #f5c518; background: rgba(255,255,255,.06); }
       /* VSCode 式底部状态栏：分支/同步/改动一目了然，点击直达对应操作 */
       #statusbar { display: flex; align-items: center; height: 24px; padding: 0 4px; background: var(--panel); border-top: 1px solid var(--border); font-size: 11px; color: #9a9a9a; flex: none; user-select: none; }
       #statusbar .sb-item { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; height: 100%; cursor: pointer; white-space: nowrap; }
@@ -404,7 +407,8 @@
       #inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--panel); }
       #inputbar.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; }
       .input-col { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-      #input { resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: inherit; }
+      #input { resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; padding-right: 32px; font: inherit; }
+      .input-wrap { position: relative; }
       #attachList { display: flex; flex-wrap: wrap; gap: 6px; }
       #attachList:empty { display: none; }
       /* 计划模式开关：开启后本对话发送的查询会先要求模型给出分步方案待确认 */
@@ -855,7 +859,10 @@
           <div class="input-col">
             <div id="quickbar"></div>
             <div id="attachList"></div>
-            <textarea id="input" rows="2" data-i18n-ph="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）" placeholder="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）"></textarea>
+            <div class="input-wrap">
+              <textarea id="input" rows="2" data-i18n-ph="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）" placeholder="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）"></textarea>
+              <button id="savePromptBtn" type="button" title="收藏当前输入为 Prompt 片段">⭐</button>
+            </div>
             <div class="input-foot">
               <button id="planToggle" type="button" data-i18n-title="计划模式：先给出分步方案待确认，不直接改动" title="计划模式：先给出分步方案待确认，不直接改动">📋 <span data-i18n="计划模式">计划模式</span></button>
               <span id="costReadout" class="cost-readout"></span>

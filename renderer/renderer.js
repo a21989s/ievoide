@@ -2587,6 +2587,31 @@ function cmdkSwitchView(view) {
   $("sidebar").classList.toggle("req-mode", view === "req");
 }
 // 静态动作清单：与活动栏 / 顶栏既有按钮一一对应，复用其行为
+// ── Saved Prompts（localStorage，零 token）─────────────────────────────
+const SAVED_PROMPTS_KEY = "savedPrompts";
+function getSavedPrompts() {
+  try { return JSON.parse(localStorage.getItem(SAVED_PROMPTS_KEY) || "[]"); } catch { return []; }
+}
+function savePrompt(text) {
+  const t = text.trim();
+  if (!t) return false;
+  const list = getSavedPrompts().filter(p => p !== t);
+  list.unshift(t);
+  localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(list.slice(0, 50)));
+  return true;
+}
+function deletePrompt(text) {
+  localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(getSavedPrompts().filter(p => p !== text)));
+}
+$("savePromptBtn").onclick = () => {
+  const val = $("input").value;
+  if (savePrompt(val)) {
+    const btn = $("savePromptBtn");
+    btn.textContent = "★"; btn.style.color = "#f5c518";
+    setTimeout(() => { btn.textContent = "⭐"; btn.style.color = ""; }, 1200);
+  }
+};
+
 function cmdkBaseCommands() {
   const cmds = [
     { ic: "＋", label: tr("新建对话"), run: () => newConversation() },
@@ -2611,6 +2636,20 @@ function cmdkBaseCommands() {
     ic: q.icon || "⚡", label: tr(q.label), hint: tr("快捷技能"),
     run: () => runQuickSkill(q),
   }));
+  // 已保存 Prompt 分组
+  const saved = getSavedPrompts();
+  if (saved.length) {
+    cmds.push({ kind: "group", label: tr("已保存 Prompt") });
+    saved.forEach((p) => {
+      const short = p.length > 60 ? p.slice(0, 57) + "…" : p;
+      cmds.push({ ic: "⭐", label: short, hint: tr("插入"), kind: "saved",
+        run: () => { $("input").value = p; $("input").focus(); $("input").dispatchEvent(new Event("input")); }
+      });
+      cmds.push({ ic: "🗑", label: short, hint: tr("删除"), kind: "saved-del",
+        run: () => { deletePrompt(p); }
+      });
+    });
+  }
   return cmds;
 }
 let cmdkItems = [];   // 当前渲染的结果（动作 + 文件）
@@ -2635,7 +2674,7 @@ function renderCmdk(q) {
     for (const ch of t) { if (ch === ql[i]) i++; if (i === ql.length) return true; }
     return false;
   };
-  const actions = cmdkBaseCommands().filter((c) => match(c.label)).map((c) => ({ ...c, kind: "action" }));
+  const actions = cmdkBaseCommands().filter((c) => c.kind === "group" || match(c.label)).map((c) => c.kind ? c : { ...c, kind: "action" });
   cmdkItems = actions;
   cmdkSel = 0;
   drawCmdk();
@@ -2655,30 +2694,43 @@ function renderCmdk(q) {
 }
 function drawCmdk() {
   const list = $("cmdkList");
-  if (!cmdkItems.length) { list.innerHTML = `<div class="cmdk-empty">${tr("无匹配")}</div>`; return; }
-  if (cmdkSel >= cmdkItems.length) cmdkSel = cmdkItems.length - 1;
+  const selectables = cmdkItems.filter(it => it.kind !== "group");
+  if (!selectables.length) { list.innerHTML = `<div class="cmdk-empty">${tr("无匹配")}</div>`; return; }
+  // cmdkSel 索引对应 selectables 数组
+  if (cmdkSel >= selectables.length) cmdkSel = selectables.length - 1;
   list.innerHTML = "";
-  cmdkItems.forEach((it, i) => {
+  let selIdx = 0;
+  cmdkItems.forEach((it) => {
+    if (it.kind === "group") {
+      const el = document.createElement("div");
+      el.className = "cmdk-group";
+      el.textContent = it.label;
+      list.appendChild(el);
+      return;
+    }
+    const myIdx = selIdx++;
     const el = document.createElement("div");
-    el.className = "cmdk-item" + (i === cmdkSel ? " sel" : "");
+    el.className = "cmdk-item" + (myIdx === cmdkSel ? " sel" : "");
     el.innerHTML = `<span class="cmdk-ic">${esc(it.ic || "•")}</span>` +
       `<span class="cmdk-label">${esc(it.label)}</span>` +
       (it.hint ? `<span class="cmdk-hint">${esc(it.hint)}</span>` : "");
-    el.onclick = () => runCmdk(i);
-    el.onmousemove = () => { if (cmdkSel !== i) { cmdkSel = i; drawCmdk(); } };
+    el.onclick = () => runCmdk(myIdx);
+    el.onmousemove = () => { if (cmdkSel !== myIdx) { cmdkSel = myIdx; drawCmdk(); } };
     list.appendChild(el);
   });
   list.querySelector(".cmdk-item.sel")?.scrollIntoView({ block: "nearest" });
 }
 function runCmdk(i) {
-  const it = cmdkItems[i];
+  const selectables = cmdkItems.filter(it => it.kind !== "group");
+  const it = selectables[i];
   if (!it) return;
   closeCmdk();
   try { it.run(); } catch (e) { console.error(e); }
 }
 $("cmdkInput").addEventListener("input", (e) => renderCmdk(e.target.value));
 $("cmdkInput").addEventListener("keydown", (e) => {
-  if (e.key === "ArrowDown") { e.preventDefault(); cmdkSel = Math.min(cmdkSel + 1, cmdkItems.length - 1); drawCmdk(); }
+  const selCount = cmdkItems.filter(it => it.kind !== "group").length;
+  if (e.key === "ArrowDown") { e.preventDefault(); cmdkSel = Math.min(cmdkSel + 1, selCount - 1); drawCmdk(); }
   else if (e.key === "ArrowUp") { e.preventDefault(); cmdkSel = Math.max(cmdkSel - 1, 0); drawCmdk(); }
   else if (e.key === "Enter") { e.preventDefault(); runCmdk(cmdkSel); }
   else if (e.key === "Escape") { e.preventDefault(); closeCmdk(); }
