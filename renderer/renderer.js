@@ -2600,6 +2600,12 @@ const KBD_SHORTCUTS = [
     [["Enter"], "换行"],
     [["↑", "↓"], "在斜杠 / 文件补全弹窗中选择"],
     [["Enter", "Tab"], "确认补全项"],
+    [["Shift", "点击快捷技能"], "仅填入输入框（可追加上下文后再发送）"],
+  ]],
+  ["命令面板", [
+    [["Enter"], "执行选中项"],
+    [["Shift", "Enter"], "快捷技能：仅填入输入框（不发送）"],
+    [["Esc"], "关闭面板"],
   ]],
   ["源代码管理", [
     [[KBD_MOD, "Enter"], "提交已暂存的更改（提交信息框内）"],
@@ -2686,10 +2692,10 @@ function cmdkBaseCommands() {
     { ic: "🗺", label: tr("生成代码地图"), run: () => genCodemap() },
     { ic: "📜", label: tr("生成 CHANGELOG"), run: () => genChangelog() },
   ];
-  // 快捷技能：直接以技能提示词发起一次对话（action: 开头的为内置动作）
+  // 快捷技能：Enter=直接发送，Shift+Enter=仅填入输入框（可追加上下文后再手动发送）
   (QUICK_SKILLS || []).forEach((q) => cmds.push({
-    ic: q.icon || "⚡", label: tr(q.label), hint: tr("快捷技能"),
-    run: () => runQuickSkill(q),
+    ic: q.icon || "⚡", label: tr(q.label), hint: tr("快捷技能 · Shift↵插入"),
+    run: (insertOnly = false) => runQuickSkill(q, insertOnly),
   }));
   // 最近目录分组
   const recentFolders = getRecentFolders();
@@ -2790,18 +2796,19 @@ function drawCmdk() {
   });
   list.querySelector(".cmdk-item.sel")?.scrollIntoView({ block: "nearest" });
 }
-function runCmdk(i) {
+function runCmdk(i, insertOnly = false) {
   const selectables = cmdkItems.filter(it => it.kind !== "group");
   const it = selectables[i];
   if (!it) return;
   closeCmdk();
-  try { it.run(); } catch (e) { console.error(e); }
+  try { it.run(insertOnly); } catch (e) { console.error(e); }
 }
 $("cmdkInput").addEventListener("input", (e) => renderCmdk(e.target.value));
 $("cmdkInput").addEventListener("keydown", (e) => {
   const selCount = cmdkItems.filter(it => it.kind !== "group").length;
   if (e.key === "ArrowDown") { e.preventDefault(); cmdkSel = Math.min(cmdkSel + 1, selCount - 1); drawCmdk(); }
   else if (e.key === "ArrowUp") { e.preventDefault(); cmdkSel = Math.max(cmdkSel - 1, 0); drawCmdk(); }
+  else if (e.key === "Enter" && e.shiftKey) { e.preventDefault(); runCmdk(cmdkSel, true); }
   else if (e.key === "Enter") { e.preventDefault(); runCmdk(cmdkSel); }
   else if (e.key === "Escape") { e.preventDefault(); closeCmdk(); }
 });
@@ -4261,10 +4268,13 @@ if (!localStorage.getItem("claudeTools.quickSkills.codemapSeeded")) {
   persistQuickSkills();
 }
 // 执行快捷技能：action: 开头的是内置动作，其余作为 prompt 发起对话
-function runQuickSkill(q) {
-  if (q.prompt === "action:codemap") { genCodemap(); return; }
+// insertOnly=true 时仅填入输入框（Shift+点击 / 命令面板 Shift+↵），让用户追加上下文后再手动发送
+function runQuickSkill(q, insertOnly = false) {
+  if (q.prompt === "action:codemap") { if (!insertOnly) genCodemap(); return; }
   $("input").value = q.prompt;
-  send();
+  $("input").focus();
+  $("input").dispatchEvent(new Event("input"));
+  if (!insertOnly) send();
 }
 function persistQuickSkills() {
   try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {}
@@ -4296,8 +4306,8 @@ function renderQuickbar() {
     b.className = "qbtn";
     b.type = "button";
     b.textContent = `${q.icon ? q.icon + " " : ""}${tr(q.label)}`;
-    b.title = `${q.prompt}\n${tr("右键编辑 / 删除")}`;
-    b.onclick = () => runQuickSkill(q); // 普通项复用既有发送逻辑，action: 项走内置动作
+    b.title = `${q.prompt}\n${tr("右键编辑 / 删除")}\nShift+点击 → 仅填入输入框`;
+    b.onclick = (e) => runQuickSkill(q, e.shiftKey); // Shift+点击仅填入，普通点击直接发送
     b.oncontextmenu = (e) => { e.preventDefault(); editQuickSkill(i); };
     bar.appendChild(b);
   });
