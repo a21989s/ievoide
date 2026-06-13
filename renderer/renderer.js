@@ -2027,6 +2027,7 @@ function trimConvToN(n) {
   const c = activeConv;
   if (!c || !c.pane) return;
   const msgs = [...c.pane.querySelectorAll(":scope > .msg")];
+  if (!msgs.length) return;
   if (msgs.length <= n) { toast(trf("当前只有 {0} 条消息，无需裁剪", msgs.length)); return; }
   const removeCount = msgs.length - n;
   for (let i = 0; i < removeCount; i++) msgs[i].remove();
