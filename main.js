@@ -524,32 +524,45 @@ function mergeConvState(mine, theirs) {
   if (extraHist.length) mine.history = [...mineHist, ...extraHist];
   return mine;
 }
-ipcMain.handle("saveConvs", async (_e, data) => {
-  try {
+// 跟踪最新一次 saveConvs 的 Promise，供 before-quit 等待写盘完成
+let _lastSaveConvsPromise = Promise.resolve();
+ipcMain.handle("saveConvs", (_e, data) => {
+  _lastSaveConvsPromise = (async () => {
     try {
-      data = mergeConvState(data, JSON.parse(await fs.readFile(convFile(), "utf8")));
-    } catch {}
-    delete data.removed; // 仅用于合并判断，不落盘
-    // 原子写：先写临时文件再 rename 覆盖，避免写到一半被中断导致正式文件截断损坏
-    const target = convFile();
-    const tmp = `${target}.${process.pid}.tmp`;
-    try {
-      await fs.writeFile(tmp, JSON.stringify(data));
       try {
-        await fs.rename(tmp, target);
-      } catch (renameErr) {
-        // Windows 下 rename 到已存在文件可能抛 EPERM，fallback 到 copyFile+unlink
-        await fs.copyFile(tmp, target);
-        await fs.unlink(tmp).catch(() => {});
+        data = mergeConvState(data, JSON.parse(await fs.readFile(convFile(), "utf8")));
+      } catch {}
+      delete data.removed; // 仅用于合并判断，不落盘
+      // 原子写：先写临时文件再 rename 覆盖，避免写到一半被中断导致正式文件截断损坏
+      const target = convFile();
+      const tmp = `${target}.${process.pid}.tmp`;
+      try {
+        await fs.writeFile(tmp, JSON.stringify(data));
+        try {
+          await fs.rename(tmp, target);
+        } catch (renameErr) {
+          // Windows 下 rename 到已存在文件可能抛 EPERM，fallback 到 copyFile+unlink
+          await fs.copyFile(tmp, target);
+          await fs.unlink(tmp).catch(() => {});
+        }
+      } finally {
+        fs.unlink(tmp).catch(() => {});
       }
-    } finally {
-      fs.unlink(tmp).catch(() => {});
+      return { ok: true };
+    } catch (err) {
+      console.error("[saveConvs] failed:", err);
+      return { error: String(err) };
     }
-    return { ok: true };
-  } catch (err) {
-    console.error("[saveConvs] failed:", err);
-    return { error: String(err) };
-  }
+  })();
+  return _lastSaveConvsPromise;
+});
+// 确保退出前写盘完成，消除快速关闭时对话记录丢失风险
+let _quitting = false;
+app.on("before-quit", (e) => {
+  if (_quitting) return;
+  e.preventDefault();
+  _quitting = true;
+  _lastSaveConvsPromise.catch(() => {}).finally(() => app.quit());
 });
 
 // 监听共享历史文件：手机端写入后通知渲染层合并刷新（监听目录，文件被替换也不失效）

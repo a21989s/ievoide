@@ -1761,7 +1761,7 @@ window.addEventListener("pagehide", () => {
   if (!_saveTimer) return; // 没有待写改动
   clearTimeout(_saveTimer);
   _saveTimer = null;
-  window.api.saveConvs(buildConvState());
+  window.api.saveConvs(buildConvState()).catch(e => console.error('紧急存档失败', e));
 });
 
 function newConversation() {
