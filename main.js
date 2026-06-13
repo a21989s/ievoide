@@ -1076,6 +1076,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
   if (plan) prompt = PLAN_PREAMBLE + prompt;
   let abort = new AbortController(); // 可重建：续接失败重试时若旧控制器已中止，换新的（见下方 catch）
   let stopped = false; // 用户是否已主动停止（避免重复发 chat:stopped）
+  let timedOut = false; // 流超时标志（区别于用户主动停止）
   // 所有发给渲染层的事件都带上 convId，渲染层据此路由到对应对话。
   // 若渲染帧已销毁(窗口关闭/重载/重启)则中止本次查询，避免 disposed 错误刷屏。
   const send = (ch, payload) => {
@@ -1133,6 +1134,16 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
   let chatToolCalls = 0; // 本轮工具调用次数，供活动日志分析效率
   let chatModel = "";    // 本轮实际模型
   const run = async (resumeId) => {
+    const CHAT_STREAM_TIMEOUT_MS = (appConfig.chatStreamTimeoutSec ?? 120) * 1000;
+    let watchdog;
+    const resetWatchdog = () => {
+      clearTimeout(watchdog);
+      watchdog = setTimeout(() => {
+        timedOut = true;
+        try { abort.abort(); } catch {}
+      }, CHAT_STREAM_TIMEOUT_MS);
+    };
+    resetWatchdog();
     const response = query({
       prompt,
       options: {
@@ -1155,7 +1166,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
         ...(resumeId ? { resume: resumeId } : {}),
       },
     });
-    for await (const msg of response) {
+    try { for await (const msg of response) {
+      resetWatchdog();
       if (stopped) break; // 已停止：不再转发后续事件（含 chat:done），避免界面被重新锁回忙碌
       if (msg.type === "system" && msg.subtype === "init") {
         lastMcpStatus = msg.mcp_servers || []; // 缓存连接状态供 MCP 面板显示
@@ -1231,7 +1243,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
           checkpoint,
         });
       }
-    }
+    } } finally { clearTimeout(watchdog); }
   };
 
   try {
@@ -1250,6 +1262,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
         if (stopped || abort.signal.aborted) { if (!stopped) send("chat:stopped", {}); }
         else send("chat:error", { message: String(err2?.stack || err2) });
       }
+    } else if (timedOut) {
+      send("chat:error", { message: `流超时：${(appConfig.chatStreamTimeoutSec ?? 120)}s 内未收到数据，网络可能已中断` });
     } else if (stopped || abort.signal.aborted) {
       if (!stopped) send("chat:stopped", {}); // stop() 已发过则不重复
     } else {
