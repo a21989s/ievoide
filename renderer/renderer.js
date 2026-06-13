@@ -2291,26 +2291,31 @@ async function send(light = false) {
   }
 
   // 真正发给模型的 prompt：正文 + @mention 文件内容 + 附件绝对路径
-  const mentionNote = await resolveMentionedFiles(text);
-  const promptToSend = text + mentionNote + attachNote(atts);
+  try {
+    const mentionNote = await resolveMentionedFiles(text);
+    const promptToSend = text + mentionNote + attachNote(atts);
 
-  if (conv.busy) {
-    conv.queue.push(promptToSend); // 当前轮还在跑 => 排队
-    renderConvList();
-    refreshSendBtn();
-    scrollIfActive(conv);
-    return;
+    if (conv.busy) {
+      conv.queue.push(promptToSend); // 当前轮还在跑 => 排队
+      renderConvList();
+      refreshSendBtn();
+      scrollIfActive(conv);
+      return;
+    }
+    // 上下文过大且空闲 => 先自动压缩，再把本条消息经队列自动发出。
+    // 压缩放在「用户继续聊」时才做：被搁置的对话不白白花一次压缩费
+    if (conv.ctx >= CTX_AUTOCOMPACT && !conv._compacting) {
+      conv._compacting = true;
+      conv.queue.push(promptToSend);
+      addMsg(conv, "assistant", trf("🧹 上下文已达 {0}，自动发送 /compact 压缩后继续…", fmtTokens(conv.ctx)));
+      startTurn(conv, "/compact");
+      return;
+    }
+    startTurn(conv, promptToSend, { light });
+  } catch (err) {
+    toast(tr("发送失败：") + err.message, "error");
+    $("input").value = text;
   }
-  // 上下文过大且空闲 => 先自动压缩，再把本条消息经队列自动发出。
-  // 压缩放在「用户继续聊」时才做：被搁置的对话不白白花一次压缩费
-  if (conv.ctx >= CTX_AUTOCOMPACT && !conv._compacting) {
-    conv._compacting = true;
-    conv.queue.push(promptToSend);
-    addMsg(conv, "assistant", trf("🧹 上下文已达 {0}，自动发送 /compact 压缩后继续…", fmtTokens(conv.ctx)));
-    startTurn(conv, "/compact");
-    return;
-  }
-  startTurn(conv, promptToSend, { light });
 }
 
 // 解析 text 中的 @rel/path 标记，读取文件内容，返回追加到 prompt 的字符串
