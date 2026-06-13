@@ -2284,6 +2284,15 @@ ipcMain.handle("gitWatch", (_e, repo) => {
       if (/(^|\/)node_modules(\/|$)/.test(f)) return;
       if (/(^|\/)\.git\/(objects|lfs|logs|hooks)(\/|$)/.test(f)) return;
       if (watchDebounce) clearTimeout(watchDebounce);
+      // 立即失效该文件的内容缓存，避免全文搜索返回旧内容
+      if (f) {
+        const absPath = path.join(repo, f);
+        if (contentCache.has(absPath)) {
+          const cached = contentCache.get(absPath);
+          if (cached) contentCacheBytes -= cached.join("\n").length;
+          contentCache.delete(absPath);
+        }
+      }
       watchDebounce = setTimeout(() => {
         watchDebounce = null;
         if (win && !win.isDestroyed()) win.webContents.send("git:changed", repo);
