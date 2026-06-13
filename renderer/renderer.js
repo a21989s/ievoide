@@ -495,17 +495,29 @@ function resetMdEdit() {
 }
 // 把 markdown 渲染进任意容器，并把 ```mermaid 代码块转成图
 function renderMdInto(el, content) {
-  el.innerHTML = safeMd(content);
-  hlBlocks(el);
-  const nodes = [];
-  el.querySelectorAll("code.language-mermaid").forEach((code) => {
-    const div = document.createElement("div");
-    div.className = "mermaid";
-    div.textContent = code.textContent;
-    (code.closest("pre") || code).replaceWith(div);
-    nodes.push(div);
+  // rAF 节流：流式期间每帧最多重渲染一次，消除每 token 重解析的 CPU 浪费
+  if (el._renderPending) {
+    el._renderContent = content;
+    return;
+  }
+  el._renderContent = content;
+  el._renderPending = true;
+  requestAnimationFrame(() => {
+    el._renderPending = false;
+    const c = el._renderContent;
+    el._renderContent = undefined;
+    el.innerHTML = safeMd(c);
+    hlBlocks(el);
+    const nodes = [];
+    el.querySelectorAll("code.language-mermaid").forEach((code) => {
+      const div = document.createElement("div");
+      div.className = "mermaid";
+      div.textContent = code.textContent;
+      (code.closest("pre") || code).replaceWith(div);
+      nodes.push(div);
+    });
+    renderMermaidNodes(nodes);
   });
-  return renderMermaidNodes(nodes);
 }
 function toggleMdEdit() {
   mdEditing ? exitMdEdit() : enterMdEdit();
