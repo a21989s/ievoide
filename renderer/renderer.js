@@ -5583,13 +5583,13 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
     if (lastBubble) {
       const costSpan = document.createElement("span");
       costSpan.className = "turn-cost";
-      costSpan.textContent = `$${cost.toFixed(4)}`;
-      costSpan.title = `本轮费用 $${cost.toFixed(6)}`;
+      costSpan.innerHTML = `$${cost.toFixed(4)}` + (_crT > 0 ? ` <span style="color:#888;font-size:9px">⚡cached</span>` : "");
+      costSpan.title = `本轮费用 $${cost.toFixed(6)}` + (_crT > 0 ? `\n缓存读 ${_crT.toLocaleString()} tokens（节省约 90%）` : "");
       lastBubble.appendChild(costSpan);
     }
   }
   finishTurn(conv,
-    `${tr("用时 ")}${ms}ms · $${cost?.toFixed?.(4) ?? cost}${_tokStr}` +
+    `${tr("用时 ")}${ms}ms · $${cost?.toFixed?.(4) ?? cost}${_crT > 0 ? " ⚡cached" : ""}${_tokStr}` +
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
   if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
