@@ -5302,6 +5302,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
     if (conv && !conv._aiTitled && conv.promptHist && conv.promptHist.length === 1) {
       conv._aiTitled = true;
       const firstMsg = conv.promptHist[0];
+      if (firstMsg.trim().length < 12 || firstMsg.trim().startsWith('/')) return;
       window.api.convAutoTitle(firstMsg).then((r) => {
         if (r && r.title && conv.title !== r.title) {
           conv.title = r.title;
