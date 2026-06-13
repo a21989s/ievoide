@@ -2097,7 +2097,7 @@ $("input").addEventListener("paste", (e) => {
 // 拖拽
 setupDropZone($("inputbar"), addAttachment);
 
-function send(light = false) {
+async function send(light = false) {
   const input = $("input");
   const text = input.value.trim();
   const atts = pendingAttachments.slice();
@@ -2127,8 +2127,9 @@ function send(light = false) {
     conv.title = t.length > 30 ? t.slice(0, 30) + "…" : t;
   }
 
-  // 真正发给模型的 prompt：正文 + 附件绝对路径（让 Claude 用工具读取）
-  const promptToSend = text + attachNote(atts);
+  // 真正发给模型的 prompt：正文 + @mention 文件内容 + 附件绝对路径
+  const mentionNote = await resolveMentionedFiles(text);
+  const promptToSend = text + mentionNote + attachNote(atts);
 
   if (conv.busy) {
     conv.queue.push(promptToSend); // 当前轮还在跑 => 排队
@@ -2147,6 +2148,24 @@ function send(light = false) {
     return;
   }
   startTurn(conv, promptToSend, { light });
+}
+
+// 解析 text 中的 @rel/path 标记，读取文件内容，返回追加到 prompt 的字符串
+async function resolveMentionedFiles(text) {
+  const seen = new Set();
+  const re = /@([\S]+)/g;
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const ref = m[1].replace(/[.,!?;:'")\]>]+$/, ""); // 去掉句尾标点
+    if (ref) seen.add(ref);
+  }
+  if (!seen.size) return "";
+  const parts = [];
+  for (const ref of seen) {
+    const content = await window.api.readWorkdirFile(ref);
+    parts.push(`=== @${ref} ===\n${content}\n=== end ===`);
+  }
+  return "\n\n[以下为 @引用文件内容，请直接使用]\n" + parts.join("\n\n");
 }
 
 function attachNote(list) {

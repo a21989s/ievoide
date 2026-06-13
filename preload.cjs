@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld("api", {
   searchFiles: (q) => ipcRenderer.invoke("searchFiles", q),
   grepFiles: (q) => ipcRenderer.invoke("grepFiles", q),
   readFile: (p) => ipcRenderer.invoke("readFile", p),
+  readWorkdirFile: (rel) => ipcRenderer.invoke("readWorkdirFile", rel),
   writeFile: (p, content) => ipcRenderer.invoke("writeFile", p, content),
   mkdir: (p) => ipcRenderer.invoke("mkdir", p),
   renameEntry: (oldPath, newPath) => ipcRenderer.invoke("renameEntry", oldPath, newPath),

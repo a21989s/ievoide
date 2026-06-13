@@ -777,6 +777,22 @@ ipcMain.handle("readFile", async (_e, filePath) => {
   }
 });
 
+// ── 按工作目录相对路径读取文件（@mention 注入用）────────────────
+ipcMain.handle("readWorkdirFile", async (_e, relPath) => {
+  if (!workdir) return "(未设置工作目录)";
+  const absPath = path.join(workdir, relPath.replace(/\/$/, ""));
+  try {
+    const stat = await fs.stat(absPath);
+    if (stat.isDirectory()) return `(${relPath} 是目录，请引用具体文件)`;
+    if (stat.size > 100_000) return `(文件过大 ${Math.round(stat.size / 1024)}KB，已跳过)`;
+    const buf = await fs.readFile(absPath);
+    if (looksBinary(buf)) return "(二进制文件)";
+    return buf.toString("utf8");
+  } catch (err) {
+    return `(读取失败: ${String(err)})`;
+  }
+});
+
 // ── 文本写回（md 编辑器用）：写临时文件后原子重命名，避免中途崩溃损坏原文件 ──
 ipcMain.handle("writeFile", async (_e, filePath, content) => {
   try {
