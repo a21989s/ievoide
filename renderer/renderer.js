@@ -1,4 +1,8 @@
 const $ = (id) => document.getElementById(id);
+function safeLocalSet(key, val) {
+  try { localStorage.setItem(key, val); }
+  catch { try { toast(tr('本地存储已满，设置未保存'), 'error'); } catch {} }
+}
 // 拖拽附件工厂：高亮 dragover，drop 时把文件逐个交给 onFiles
 function setupDropZone(el, onFiles) {
   ["dragenter", "dragover"].forEach((ev) =>
@@ -297,7 +301,7 @@ async function openFolderUI(folder) {
       const existing = ta.value.trim();
       const sep = existing ? "\n\n" : "";
       ta.value = existing + sep + md.trim();
-      localStorage.setItem("claudeTools.projectMemory", ta.value);
+      safeLocalSet("claudeTools.projectMemory", ta.value);
       toast("检测到 CLAUDE.md，已追加到项目记忆", "info");
     }
   } catch {}
@@ -803,7 +807,7 @@ $("vsave").onclick = saveMd;
 // 停靠到中间（仿 VS Code）↔ 浮窗显示：占据真实布局而非覆盖
 $("vdock").onclick = () => {
   const docked = $("viewer").classList.toggle("docked");
-  localStorage.setItem("viewerDocked", docked ? "1" : "0");
+  safeLocalSet("viewerDocked", docked ? "1" : "0");
 };
 // 恢复上次的停靠状态与宽度
 if (localStorage.getItem("viewerDocked") === "1") $("viewer").classList.add("docked");
@@ -1694,7 +1698,7 @@ function switchConv(id) {
   if (activeConv) {
     const draftVal = $('input').value;
     activeConv._draft = draftVal;
-    if (draftVal) localStorage.setItem('draft_' + activeConv.id, draftVal);
+    if (draftVal) safeLocalSet('draft_' + activeConv.id, draftVal);
     else localStorage.removeItem('draft_' + activeConv.id);
   }
   activeConv = c;
@@ -3194,11 +3198,11 @@ function savePrompt(text, tag = "") {
   if (!t) return false;
   const list = getSavedPrompts().filter(p => p.text !== t);
   list.unshift({ text: t, tag: (tag || "").trim() });
-  localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(list.slice(0, 50)));
+  safeLocalSet(SAVED_PROMPTS_KEY, JSON.stringify(list.slice(0, 50)));
   return true;
 }
 function deletePrompt(text) {
-  localStorage.setItem(SAVED_PROMPTS_KEY, JSON.stringify(getSavedPrompts().filter(p => p.text !== text)));
+  safeLocalSet(SAVED_PROMPTS_KEY, JSON.stringify(getSavedPrompts().filter(p => p.text !== text)));
 }
 function savePromptDialog(prefillText) {
   return new Promise((resolve) => {
@@ -4164,13 +4168,13 @@ $("evClose").onclick = () => { $("evolveModal").classList.remove("open", "collap
 $("evDock").onclick = () => {
   const docked = $("evolveModal").classList.toggle("docked");
   $("evolveModal").classList.remove("collapsed");
-  localStorage.setItem("evolveDocked", docked ? "1" : "0");
+  safeLocalSet("evolveDocked", docked ? "1" : "0");
   syncEvDock();
 };
 $("evCollapse").onclick = () => {
   // 隐藏需停靠态：未停靠时先切到停靠
   $("evolveModal").classList.add("docked");
-  localStorage.setItem("evolveDocked", "1");
+  safeLocalSet("evolveDocked", "1");
   $("evolveModal").classList.add("collapsed");
   syncEvDock();
 };
@@ -4191,7 +4195,7 @@ $("evRestore").onclick = () => { $("evolveModal").classList.remove("collapsed");
       document.removeEventListener("mousemove", move);
       document.removeEventListener("mouseup", up);
       const cur = getComputedStyle(document.documentElement).getPropertyValue("--ev-dock-w").trim();
-      localStorage.setItem("evolveDockW", parseInt(cur, 10) || 440);
+      safeLocalSet("evolveDockW", parseInt(cur, 10) || 440);
     };
     document.addEventListener("mousemove", move);
     document.addEventListener("mouseup", up);
@@ -4669,7 +4673,7 @@ function getProjectMemory() {
     clearTimeout(saveTimer);
     $("memSaveHint").textContent = "";
     saveTimer = setTimeout(() => {
-      localStorage.setItem(MEM_KEY, ta.value);
+      safeLocalSet(MEM_KEY, ta.value);
       $("memSaveHint").textContent = "✓ 已保存";
       setTimeout(() => { $("memSaveHint").textContent = ""; }, 1500);
     }, 600);
@@ -4789,7 +4793,7 @@ function renderReqMini() {
     `<div class="rm-body">${itemsHtml}</div>`;
   el.querySelector(".rm-head").onclick = () => {
     reqMiniCollapsed = !reqMiniCollapsed;
-    localStorage.setItem("claudeTools.reqMiniCollapsed", reqMiniCollapsed ? "1" : "0");
+    safeLocalSet("claudeTools.reqMiniCollapsed", reqMiniCollapsed ? "1" : "0");
     renderReqMini();
   };
 }
