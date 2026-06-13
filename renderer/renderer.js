@@ -2194,7 +2194,12 @@ async function saveFileAsAttachment(file) {
 // 气泡/历史/需求清单里的图片统一用 file:// 引用已存盘附件，不把整张 base64 写进持久化 HTML；
 // dataUrl 仅用于发送前 attachList 的临时缩略图（旧存档里的 data: 条目仍由 CSP 放行，正常显示）
 const fileUrl = (p) => "file://" + encodeURI(p);
+const MAX_ATTACH_BYTES = 20 * 1024 * 1024; // 20 MB
 async function addAttachment(file) {
+  if (file.size > MAX_ATTACH_BYTES) {
+    toast(tr("文件过大"), "error");
+    return;
+  }
   try {
     const a = await saveFileAsAttachment(file);
     a.size = file.size || 0;
