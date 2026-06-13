@@ -660,28 +660,39 @@ const server = http.createServer(async (req, res) => {
           log("📎 附件：" + files.map((f) => path.basename(f)).join(", "));
         }
         const cfg = loadCfg();
-        const response = query({
-          prompt: `需求/问题：\n${requirement}${attachNote}\n\n请直接修改源码实现它（用 Read/Grep 定位，Edit/Write 修改）。`,
-          options: {
-            cwd: __dirname,
-            permissionMode: "bypassPermissions",
-            maxTurns: 30,
-            systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend + "\n" + GUARDRAILS },
-            ...((cfg.evolveModel || cfg.model) ? { model: cfg.evolveModel || cfg.model } : {}),
-            ...tokenOpts(cfg),
-            ...(resume ? { resume } : {}),
-            abortController: abort,
-          },
-        });
+        // 公共的 evolve 会话参数；测试门禁的 fix 轮复用，靠 session 续接同一上下文。
+        const evolveOpts = {
+          cwd: __dirname,
+          permissionMode: "bypassPermissions",
+          maxTurns: 50, // 对抗评估 + 实现 + 自测/修复循环需要更多轮次
+          systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend + "\n" + GUARDRAILS },
+          ...((cfg.evolveModel || cfg.model) ? { model: cfg.evolveModel || cfg.model } : {}),
+          ...tokenOpts(cfg),
+          abortController: abort,
+        };
         let summary = "", session = resume;
-        for await (const msg of response) {
-          if (msg.type === "assistant")
-            for (const b of msg.message.content) {
-              if (b.type === "text") { summary += b.text; send("chunk", { text: b.text }); }
-              else if (b.type === "tool_use") send("tool", { name: b.name });
-            }
-          else if (msg.type === "result") session = msg.session_id || session;
-        }
+        // 跑一轮 query 并把流式输出转发给前端；session 续接让 fix 轮看得到前文。
+        const runQuery = async (prompt) => {
+          const response = query({ prompt, options: { ...evolveOpts, ...(session ? { resume: session } : {}) } });
+          for await (const msg of response) {
+            if (msg.type === "assistant")
+              for (const b of msg.message.content) {
+                if (b.type === "text") { summary += b.text; send("chunk", { text: b.text }); }
+                else if (b.type === "tool_use") send("tool", { name: b.name });
+              }
+            else if (msg.type === "result") session = msg.session_id || session;
+          }
+        };
+
+        // 2) 对抗式生成方案 → 评估通过 → 实现（分阶段，不跳步）
+        await runQuery(
+          `需求/问题：\n${requirement}${attachNote}\n\n` +
+          `按以下阶段执行，不要跳步：\n` +
+          `1) 方案：先用 Read/Grep 摸清现状，提出实现方案，明确改动点、边界条件、风险。\n` +
+          `2) 对抗评估：扮演挑剔的审稿人逐条质疑该方案——哪里会出错、漏了什么、有无更简单可靠的做法；发现问题就改方案，直到自己也挑不出毛病。\n` +
+          `3) 评估全部通过后再动手改源码（用 Edit/Write）。\n` +
+          `4) 自测：改完立即用 Bash 跑验证，不通过就修，直到通过再结束。`
+        );
 
         // 用户中途停止：丢弃半成品改动，回滚到检查点
         if (abort.signal.aborted) {
@@ -691,7 +702,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         // 3) 改了哪些文件
-        const changed = (await gt(["status", "--porcelain"]))
+        let changed = (await gt(["status", "--porcelain"]))
           .split("\n").map((s) => s.slice(3).trim()).filter(Boolean);
         if (!changed.length) {
           evolving = false;
@@ -699,21 +710,42 @@ const server = http.createServer(async (req, res) => {
         }
         log("📝 改动：" + changed.join(", "));
 
-        // 4) 语法校验（失败回滚）
-        for (const f of changed) {
-          if (/\.(c|m)?js$/.test(f) && fs.existsSync(path.join(__dirname, f))) {
-            try { await execFileAsync("node", ["--check", path.join(__dirname, f)]); }
-            catch (err) {
-              log("❌ 语法校验失败，回滚");
-              try { await gt(["reset", "--hard", checkpoint]); await gt(["clean", "-fd"]); } catch {}
-              evolving = false;
-              send("done", { error: "语法错误已回滚", detail: String(err?.stderr || err).slice(0, 400), session });
-              return res.end();
+        // 4) 测试门禁：逐个语法校验改动文件 + 跑项目自带 dryrun；
+        //    不过就把报错回灌给 agent 修（resume 续接），循环直到通过或超次数。
+        const npmBin = process.platform === "win32" ? "npm.cmd" : "npm";
+        const runTests = async () => {
+          const cur = (await gt(["status", "--porcelain"]))
+            .split("\n").map((s) => s.slice(3).trim()).filter(Boolean);
+          for (const f of cur) { // dryrun 未覆盖 server.mjs 等，逐个补校验
+            if (/\.(c|m)?js$/.test(f) && fs.existsSync(path.join(__dirname, f))) {
+              try { await execFileAsync("node", ["--check", path.join(__dirname, f)]); }
+              catch (e) { return `语法错误 ${f}:\n` + String(e?.stderr || e); }
             }
           }
+          try { await execFileAsync(npmBin, ["run", "dryrun"], { cwd: __dirname, maxBuffer: 8 * 1024 * 1024 }); return null; }
+          catch (e) {
+            if (e?.code === "ENOENT") { log("⚠️ 未找到 npm，跳过 dryrun（已逐文件语法校验）"); return null; }
+            return String(e?.stderr || e?.stdout || e?.message || e);
+          }
+        };
+        let testErr = await runTests();
+        for (let round = 1; testErr && round <= 3 && !abort.signal.aborted; round++) {
+          log(`❌ 测试未通过，第 ${round}/3 轮修复…`);
+          await runQuery(`测试未通过，报错如下，请修复后再自测，直到通过：\n${testErr.slice(0, 2000)}`);
+          testErr = await runTests();
         }
+        if (testErr) {
+          log("❌ 多轮修复后测试仍未通过，回滚");
+          try { await gt(["reset", "--hard", checkpoint]); await gt(["clean", "-fd"]); } catch {}
+          evolving = false;
+          send("done", { error: "测试未通过已回滚", detail: testErr.slice(0, 400), session });
+          return res.end();
+        }
+        log("✅ 测试通过");
 
-        // 5) 提交并应用
+        // 5) 提交并应用（重算改动清单，纳入修复轮的改动）
+        changed = (await gt(["status", "--porcelain"]))
+          .split("\n").map((s) => s.slice(3).trim()).filter(Boolean);
         await gt(["add", "-A"]);
         await gt(["commit", "-m", `evolve: ${requirement.slice(0, 60)}`]);
         const commit = (await gt(["rev-parse", "HEAD"])).trim();
