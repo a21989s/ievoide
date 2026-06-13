@@ -1905,7 +1905,11 @@ ipcMain.handle("evolveAudit", async () => {
           if (b.type === "text") text += b.text;
           else if (b.type === "tool_use") send("evolve:log", `🔧 ${b.name}`);
         }
-      else if (msg.type === "result") recordCost("evolve", msg.usage, msg.total_cost_usd); // 巡检消耗记入 evolve
+      else if (msg.type === "result") {
+        recordCost("evolve", msg.usage, msg.total_cost_usd); // 巡检消耗记入 evolve
+        const au = msg.usage || {};
+        send("evolve:usage", { input: au.input_tokens || 0, output: au.output_tokens || 0, cost: msg.total_cost_usd || 0 });
+      }
     }
     const m = text.match(/\[[\s\S]*\]/);
     let items = [];
@@ -2055,6 +2059,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
         evolveToolCalls = 0; // 重置，避免 steer 多轮累加
         prevCost = Math.max(prevCost, msg.total_cost_usd || 0);
         prevUsage = u;
+        send("evolve:usage", { input: u.input_tokens || 0, output: u.output_tokens || 0, cost: msg.total_cost_usd || 0 });
         // 本轮结束：没有待追加的调整消息则收尾结束输入流；否则继续下一轮
         if (!steer.queue.length) { steer.done = true; if (steer.wake) { steer.wake(); steer.wake = null; } }
       }

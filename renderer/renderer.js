@@ -3641,6 +3641,8 @@ async function runEvolve(requirement) {
   // 覆盖手动/清单/持续进化/定期自检/自动修错所有入口）。模型侧本就是每次全新
   // 会话（query 不带 resume），这里把界面「会话」也对齐成一题一清。
   $("evLog").textContent = "";
+  $("evUsageLine").textContent = "";
+  $("evUsageLine").classList.remove("visible");
   evolveAttachments = [];
   renderAttachments();
   evLog("▶ " + requirement + (scopeGlob ? "\n🔒 限定文件：" + scopeGlob : "") + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
@@ -4044,6 +4046,12 @@ $("evDiffModal").onclick = (e) => { if (e.target.id === "evDiffModal") $("evDiff
 
 // 进化事件
 window.api.on("evolve:log", (t) => evLog(t));
+window.api.on("evolve:usage", (u) => {
+  const total = (u.input || 0) + (u.output || 0);
+  const costStr = u.cost > 0 ? ` ≈ $${u.cost.toFixed(4)}` : "";
+  $("evUsageLine").textContent = `已用 ${total.toLocaleString()} token${costStr}（input ${(u.input||0).toLocaleString()} + output ${(u.output||0).toLocaleString()}）`;
+  $("evUsageLine").classList.add("visible");
+});
 window.api.on("evolve:done", (info) => {
   setEvolveBusy(false);
   if (info?.error) evLog(tr("✖ 失败：") + info.error);

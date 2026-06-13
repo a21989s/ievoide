@@ -674,6 +674,8 @@
       #evHistory .evh.ok .evh-badge { background: #1e3a32; color: #6dca9f; }
       #evHistory .evh.bad .evh-badge { background: #3a1e1e; color: #e08a8a; }
       #evHistory .evh.neutral .evh-badge { background: #2a2a2a; color: #aaa; }
+      #evUsageLine { font-size: 11px; color: #f0a040; background: #1a1200; border: 1px solid #3a2800; border-radius: 4px; padding: 3px 8px; margin-bottom: 4px; display: none; }
+      #evUsageLine.visible { display: block; }
       #evLog { flex: 1; overflow: auto; background: #141414; border: 1px solid var(--border); border-radius: 6px; padding: 10px; margin: 0; font-size: 12px; white-space: pre-wrap; word-break: break-word; line-height: 1.5; }
       #evHistory .evh .evh-diff { flex-shrink: 0; padding: 0 5px; border-radius: 3px; cursor: pointer; opacity: .65; }
       #evHistory .evh .evh-diff:hover { opacity: 1; background: rgba(127,127,127,.2); }
@@ -1041,6 +1043,7 @@
           <div class="ev-sub"><span data-i18n="进化记录">进化记录</span> <span class="sc-n" id="evHistN">0</span><span class="sc-grp-act" id="evClearHist" data-i18n-title="清空" title="清空">🗑</span></div>
           <div id="evHistory"></div>
           <div class="ev-sub" data-i18n="进化日志">进化日志</div>
+          <div id="evUsageLine"></div>
           <pre id="evLog"></pre>
         </div>
       </div>
