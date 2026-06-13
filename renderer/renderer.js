@@ -5453,6 +5453,17 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
       (_cwT ? ` / cw ${fmtTok(_cwT)}` : "") +
       (_crT ? ` / cr ${fmtTok(_crT)}` : "")
     : "";
+  // 在最后一个内容气泡右下角注入本轮费用小标（仅 cost > 0 时显示）
+  if (turnWrap && typeof cost === "number" && cost > 0) {
+    const lastBubble = [...turnWrap.querySelectorAll(".bubble")].pop();
+    if (lastBubble) {
+      const costSpan = document.createElement("span");
+      costSpan.className = "turn-cost";
+      costSpan.textContent = `$${cost.toFixed(4)}`;
+      costSpan.title = `本轮费用 $${cost.toFixed(6)}`;
+      lastBubble.appendChild(costSpan);
+    }
+  }
   finishTurn(conv,
     `${tr("用时 ")}${ms}ms · $${cost?.toFixed?.(4) ?? cost}${_tokStr}` +
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
