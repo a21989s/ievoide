@@ -429,6 +429,9 @@
       .plan-actions button { padding: 4px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
       .plan-actions button:first-child { background: var(--accent); border-color: var(--accent); color: #fff; }
       .plan-actions button:hover { filter: brightness(1.12); }
+      .followup-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+      .followup-btn { padding: 3px 10px; font-size: 12px; border: 1px solid var(--border); border-radius: 12px; background: transparent; color: var(--fg); cursor: pointer; opacity: .75; transition: opacity .15s, background .15s; }
+      .followup-btn:hover { opacity: 1; background: var(--panel); }
       .retry-btn { display: inline-block; margin-top: 6px; padding: 3px 10px; font-size: 12px; border: 1px solid #c0392b; border-radius: 6px; background: transparent; color: #e57373; cursor: pointer; }
       .retry-btn:hover:not(:disabled) { background: rgba(229,115,115,.15); }
       .retry-btn:disabled { opacity: .45; cursor: not-allowed; }

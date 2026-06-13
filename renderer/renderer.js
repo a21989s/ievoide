@@ -2174,6 +2174,36 @@ function addPlanActions(conv, wrap) {
   scrollIfActive(conv);
 }
 
+// follow-up 快捷按钮：每轮正常完成后追加，点击填入 prompt 并发送
+function addFollowUpBtns(conv, wrap) {
+  const BTNS = [
+    { label: "🧪 " + tr("生成测试"),       prompt: tr("请为上述实现生成完整的单元测试，覆盖主流程和边界情况。") },
+    { label: "💡 " + tr("解释实现"),       prompt: tr("请逐步解释上述实现的核心逻辑、关键设计决策与潜在风险。") },
+    { label: "⚡ " + tr("提炼为快捷技能"), prompt: tr("请将上述实现提炼为一个可复用的快捷技能（skill），给出完整定义与调用示例。") },
+  ];
+  if (!wrap) return;
+  const bar = document.createElement("div");
+  bar.className = "followup-bar";
+  BTNS.forEach(({ label, prompt }) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "followup-btn";
+    btn.textContent = label;
+    btn.title = prompt;
+    btn.onclick = () => {
+      bar.remove();
+      if (conv !== activeConv) return;
+      const inp = $("input");
+      inp.value = prompt;
+      inp.focus();
+      send();
+    };
+    bar.appendChild(btn);
+  });
+  wrap.appendChild(bar);
+  scrollIfActive(conv);
+}
+
 function appendText(conv, t) {
   if (!conv || !conv.currentBubble) return;
   const cb = conv.currentBubble;
@@ -4831,6 +4861,8 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
   if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
   // 计划模式轮 & 没有排队消息 => 渲染「按计划执行 / 继续调整」操作条
   if (conv && conv._planTurn && turnWrap && !conv.queue.length) addPlanActions(conv, turnWrap);
+  // 非计划轮、无排队消息 => 追加 follow-up 快捷按钮
+  if (conv && !conv._planTurn && turnWrap && !conv.queue.length) addFollowUpBtns(conv, turnWrap);
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 合并成一轮发出（续接同一 session）；否则推进需求清单。
