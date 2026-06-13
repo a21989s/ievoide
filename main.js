@@ -804,6 +804,7 @@ ipcMain.handle("readFile", async (_e, filePath) => {
 ipcMain.handle("readWorkdirFile", async (_e, relPath) => {
   if (!workdir) return "(未设置工作目录)";
   const absPath = path.join(workdir, relPath.replace(/\/$/, ""));
+  if (path.relative(workdir, absPath).startsWith("..")) return "(路径越界，拒绝读取)";
   try {
     const stat = await fs.stat(absPath);
     if (stat.isDirectory()) return `(${relPath} 是目录，请引用具体文件)`;
