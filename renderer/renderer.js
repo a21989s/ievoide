@@ -2060,12 +2060,12 @@ async function exportActiveConv(includeTools) {
 }
 $("exportConv").onclick = (e) => exportActiveConv(e.shiftKey);
 
-$("ctxTrimBtn").onclick = () => {
+$("ctxTrimBtn").onclick = async () => {
   const c = activeConv;
   if (!c || !c.pane) return;
   const total = c.pane.querySelectorAll(":scope > .msg").length;
   if (!total) { toast(tr("当前对话没有消息")); return; }
-  const raw = prompt(trf("当前共 {0} 条消息。\n保留最近几条？（输入数字，1 条=1 个 user 或 assistant 气泡）", total), String(Math.max(1, Math.min(10, total))));
+  const raw = await modalPrompt(trf("当前共 {0} 条消息。\n保留最近几条？（输入数字，1 条=1 个 user 或 assistant 气泡）", total), String(Math.max(1, Math.min(10, total))));
   if (raw === null) return; // 取消
   const n = parseInt(raw, 10);
   if (!n || n < 1 || n >= total) { toast(n >= total ? tr("保留数不少于当前消息数，无需裁剪") : tr("请输入有效的正整数")); return; }
