@@ -630,8 +630,10 @@ async function listWorkdirFiles() {
   const all = [];
   const dirs = []; // 目录条目，供 @ 补全把整个目录纳入上下文
   const visited = new Set(); // 已访问目录的真实路径，防符号链接自指/环路重复遍历
-  async function walk(dir) {
+  const MAX_DEPTH = 20;
+  async function walk(dir, depth = 0) {
     if (all.length >= FILE_CACHE_MAX) return;
+    if (depth > MAX_DEPTH) return;
     let real;
     try {
       real = await fs.realpath(dir);
@@ -654,7 +656,7 @@ async function listWorkdirFiles() {
         if (SKIP_DIRS.has(d.name)) continue;
         const rel = path.relative(workdir, full).replace(/\\/g, "/");
         dirs.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
-        await walk(full);
+        await walk(full, depth + 1);
       } else {
         const rel = path.relative(workdir, full).replace(/\\/g, "/");
         all.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
