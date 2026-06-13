@@ -1957,6 +1957,20 @@ ipcMain.on("evolveAlive", () => {
 ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
   if (evolving) return { error: "已有进化在进行中" };
   if (!requirement || !requirement.trim()) return { error: "需求为空" };
+  // 硬性每日消费上限：与 chat handler 保持一致，超限直接拦截
+  const maxSpend = appConfig.maxDailySpendUSD;
+  if (maxSpend > 0) {
+    const s = loadCostStats();
+    const today = localDay();
+    const todaySpent = s.days[today]
+      ? Object.values(s.days[today]).reduce((a, v) => a + (v.cost || 0), 0)
+      : 0;
+    if (todaySpent >= maxSpend) {
+      if (win && !win.isDestroyed())
+        win.webContents.send("evolve:error", `今日消费已达 $${maxSpend} 上限，请在设置中调整「每日消费硬上限」。`);
+      return { error: `今日消费已达 $${maxSpend} 上限` };
+    }
+  }
   evolving = true; // 先占锁再取提示词：取词的 await 期间不让第二个进化穿透检查
   // 进化系统提示词由大脑服务下发（成功过一次后离线有缓存兜底），取不到则不开工
   let evolveAppend;
