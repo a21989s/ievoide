@@ -1077,6 +1077,7 @@ if (window._scAutoRefreshTimer) clearInterval(window._scAutoRefreshTimer);
 window._scAutoRefreshTimer = setInterval(scAutoRefresh, 10000);
 window.addEventListener("beforeunload", () => {
   clearInterval(window._scAutoRefreshTimer);
+  clearInterval(window._loadUsageTimer);
   [
     "git:changed", "convs:changed", "mcp:status", "evolve:backlog", "budget:exceeded",
     "evolve:log", "evolve:usage", "evolve:done", "evolve:rolledback", "issues:update",
@@ -3381,7 +3382,8 @@ $("usage").onclick = () => { _usageThrottle = Date.now(); loadUsage(true); };
 loadUsage(); // 启动拉一次
 // 每 60 秒刷新（30s 轮询曾触发用量端点 429 限流；用户要求放缓到 60s 一次）。
 // 探测走控制通道不耗 token，仅子进程开销；窗口不可见时跳过。
-setInterval(() => { if (!document.hidden) loadUsage(); }, 60000);
+if (window._loadUsageTimer) clearInterval(window._loadUsageTimer);
+window._loadUsageTimer = setInterval(() => { if (!document.hidden) loadUsage(); }, 60000);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) loadUsageThrottled(); }); // 恢复可见时立即刷一次（带节流防抖）
 
 // ── 模型切换：顶栏下拉，写回 config 后下一轮 chat 即生效，与用量/费用联动控成本 ──
