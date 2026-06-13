@@ -3578,7 +3578,7 @@ async function loadEvolveHistory() {
 $("evClearHist").onclick = async () => { await window.api.clearEvolveHistory(); loadEvolveHistory(); };
 
 // 查看某次进化实际改了哪些代码：拉取 git diff 并按行高亮展示
-function renderDiff(text) {
+function renderDiffLines(text) {
   const esc = (s) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return text.split("\n").map((line) => {
     let cls = "";
@@ -3590,8 +3590,27 @@ function renderDiff(text) {
     return cls ? `<span class="${cls}">${esc(line)}</span>` : esc(line);
   }).join("\n");
 }
+// 把整段 diff 按文件拆分，返回 [{filePath, rawDiff}]
+function parseDiffByFile(text) {
+  const groups = [];
+  let cur = null;
+  for (const line of text.split("\n")) {
+    if (line.startsWith("diff --git ")) {
+      if (cur) groups.push(cur);
+      // 从 "diff --git a/foo b/foo" 中提取文件路径（取 b/ 部分）
+      const m = line.match(/^diff --git a\/.+ b\/(.+)$/);
+      cur = { filePath: m ? m[1] : line, lines: [line] };
+    } else if (cur) {
+      cur.lines.push(line);
+    }
+  }
+  if (cur) groups.push(cur);
+  return groups;
+}
+let _diffCheckpoint = null; // 当前弹窗对应的 checkpoint（供撤销按钮使用）
 async function showEvolveDiff(h, req) {
   const modal = $("evDiffModal");
+  _diffCheckpoint = h.checkpoint || null;
   $("evDiffTitle").textContent = "🔍 " + tr("查看改动") + (req ? "：" + req : "");
   $("evDiffStat").textContent = "";
   $("evDiffBody").textContent = tr("加载中…");
@@ -3600,7 +3619,50 @@ async function showEvolveDiff(h, req) {
   if (!r || r.error) { $("evDiffBody").textContent = tr("✖ 无法获取改动：") + ((r && r.error) || "?"); return; }
   if (r.empty || !r.diff) { $("evDiffBody").textContent = tr("（本次未产生代码改动）"); return; }
   if (r.stat) $("evDiffStat").textContent = r.stat.trim();
-  $("evDiffBody").innerHTML = renderDiff(r.diff);
+  const groups = parseDiffByFile(r.diff);
+  if (groups.length <= 1) {
+    // 单文件或无法解析时退化为整体渲染
+    $("evDiffBody").innerHTML = renderDiffLines(r.diff);
+    return;
+  }
+  const body = $("evDiffBody");
+  body.innerHTML = "";
+  body.style.whiteSpace = "normal";
+  for (const g of groups) {
+    const div = document.createElement("div");
+    div.className = "ev-file-group";
+    const hdr = document.createElement("div");
+    hdr.className = "ev-file-header";
+    const nm = document.createElement("span");
+    nm.className = "ev-file-name";
+    nm.textContent = g.filePath;
+    const btn = document.createElement("button");
+    btn.className = "ev-file-revert";
+    btn.textContent = tr("↩ 撤销此文件");
+    btn.title = tr("把此文件恢复到本次进化前的状态");
+    btn.onclick = async () => {
+      if (!_diffCheckpoint) { alert(tr("无检查点，无法撤销")); return; }
+      btn.disabled = true;
+      btn.textContent = tr("撤销中…");
+      const res = await window.api.evolveRevertFile({ checkpoint: _diffCheckpoint, filePath: g.filePath });
+      if (res && res.ok) {
+        btn.textContent = tr("✓ 已撤销");
+        div.style.opacity = "0.45";
+      } else {
+        btn.disabled = false;
+        btn.textContent = tr("↩ 撤销此文件");
+        alert(tr("撤销失败：") + (res && res.error ? res.error : "?"));
+      }
+    };
+    hdr.appendChild(nm);
+    hdr.appendChild(btn);
+    const pre = document.createElement("pre");
+    pre.className = "ev-file-patch";
+    pre.innerHTML = renderDiffLines(g.lines.join("\n"));
+    div.appendChild(hdr);
+    div.appendChild(pre);
+    body.appendChild(div);
+  }
 }
 $("evDiffClose").onclick = () => $("evDiffModal").classList.remove("open");
 $("evDiffModal").onclick = (e) => { if (e.target.id === "evDiffModal") $("evDiffModal").classList.remove("open"); };

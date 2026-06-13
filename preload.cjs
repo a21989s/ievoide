@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld("api", {
   getEvolveHistory: () => ipcRenderer.invoke("getEvolveHistory"),
   clearEvolveHistory: () => ipcRenderer.invoke("clearEvolveHistory"),
   evolveDiff: (payload) => ipcRenderer.invoke("evolveDiff", payload),
+  evolveRevertFile: (payload) => ipcRenderer.invoke("evolveRevertFile", payload),
   evolveAudit: () => ipcRenderer.invoke("evolveAudit"),
   getEvolveBacklog: () => ipcRenderer.invoke("getEvolveBacklog"),
   clearEvolveBacklog: () => ipcRenderer.invoke("clearEvolveBacklog"),

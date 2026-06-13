@@ -1744,6 +1744,15 @@ ipcMain.handle("evolveDiff", (_e, payload) => {
     return { error: String(err?.stderr || err).trim() };
   }
 });
+ipcMain.handle("evolveRevertFile", (_e, { checkpoint, filePath } = {}) => {
+  if (!checkpoint || !filePath) return { error: "参数不完整" };
+  try {
+    gitT(["checkout", checkpoint, "--", filePath]);
+    return { ok: true };
+  } catch (err) {
+    return { error: String(err?.stderr || err).trim() };
+  }
+});
 ipcMain.handle("getEvolveBacklog", () => readBacklog());
 ipcMain.handle("clearEvolveBacklog", () => { writeBacklog([]); return { ok: true }; });
 ipcMain.handle("removeEvolveBacklog", (_e, id) => { writeBacklog(readBacklog().filter((x) => x.id !== id)); return { ok: true }; });

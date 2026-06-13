@@ -668,6 +668,13 @@
       #evDiffBody .d-del { color: #e08a8a; }
       #evDiffBody .d-hunk { color: #5a9bd4; }
       #evDiffBody .d-file { color: #d6b35a; font-weight: bold; }
+      #evDiffBody .ev-file-group { margin-bottom: 12px; white-space: normal; }
+      #evDiffBody .ev-file-header { display: flex; align-items: center; justify-content: space-between; background: rgba(214,179,90,.12); border: 1px solid rgba(214,179,90,.3); border-radius: 4px; padding: 3px 8px; margin-bottom: 4px; }
+      #evDiffBody .ev-file-name { color: #d6b35a; font-weight: bold; font-size: 12px; word-break: break-all; white-space: pre-wrap; }
+      #evDiffBody .ev-file-revert { flex-shrink: 0; margin-left: 10px; padding: 1px 8px; font-size: 11px; border-radius: 3px; border: 1px solid #e08a8a; background: transparent; color: #e08a8a; cursor: pointer; white-space: nowrap; }
+      #evDiffBody .ev-file-revert:hover { background: rgba(224,138,138,.2); }
+      #evDiffBody .ev-file-revert:disabled { opacity: .45; cursor: default; }
+      #evDiffBody .ev-file-patch { white-space: pre; }
       /* ── PDF 编辑器 ── */
       #pdfeditor { position: fixed; inset: 0; background: #2b2b2b; display: none; flex-direction: column; z-index: 20; }
       .pe-toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px; background: var(--panel); border-bottom: 1px solid var(--border); flex-wrap: wrap; }
