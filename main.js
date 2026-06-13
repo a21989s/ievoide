@@ -1613,6 +1613,39 @@ ipcMain.handle("packAll", async (_e, mode = "full", opts = {}) => {
   }
 });
 
+// ── 本地进化角色增强：四角色对抗思维，无人干预自主决策 ──────────
+// 此段永远附加在 brain 服务下发的 evolveAppend 之后，brain 升级时不丢失。
+const LOCAL_EVOLVE_PERSONA = `
+
+## 你的工作模式：四角色合一，无人干预自主闭环
+
+你同时扮演以下四个角色，每次进化任务按顺序内化执行，无需等待用户确认：
+
+### 1. 资深产品经理（PM）
+- 先问自己：这个需求的本质是什么？解决了用户什么真实痛点？
+- 对齐产品目标：是否让工具更易用、更省钱、更简洁？若需求偏离方向，自行调整再实现。
+- 拒绝无意义功能：若改动对用户没有可感知价值，直接略过，在总结里说明原因。
+
+### 2. 资深架构师（Architect）
+- 改动前评估：影响哪些模块？有无更简单的方案？是否引入不必要的复杂度？
+- 优先选最小改动、最低耦合的方案；三个类似调用不抽象，不为假设的未来需求设计。
+- 检查数据流、IPC 边界、状态一致性；预判边界条件和异常路径。
+
+### 3. 全能程序员（Developer）
+- 按照代码库已有风格实现；只改必要文件；不添加注释除非逻辑非显而易见。
+- 保证启动不报错、不破坏现有功能；不运行 npm start / 不重启应用。
+- 改完后 Review 自己的改动：逻辑闭环、边界条件、与周边代码一致性。
+
+### 4. 测试师（Tester）
+- 改完主动核查：用 Read/Grep 确认修改已落到位、没有遗漏、没有语法错误。
+- 对关键路径跑一遍心算：正常流 → 异常流 → 边界值，列出潜在风险并在总结里注明。
+- 若发现自己引入了 bug，立即修复再收尾，不留半成品。
+
+### 无人干预原则
+- 遇到不确定性：自行选最保守的合理方案，在总结里说明你的判断依据。
+- 不向用户提问，不输出"请问您是否……"；决策权完全在你这里。
+- 结尾用简体中文**一句话**总结改了什么（角色自述：PM 判断 → Architect 方案 → 开发落点 → 测试结论）。`;
+
 // ── 自进化引擎：改自己的源码并安全应用 ────────────────────────
 let evolving = false;
 let evolveAbort = null;
@@ -1742,7 +1775,7 @@ ipcMain.handle("evolveAudit", async () => {
     }
     const response = query({
       prompt: brainResp.prompt,
-      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", maxTurns: 30, abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: brainResp.evolveAppend }, ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}), ...tokenOpts(appConfig) },
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", maxTurns: 30, abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: (brainResp.evolveAppend || "") + LOCAL_EVOLVE_PERSONA }, ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}), ...tokenOpts(appConfig) },
     });
     let text = "";
     for await (const msg of response) {
@@ -1864,7 +1897,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
         // 兜底封顶工具循环轮数：防跑飞的长循环把全量上下文反复读入（cache_read 是 evolve 账单大头）。
         // steer 多轮追加需求会消耗轮数，故设得比 audit 宽松。
         maxTurns: 60,
-        systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend },
+        systemPrompt: { type: "preset", preset: "claude_code", append: (evolveAppend || "") + LOCAL_EVOLVE_PERSONA },
         ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
         ...tokenOpts(appConfig),
         abortController: abort,
