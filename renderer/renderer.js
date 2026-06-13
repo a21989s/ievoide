@@ -2092,6 +2092,16 @@ $("input").addEventListener("paste", (e) => {
   if (files.length) {
     e.preventDefault();
     files.forEach(addAttachment);
+    return;
+  }
+  // 截图粘贴：files 为空但 items 里有 image/* (Ctrl+V 截图场景)
+  const imageFiles = [...(e.clipboardData?.items || [])]
+    .filter(item => item.kind === "file" && item.type.startsWith("image/"))
+    .map(item => item.getAsFile())
+    .filter(Boolean);
+  if (imageFiles.length) {
+    e.preventDefault();
+    imageFiles.forEach(addAttachment);
   }
 });
 // 拖拽
