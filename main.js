@@ -706,6 +706,21 @@ ipcMain.handle("grepFiles", async (_e, query) => {
       }
     }
   }
+  // 排序：文件名含关键词的行优先（relLower 里最后一段路径命中位置越靠前越优），
+  // 同优先级内路径越短越优，与 searchFiles 保持一致。
+  out.sort((a, b) => {
+    const nameA = a.rel.toLowerCase();
+    const nameB = b.rel.toLowerCase();
+    const ia = nameA.lastIndexOf("/") + 1;
+    const ib = nameB.lastIndexOf("/") + 1;
+    const fa = nameA.slice(ia).indexOf(ql);
+    const fb = nameB.slice(ib).indexOf(ql);
+    // 文件名段命中：-1 表示未命中，排在命中之后
+    const hitA = fa >= 0 ? fa : Infinity;
+    const hitB = fb >= 0 ? fb : Infinity;
+    if (hitA !== hitB) return hitA - hitB;
+    return nameA.length - nameB.length;
+  });
   return out;
 });
 
