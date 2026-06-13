@@ -1521,6 +1521,7 @@ function showActive() {
   chat.scrollTop = chat.scrollHeight;
   refreshSendBtn();
   renderCostReadout(); // 同步显示该会话累计用量
+  renderCtxFooter();
 }
 function refreshSendBtn() {
   const hasText = $("input").value.trim().length > 0;
@@ -1863,6 +1864,40 @@ function renderCostReadout() {
     trf("计费等效 ≈ {0} tokens · 估算 ${1}", billed.toLocaleString(), c.costUsd.toFixed(4)) +
     (big ? "\n" + tr("⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token") : "");
 }
+// 对话底部 token 统计条 + 裁剪按钮
+function renderCtxFooter() {
+  const footer = $("ctxFooter");
+  const tokEl = $("ctxFooterTok");
+  if (!footer || !tokEl) return;
+  const c = activeConv;
+  if (!c || !c.ctx) { footer.classList.remove("visible"); return; }
+  footer.classList.add("visible");
+  const kTok = (c.ctx / 1000).toFixed(1);
+  tokEl.textContent = kTok;
+  tokEl.className = "ctx-tok" + (c.ctx >= CTX_WARN ? " warn" : "");
+}
+
+// 裁剪对话：保留最近 N 轮（user+assistant 各算 1 条 msg），更早的从 DOM 移除，追加 system note
+function trimConvToN(n) {
+  const c = activeConv;
+  if (!c || !c.pane) return;
+  const msgs = [...c.pane.querySelectorAll(":scope > .msg")];
+  if (msgs.length <= n) { toast(trf("当前只有 {0} 条消息，无需裁剪", msgs.length)); return; }
+  const removeCount = msgs.length - n;
+  for (let i = 0; i < removeCount; i++) msgs[i].remove();
+  // 追加 system note
+  const note = document.createElement("div");
+  note.className = "msg assistant";
+  note.innerHTML = `<div class="role">系统</div><div class="bubble" style="font-size:11px;color:#9a9a9a">✂ 已裁剪 ${removeCount} 条早期消息（保留最近 ${n} 条）。上下文已缩短，后续请求费用将降低。</div>`;
+  c.pane.insertBefore(note, c.pane.firstChild);
+  // 估算裁剪后 ctx（按比例缩减）
+  c.ctx = Math.round(c.ctx * (n / msgs.length));
+  persistConvs();
+  renderCtxFooter();
+  renderCostReadout();
+  toast(trf("已裁剪，保留最近 {0} 条消息", n));
+}
+
 // 渲染顶部 tab 标签条（tab 名=首条输入）
 function renderConvList() {
   const tabs = $("convTabs");
@@ -1985,6 +2020,18 @@ async function exportActiveConv(includeTools) {
   toast(tr("已导出到 ") + r.path);
 }
 $("exportConv").onclick = (e) => exportActiveConv(e.shiftKey);
+
+$("ctxTrimBtn").onclick = () => {
+  const c = activeConv;
+  if (!c || !c.pane) return;
+  const total = c.pane.querySelectorAll(":scope > .msg").length;
+  if (!total) { toast(tr("当前对话没有消息")); return; }
+  const raw = prompt(trf("当前共 {0} 条消息。\n保留最近几条？（输入数字，1 条=1 个 user 或 assistant 气泡）", total), String(Math.max(1, Math.min(10, total))));
+  if (raw === null) return; // 取消
+  const n = parseInt(raw, 10);
+  if (!n || n < 1 || n >= total) { toast(n >= total ? tr("保留数不少于当前消息数，无需裁剪") : tr("请输入有效的正整数")); return; }
+  trimConvToN(n);
+};
 
 // 启动：从磁盘恢复对话历史（旧版 localStorage 全量缓存一次性迁移后清除，磁盘是唯一持久层）
 (async function initConvs() {
@@ -5380,6 +5427,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
     scrollIfActive(conv);
   }
   renderCostReadout(); // 刷新输入区底部的会话累计读数
+  renderCtxFooter();   // 刷新对话底部 token 统计条
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 合并成一轮发出（续接同一 session）；否则推进需求清单。
   // 合并而非逐条跑：每轮请求都会全量重发对话上下文，N 条排队逐条跑就是 N 次全量重发，
