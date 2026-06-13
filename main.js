@@ -1056,7 +1056,7 @@ async function releaseConvLock(convId, owner) {
   } catch {}
 }
 
-ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd }) => {
+ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd, projectMemory }) => {
   // 硬性每日消费上限：发 API 前检查，超限直接拦截，不发请求
   const maxSpend = appConfig.maxDailySpendUSD;
   if (maxSpend > 0) {
@@ -1145,7 +1145,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd 
         systemPrompt: {
           type: "preset",
           preset: "claude_code",
-          append: appConfig.systemPromptAppend || "",
+          append: (projectMemory ? "# 项目记忆\n" + projectMemory + "\n\n" : "") + (appConfig.systemPromptAppend || ""),
         },
         // plan 轮用 planModel；轻量请求（快捷技能）用 lightModel；其余用主模型
         ...(((plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model) ? { model: (plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model } : {}),
@@ -1954,7 +1954,7 @@ ipcMain.on("evolveAlive", () => {
   }
 });
 
-ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
+ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory }) => {
   if (evolving) return { error: "已有进化在进行中" };
   if (!requirement || !requirement.trim()) return { error: "需求为空" };
   // 硬性每日消费上限：与 chat handler 保持一致，超限直接拦截
@@ -2036,7 +2036,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
         // 兜底封顶工具循环轮数：防跑飞的长循环把全量上下文反复读入（cache_read 是 evolve 账单大头）。
         // steer 多轮追加需求会消耗轮数，故设得比 audit 宽松。
         maxTurns: 60,
-        systemPrompt: { type: "preset", preset: "claude_code", append: (evolveAppend || "") + LOCAL_EVOLVE_PERSONA },
+        systemPrompt: { type: "preset", preset: "claude_code", append: (projectMemory ? "# 项目记忆\n" + projectMemory + "\n\n" : "") + (evolveAppend || "") + LOCAL_EVOLVE_PERSONA },
         ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
         ...tokenOpts(appConfig),
         abortController: abort,

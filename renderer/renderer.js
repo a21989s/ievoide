@@ -2230,7 +2230,7 @@ function startTurn(conv, text, opts) {
   conv._planTurn = plan; // 记录本轮是否计划模式：chat:done 时据此渲染「按计划执行」操作条
   // 续聊时带上本对话存下的 cwd，让主进程沿用同一目录找到对应 session（新对话为 null，主进程回退到当前 workdir）
   const light = !!(opts && opts.light);
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null });
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null, projectMemory: getProjectMemory() });
   persistConvs();
 }
 
@@ -3716,7 +3716,7 @@ async function runEvolve(requirement) {
   evolveAttachments = [];
   renderAttachments();
   evLog("▶ " + requirement + (scopeGlob ? "\n🔒 限定文件：" + scopeGlob : "") + (attachments.length ? "\n📎 " + attachments.map((p) => p.split(/[\\/]/).pop()).join(", ") : ""));
-  const r = await window.api.evolve({ requirement: effectiveReq, attachments });
+  const r = await window.api.evolve({ requirement: effectiveReq, attachments, projectMemory: getProjectMemory() });
   // evolve:done 事件通常会兜底设状态；但无改动等分支不发该事件，这里据返回值兜底，
   // 避免忙状态卡死（也让持续进化能据返回值推进下一条）。relaunch 会重启，无需处理。
   if (!(r && r.relaunch)) setEvolveBusy(false);
@@ -4224,8 +4224,29 @@ document.querySelectorAll("#activitybar .act-btn[data-view]").forEach((tab) => {
       .forEach((x) => x.classList.toggle("active", x === tab));
     $("sidebar").classList.remove("collapsed");
     $("sidebar").classList.toggle("req-mode", tab.dataset.view === "req");
+    $("sidebar").classList.toggle("mem-mode", tab.dataset.view === "mem");
   };
 });
+
+// ── 项目记忆：持久化到 localStorage，自动追加到每次 chat/evolve 的系统提示词前缀 ──
+const MEM_KEY = "claudeTools.projectMemory";
+function getProjectMemory() {
+  return localStorage.getItem(MEM_KEY) || "";
+}
+{
+  const ta = $("projectMemory");
+  ta.value = getProjectMemory();
+  let saveTimer;
+  ta.oninput = () => {
+    clearTimeout(saveTimer);
+    $("memSaveHint").textContent = "";
+    saveTimer = setTimeout(() => {
+      localStorage.setItem(MEM_KEY, ta.value);
+      $("memSaveHint").textContent = "✓ 已保存";
+      setTimeout(() => { $("memSaveHint").textContent = ""; }, 1500);
+    }, 600);
+  };
+}
 
 let requirements = []; // {id, text, status: pending|running|done|failed, atts?: [{name,path,type,dataUrl?}]}
 let reqPendingAtts = []; // 当前正在录入的需求所附带的文件

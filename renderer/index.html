@@ -145,6 +145,14 @@
       #reqView { flex: 1; display: none; flex-direction: column; min-height: 0; padding-bottom: 8px; }
       #sidebar.req-mode #scView { display: none; }
       #sidebar.req-mode #reqView { display: flex; }
+      #sidebar.mem-mode #scView { display: none; }
+      #sidebar.mem-mode #memView { display: flex; }
+      #memView { flex: 1; display: none; flex-direction: column; min-height: 0; padding: 8px; gap: 6px; }
+      #memView .mem-title { font-size: 11px; letter-spacing: .4px; color: var(--muted); padding: 4px 0 2px; }
+      #memView .mem-hint { font-size: 11px; color: #6b6b6b; line-height: 1.5; }
+      #projectMemory { flex: 1; resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px; font: inherit; font-size: 12px; line-height: 1.6; min-height: 120px; }
+      #projectMemory:focus { outline: 1px solid var(--accent); border-color: var(--accent); }
+      #memSaveHint { font-size: 10px; color: var(--muted); text-align: right; height: 14px; }
       .req-hint { font-size: 11px; color: #6b6b6b; padding: 6px 8px; line-height: 1.5; }
       .req-inputbar { display: flex; flex-direction: column; gap: 6px; padding: 0 8px; border-radius: 6px; }
       .req-inputbar.dragover { outline: 2px dashed var(--accent); outline-offset: -2px; }
@@ -794,6 +802,7 @@
       <div id="activitybar">
         <div class="act-btn active" data-view="sc" data-i18n-title="源代码管理" title="源代码管理">⎇</div>
         <div class="act-btn" data-view="req" data-i18n-title="需求开发：逐条录入需求，右侧自动分析并修改代码" title="需求开发：逐条录入需求，右侧自动分析并修改代码">✓</div>
+        <div class="act-btn" data-view="mem" data-i18n-title="项目记忆：一次写入项目背景/技术栈/约定，自动追加到每次对话的系统提示词前缀" title="项目记忆：一次写入项目背景/技术栈/约定，自动追加到每次对话的系统提示词前缀">🧠</div>
         <div class="act-btn" id="historyBtn" data-i18n-title="查看已关闭的对话历史，可重新打开续聊" title="查看已关闭的对话历史，可重新打开续聊">🕘</div>
         <div class="act-btn" id="evolveBtn" data-i18n-title="自进化：让 App 改自己的源码（自动回滚保护）" title="自进化：让 App 改自己的源码（自动回滚保护）">🧬</div>
         <div class="act-btn" id="packBtn" data-i18n-title="全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装" title="全量打包(含 node_modules/数据/历史)到桌面，解压即用、零安装">📦</div>
@@ -848,6 +857,12 @@
           </span>
         </div>
         <div id="tree"></div>
+        </div>
+        <div id="memView">
+          <div class="mem-title">PROJECT MEMORY</div>
+          <div class="mem-hint" data-i18n="把项目背景、技术栈、禁止改动的文件等写在这里，会自动追加到每次 chat / 进化的系统提示词前缀，无需每次重复。">把项目背景、技术栈、禁止改动的文件等写在这里，会自动追加到每次 chat / 进化的系统提示词前缀，无需每次重复。</div>
+          <textarea id="projectMemory" data-i18n-ph="例如：&#10;- 技术栈：React + TypeScript + Vite&#10;- 禁止修改：src/legacy/&#10;- 代码风格：函数式，不用 class&#10;- 默认语言：简体中文" placeholder="例如：&#10;- 技术栈：React + TypeScript + Vite&#10;- 禁止修改：src/legacy/&#10;- 代码风格：函数式，不用 class&#10;- 默认语言：简体中文"></textarea>
+          <div id="memSaveHint"></div>
         </div>
         <div id="reqView">
           <div class="sc-title" style="padding:8px 8px 0">
