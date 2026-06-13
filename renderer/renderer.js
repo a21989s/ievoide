@@ -1842,6 +1842,7 @@ function renderConvList() {
             ? `<span class="conv-unread" title="${tr("有新结果，点击查看")}">●</span>`
           : "") +
       `<span class="conv-title">${esc(dispTitle)}</span>` +
+      (c.ctx >= CTX_WARN ? `<span class="conv-ctx-warn" title="${trf('上下文 {0}，建议 /compact 或新开对话', fmtTokens(c.ctx))}">⚠</span>` : "") +
       `<span class="conv-del" title="${tr("关闭")}">×</span>`;
     el.dataset.cid = c.id;
     el.onclick = (e) => {
