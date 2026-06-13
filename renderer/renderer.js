@@ -3111,6 +3111,7 @@ function cmdkBaseCommands() {
     { ic: "⌨️", label: tr("快捷键速查"), run: () => toggleKbdHelp() },
     { ic: "🗺", label: tr("生成代码地图"), run: () => genCodemap() },
     { ic: "📜", label: tr("生成 CHANGELOG"), run: () => genChangelog() },
+    { ic: "⬇", label: tr("导出对话为 Markdown"), hint: tr("Shift↵含工具调用"), run: (insertOnly = false) => exportActiveConv(insertOnly) },
   ];
   // 快捷技能：Enter=直接发送，Shift+Enter=仅填入输入框（可追加上下文后再手动发送）
   (QUICK_SKILLS || []).forEach((q) => cmds.push({
