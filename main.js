@@ -567,6 +567,10 @@ const IGNORE = new Set([
   "dist", "build", "coverage", "out", "target",
   ".next", ".nuxt", ".turbo", ".parcel-cache", "__pycache__", ".venv", "venv",
 ]);
+const SKIP_DIRS = new Set([
+  "node_modules", ".git", "dist", "build", ".next", "__pycache__",
+  ".nuxt", ".turbo", ".parcel-cache", "coverage", "out", "target", ".venv", "venv",
+]);
 ipcMain.handle("listDir", async (_e, dirPath) => {
   const target = dirPath || workdir;
   if (!target) return [];
@@ -632,6 +636,7 @@ async function listWorkdirFiles() {
       if (IGNORE.has(d.name)) continue;
       const full = path.join(dir, d.name);
       if (d.isDirectory()) {
+        if (SKIP_DIRS.has(d.name)) continue;
         const rel = path.relative(workdir, full).replace(/\\/g, "/");
         dirs.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase() });
         await walk(full);
