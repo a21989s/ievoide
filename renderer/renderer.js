@@ -988,7 +988,7 @@ async function copyToClipboard(text, btn) {
     if (btn) {
       const old = btn.dataset.label || btn.textContent;
       btn.dataset.label = old;
-      btn.textContent = tr("已复制");
+      btn.textContent = btn.dataset.copied || tr("已复制");
       btn.classList.add("copied");
       setTimeout(() => { btn.textContent = old; btn.classList.remove("copied"); }, 1200);
     }
@@ -2455,7 +2455,7 @@ function startTurn(conv, text, opts) {
   conv.todoCard = null; // 新一轮重新建卡，避免跨轮原位覆盖旧清单
   const wrap = document.createElement("div");
   wrap.className = "msg assistant";
-  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}">${tr("复制回复")}</button></div>`;
+  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}" data-copied="✓">📋</button></div>`;
   conv.pane.appendChild(wrap);
   conv.currentBubble = wrap;
   conv.busy = true;
