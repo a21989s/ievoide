@@ -1379,21 +1379,24 @@ ipcMain.handle("getUsage", async (_e, { force } = {}) => {
 // 纯本地记账零额外 token：data/cost-stats.json 按【日 × 来源】聚合分项 tokens 与费用，
 // 保留 90 天，供右上角用量 tooltip 显示今日/本周/累计与趋势，量化省钱效果（关掉对话也不丢）。
 const costStatsPath = () => path.join(app.getPath("userData"), "cost-stats.json");
-let costStats = null; // 懒加载缓存：{ days: { "YYYY-MM-DD": { chat|evolve: { in,out,cw,cr,cost,turns } } } }
+// 进程内唯一可信数据源：首次调用 loadCostStats() 从磁盘初始化，之后所有读写只操作此对象
+let costStatsCache = null; // { days: { "YYYY-MM-DD": { chat|evolve: { in,out,cw,cr,cost,turns } } } }
 let costSaveTimer = null;
 let budgetAlertedDay = null; // 当日只提醒一次；跨天或调整阈值后可再次触发
 const localDay = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 function loadCostStats() {
-  if (!costStats) {
-    try { costStats = JSON.parse(fsSync.readFileSync(costStatsPath(), "utf8")); } catch {}
-    if (!costStats || typeof costStats.days !== "object" || !costStats.days) costStats = { days: {} };
+  if (!costStatsCache) {
+    try { costStatsCache = JSON.parse(fsSync.readFileSync(costStatsPath(), "utf8")); } catch {}
+    if (!costStatsCache || typeof costStatsCache.days !== "object" || !costStatsCache.days) costStatsCache = { days: {} };
   }
-  return costStats;
+  return costStatsCache;
 }
 function recordCost(source, usage, costUsd) {
   if (!usage && !(costUsd > 0)) return; // 本轮无可记内容
-  const s = loadCostStats();
+  // 确保已初始化（首次读盘），之后直接操作内存对象，避免并发调用时读到旧磁盘数据
+  if (!costStatsCache) loadCostStats();
+  const s = costStatsCache;
   const day = localDay();
   if (!s.days[day]) {
     s.days[day] = {};
@@ -1417,15 +1420,15 @@ function recordCost(source, usage, costUsd) {
       if (win && !win.isDestroyed()) win.webContents.send("budget:exceeded", { spent, budget, day });
     }
   }
-  // 防抖落盘：连续多轮只写一次
+  // 防抖落盘：连续多轮只写一次，写的是同一个内存对象，无覆盖风险
   clearTimeout(costSaveTimer);
-  costSaveTimer = setTimeout(() => { fs.writeFile(costStatsPath(), JSON.stringify(s)).catch(() => {}); }, 1500);
+  costSaveTimer = setTimeout(() => { fs.writeFile(costStatsPath(), JSON.stringify(costStatsCache)).catch(() => {}); }, 1500);
 }
 function flushCostStats() {
-  if (!costStats || !costSaveTimer) return;
+  if (!costStatsCache || !costSaveTimer) return;
   clearTimeout(costSaveTimer);
   costSaveTimer = null;
-  try { fsSync.writeFileSync(costStatsPath(), JSON.stringify(costStats)); } catch {}
+  try { fsSync.writeFileSync(costStatsPath(), JSON.stringify(costStatsCache)); } catch {}
 }
 app.on("before-quit", flushCostStats);
 ipcMain.handle("costStats", () => loadCostStats().days);
