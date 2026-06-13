@@ -1668,11 +1668,18 @@ function newConversation() {
 function switchConv(id) {
   const c = getConv(id);
   if (!c || c === activeConv) return;
-  if (activeConv) activeConv._draft = $('input').value;
+  if (activeConv) {
+    const draftVal = $('input').value;
+    activeConv._draft = draftVal;
+    if (draftVal) localStorage.setItem('draft_' + activeConv.id, draftVal);
+    else localStorage.removeItem('draft_' + activeConv.id);
+  }
   activeConv = c;
   showActive();
   const inp = $('input');
-  inp.value = c._draft || '';
+  const savedDraft = localStorage.getItem('draft_' + c.id) || c._draft || '';
+  inp.value = savedDraft;
+  if (savedDraft) { inp.setSelectionRange(savedDraft.length, savedDraft.length); inp.focus(); }
   inp.dispatchEvent(new Event('input'));
   renderConvList();
   persistConvs();
@@ -2260,6 +2267,7 @@ async function send(light = false) {
   const ububble = addMsg(conv, "user", text || tr("(附件)")); // 立刻显示这条提问
   if (atts.length) renderMsgAttachments(ububble, atts); // 在气泡里显示附件缩略图/文件名
   input.value = "";
+  localStorage.removeItem('draft_' + conv.id);
   pendingAttachments = [];
   renderAttachList();
   $("slashPopup").classList.remove("open");
