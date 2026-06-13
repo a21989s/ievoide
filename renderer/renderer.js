@@ -4788,8 +4788,16 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
     if (typeof ctx === "number" && ctx > 0) conv.ctx = ctx;
     conv._compacting = false; // 自动压缩轮结束（或普通轮结束），解除标记
   }
+  const _u = usage || {};
+  const _inT = _u.input_tokens || 0, _outT = _u.output_tokens || 0;
+  const _cwT = _u.cache_creation_input_tokens || 0, _crT = _u.cache_read_input_tokens || 0;
+  const _tokStr = (_inT || _outT || _cwT || _crT)
+    ? ` | in ${fmtTok(_inT)} / out ${fmtTok(_outT)}` +
+      (_cwT ? ` / cw ${fmtTok(_cwT)}` : "") +
+      (_crT ? ` / cr ${fmtTok(_crT)}` : "")
+    : "";
   finishTurn(conv,
-    `${tr("用时 ")}${ms}ms · cost(est) $${cost?.toFixed?.(4) ?? cost}` +
+    `${tr("用时 ")}${ms}ms · $${cost?.toFixed?.(4) ?? cost}${_tokStr}` +
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
   if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
