@@ -26,6 +26,18 @@ function loadCfg() {
   catch { return {}; }
 }
 // 省 token 旋钮，详见 main.js DEFAULT_CONFIG 注释；与桌面端共用同一份 config.json。
+// 行为护栏：以下错误在历史会话日志里反复发生，每次都白烧一整轮缓存上下文。
+// chat（默认提示词）与 evolve（大脑下发的提示词）两条路径都追加，统一避错省 token。
+const GUARDRAILS = [
+  "改/写文件前必须先 Read；若文件可能被外部改过，先重读再 Edit。",
+  "commit 前先 git status 确认确有改动，不要盲目 git add && git commit。",
+  "引用 commit/文件前先确认其存在，不要凭记忆拼 hash 或路径。",
+  "Windows 下避免 node -e 多行 heredoc（会 reset cwd），改用临时脚本文件或单行。",
+  "调用 gh 前先确认已登录，未登录则停下来告知用户而非反复重试。",
+  "Bash 每次调用 cwd 都会重置，不要反复 cd 同一目录；用绝对路径或在单条命令内 cd。",
+  "禁止把 API key/密钥明文写进命令（会进 transcript 被缓存重读且泄露），用环境变量引用。",
+].join("\n");
+
 function tokenOpts(cfg) {
   const o = {};
   if (cfg.fallbackModel) o.fallbackModel = cfg.fallbackModel;
@@ -500,15 +512,7 @@ const server = http.createServer(async (req, res) => {
           systemPrompt: {
             type: "preset",
             preset: "claude_code",
-            append: cfg.systemPromptAppend || [
-              "始终用简体中文回答，除非用户明确要求其他语言。",
-              // 行为护栏：以下错误在历史日志里反复发生，每次都白烧一整轮缓存上下文。
-              "改/写文件前必须先 Read；若文件可能被外部改过，先重读再 Edit。",
-              "commit 前先 git status 确认确有改动，不要盲目 git add && git commit。",
-              "引用 commit/文件前先确认其存在，不要凭记忆拼 hash 或路径。",
-              "Windows 下避免 node -e 多行 heredoc（会 reset cwd），改用临时脚本文件或单行。",
-              "调用 gh 前先确认已登录，未登录则停下来告知用户而非反复重试。",
-            ].join("\n"),
+            append: cfg.systemPromptAppend || ("始终用简体中文回答，除非用户明确要求其他语言。\n" + GUARDRAILS),
           },
           ...(cfg.model ? { model: cfg.model } : {}),
           ...tokenOpts(cfg),
@@ -661,8 +665,8 @@ const server = http.createServer(async (req, res) => {
           options: {
             cwd: __dirname,
             permissionMode: "bypassPermissions",
-            maxTurns: 60,
-            systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend },
+            maxTurns: 30,
+            systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend + "\n" + GUARDRAILS },
             ...((cfg.evolveModel || cfg.model) ? { model: cfg.evolveModel || cfg.model } : {}),
             ...tokenOpts(cfg),
             ...(resume ? { resume } : {}),
