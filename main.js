@@ -332,6 +332,7 @@ ipcMain.handle("pickFolder", async () => {
   if (r.canceled || !r.filePaths[0]) return null;
   workdir = r.filePaths[0];
   fileCache = { dir: null, list: null, time: 0 }; // 切换目录失效文件缓存
+  saveConfig({ workdir });
   return workdir;
 });
 
