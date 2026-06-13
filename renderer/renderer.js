@@ -2118,6 +2118,7 @@ async function send(light = false) {
       h.push(text);
       if (h.length > 20) h.shift();
     }
+    if (conv._histOrigPh) { $("input").placeholder = conv._histOrigPh; conv._histOrigPh = null; }
     conv._histIdx = -1;
     conv._histDraft = null;
   }
@@ -2696,9 +2697,10 @@ $("input").addEventListener("keydown", (e) => {
     if (e.key === "ArrowUp" && hist.length &&
         (navigating || !ta.value || !ta.value.slice(0, ta.selectionStart).includes("\n"))) {
       e.preventDefault();
-      if (!navigating) conv._histDraft = ta.value; // 切换前暂存未发送草稿
+      if (!navigating) { conv._histDraft = ta.value; conv._histOrigPh = ta.placeholder; } // 切换前暂存未发送草稿
       conv._histIdx = navigating ? (conv._histIdx - 1 + hist.length) % hist.length : hist.length - 1;
       ta.value = hist[conv._histIdx];
+      ta.placeholder = `历史 ${conv._histIdx + 1} / ${hist.length}　↑↓ 导航　Esc 退出`;
       ta.setSelectionRange(ta.value.length, ta.value.length);
       return;
     }
@@ -2707,10 +2709,14 @@ $("input").addEventListener("keydown", (e) => {
       if (conv._histIdx >= hist.length - 1) {
         // 越过最新一条 => 还原草稿并退出导航
         ta.value = conv._histDraft || "";
+        ta.placeholder = conv._histOrigPh || ta.placeholder;
         conv._histIdx = -1;
         conv._histDraft = null;
+        conv._histOrigPh = null;
       } else {
-        ta.value = hist[++conv._histIdx];
+        conv._histIdx++;
+        ta.value = hist[conv._histIdx];
+        ta.placeholder = `历史 ${conv._histIdx + 1} / ${hist.length}　↑↓ 导航　Esc 退出`;
       }
       ta.setSelectionRange(ta.value.length, ta.value.length);
       return;
@@ -2719,8 +2725,10 @@ $("input").addEventListener("keydown", (e) => {
       e.preventDefault();
       e.stopPropagation(); // 别让全局 Esc 顺手关掉其他浮层
       ta.value = conv._histDraft || "";
+      ta.placeholder = conv._histOrigPh || ta.placeholder;
       conv._histIdx = -1;
       conv._histDraft = null;
+      conv._histOrigPh = null;
       return;
     }
   }
@@ -2732,7 +2740,13 @@ $("input").addEventListener("keydown", (e) => {
 });
 // 手动编辑（含修改召回出来的内容）即退出历史导航，下次 ↑ 会把当前内容重新存为草稿，
 // 避免继续从旧位置切换而覆盖未保存的修改（程序赋值不触发 input 事件，召回本身不受影响）
-$("input").addEventListener("input", () => { if (activeConv) activeConv._histIdx = -1; });
+$("input").addEventListener("input", () => {
+  if (activeConv && activeConv._histOrigPh) {
+    $("input").placeholder = activeConv._histOrigPh;
+    activeConv._histOrigPh = null;
+  }
+  if (activeConv) activeConv._histIdx = -1;
+});
 
 // ── 左侧栏折叠/展开 ────────────────────────────────────────
 $("toggleSidebar").onclick = () => $("sidebar").classList.toggle("collapsed");
