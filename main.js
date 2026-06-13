@@ -906,7 +906,7 @@ ipcMain.handle("codemap", async () => {
         abortController: abort,
         systemPrompt: { type: "preset", preset: "claude_code" },
         ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
-        ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
+        ...tokenOpts(appConfig),
       },
     });
     let text = "", final = "";
@@ -1742,7 +1742,7 @@ ipcMain.handle("evolveAudit", async () => {
     }
     const response = query({
       prompt: brainResp.prompt,
-      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", maxTurns: 30, abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: brainResp.evolveAppend }, ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}), ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}) },
+      options: { cwd: TOOLS_DIR, permissionMode: "bypassPermissions", maxTurns: 30, abortController: abort, systemPrompt: { type: "preset", preset: "claude_code", append: brainResp.evolveAppend }, ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}), ...tokenOpts(appConfig) },
     });
     let text = "";
     for await (const msg of response) {
@@ -1866,7 +1866,7 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments }) => {
         maxTurns: 60,
         systemPrompt: { type: "preset", preset: "claude_code", append: evolveAppend },
         ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
-        ...(appConfig.maxThinkingTokens > 0 ? { maxThinkingTokens: appConfig.maxThinkingTokens } : {}),
+        ...tokenOpts(appConfig),
         abortController: abort,
       },
     });
