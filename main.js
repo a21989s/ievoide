@@ -118,11 +118,14 @@ function tokenOpts(c) {
   if (Array.isArray(c.disallowedTools) && c.disallowedTools.length) o.disallowedTools = c.disallowedTools;
   return o;
 }
+let configLoadError = null;
 function loadConfig() {
   const file = path.join(TOOLS_DIR, "config.json");
   try {
     return { ...DEFAULT_CONFIG, ...JSON.parse(fsSync.readFileSync(file, "utf8")) };
-  } catch {
+  } catch (err) {
+    crashLog("loadConfig", err.message);
+    configLoadError = err.message;
     try {
       fsSync.writeFileSync(file, JSON.stringify(DEFAULT_CONFIG, null, 2));
     } catch {}
@@ -286,6 +289,10 @@ function createWindow() {
     if (evolveRolledBack) {
       win.webContents.send("evolve:rolledback", evolveRolledBack);
       evolveRolledBack = null;
+    }
+    if (configLoadError) {
+      win.webContents.send("toast", "配置文件已损坏并重置为默认值，原因：" + configLoadError);
+      configLoadError = null;
     }
   });
 }
