@@ -1515,6 +1515,7 @@ $("refreshbranch").onclick = () => loadRepos();
 // 每个对话独立并行：pane(消息DOM) / sessionId / busy / currentBubble / toolCards
 let conversations = [];
 let activeConv = null;
+let convSearchQuery = "";
 
 const getConv = (id) => conversations.find((c) => c.id === id);
 function scrollIfActive(conv) {
@@ -1975,7 +1976,16 @@ function trimConvToN(n) {
 function renderConvList() {
   const tabs = $("convTabs");
   tabs.innerHTML = "";
-  for (const c of conversations) {
+  const q = convSearchQuery.toLowerCase();
+  const filtered = q
+    ? conversations.filter((c) => {
+        const title = (c.title || "").toLowerCase();
+        const first = (c.messages?.[0]?.content || "");
+        const firstText = (typeof first === "string" ? first : first?.[0]?.text || "").toLowerCase();
+        return title.indexOf(q) !== -1 || firstText.indexOf(q) !== -1;
+      })
+    : conversations;
+  for (const c of filtered) {
     const el = document.createElement("div");
     el.className = "conv-tab" + (c.id === activeConv?.id ? " active" : "");
     const dispTitle = !c.title || c.title === "新对话" ? tr("新对话") : c.title;
@@ -3117,6 +3127,11 @@ function closeChatSearch() {
   $("chatSearchNext").addEventListener("click", () => _chatSearchJumpTo(_chatSearchCur + 1));
   $("chatSearchPrev").addEventListener("click", () => _chatSearchJumpTo(_chatSearchCur - 1));
   $("chatSearchClose").addEventListener("click", closeChatSearch);
+
+  $("convSearchInput").addEventListener("input", (e) => {
+    convSearchQuery = e.target.value.trim();
+    renderConvList();
+  });
 }
 
 // ── 快捷键速查面板 ─────────────────────────────────────────
