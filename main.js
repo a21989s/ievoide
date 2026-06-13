@@ -673,7 +673,7 @@ ipcMain.handle("searchFiles", async (_e, query) => {
 ipcMain.handle("grepFiles", async (_e, query) => {
   if (!workdir) return [];
   const q = String(query || "").trim();
-  if (!q) return [];
+  if (q.length < 2) return [];
   const ql = q.toLowerCase();
   const MAX_RESULTS = 200; // 命中行总数上限，避免大仓库刷屏卡顿
   const MAX_PER_FILE = 20; // 单文件命中上限，防止单文件霸占结果

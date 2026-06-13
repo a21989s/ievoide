@@ -429,7 +429,7 @@ let csToken = 0;
 async function runContentSearch() {
   const q = $("csInput").value.trim();
   const box = $("csResults");
-  if (!q) { box.innerHTML = ""; return; }
+  if (q.length < 2) { box.innerHTML = q ? '<div style="padding:4px 8px;color:var(--fg2);font-size:11px">至少输入 2 个字符</div>' : ""; return; }
   const token = ++csToken;
   const hits = await window.api.grepFiles(q);
   if (token !== csToken) return; // 已有更新的查询，丢弃过期结果
