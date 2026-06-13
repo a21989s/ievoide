@@ -1549,8 +1549,26 @@ function showActive() {
 // 价格单位：USD / 1M tokens（输入侧，与 Anthropic 定价一致）
 const CONV_MODEL_PRICE = {
   "claude-haiku-4-5-20251001": 0.80,
+  "claude-haiku-4-5": 0.80,
+  "haiku": 0.80,
   "claude-sonnet-4-6": 3.00,
+  "sonnet": 3.00,
   "claude-opus-4-8": 15.00,
+  "opus": 15.00,
+  "opusplan": 15.00,
+  "claude-fable-5": 3.00,
+};
+// 输出侧定价（USD / 1M tokens）
+const CONV_MODEL_OUT_PRICE = {
+  "claude-haiku-4-5-20251001": 4.00,
+  "claude-haiku-4-5": 4.00,
+  "haiku": 4.00,
+  "claude-sonnet-4-6": 15.00,
+  "sonnet": 15.00,
+  "claude-opus-4-8": 75.00,
+  "opus": 75.00,
+  "opusplan": 75.00,
+  "claude-fable-5": 15.00,
 };
 const CONV_MODEL_LIST = [
   { value: "", label: "全局默认", sub: "使用设置页模型" },
@@ -1568,27 +1586,38 @@ function syncConvModelSel() {
   updateConvEstCost();
 }
 function updateConvEstCost() {
-  const sel = $("convModelSel");
-  if (!sel) return;
-  const model = sel.value;
-  const price = CONV_MODEL_PRICE[model];
   const readout = $("costReadout");
   if (!readout) return;
   let estEl = $("convEstCost");
-  if (!price) {
+  // 确定本对话实际使用的模型：本对话覆盖 > 全局选择 > 无
+  const convModel = (activeConv && activeConv._convModel) || "";
+  const globalModel = ($("modelSelect") && $("modelSelect").value) || "";
+  const effectiveModel = convModel || globalModel;
+  const inPrice = CONV_MODEL_PRICE[effectiveModel];
+  const outPrice = CONV_MODEL_OUT_PRICE[effectiveModel];
+  if (!inPrice) {
     if (estEl) estEl.remove();
     return;
   }
   const inputTxt = ($("input") && $("input").value) || "";
-  const estTokens = Math.max(1, Math.round(inputTxt.length / 4));
-  const estUsd = (estTokens / 1e6) * price;
+  const inputTokens = Math.round(inputTxt.length / 4);
+  const ctxTokens = (activeConv && activeConv.ctx) || 0;
+  const totalInTokens = ctxTokens + inputTokens;
+  // 输出侧粗估：按历史平均 500 tokens/回复
+  const estOutTokens = 500;
+  const estUsd = (totalInTokens / 1e6) * inPrice + (estOutTokens / 1e6) * (outPrice || inPrice * 5);
   if (!estEl) {
     estEl = document.createElement("span");
     estEl.id = "convEstCost";
     readout.parentElement.insertBefore(estEl, readout);
   }
-  estEl.textContent = estUsd < 0.0001 ? `预估 <$0.0001` : `预估 $${estUsd.toFixed(4)}`;
-  estEl.title = `当前输入约 ${estTokens} tokens × $${price}/M = $${estUsd.toFixed(6)}`;
+  const totalK = totalInTokens >= 1000 ? `${(totalInTokens / 1000).toFixed(1)}k` : `${totalInTokens}`;
+  estEl.textContent = `发送 ≈${totalK} tok · $${estUsd < 0.001 ? "<0.001" : estUsd.toFixed(3)}`;
+  const modelLabel = effectiveModel || "默认";
+  estEl.title =
+    `上下文 ${ctxTokens.toLocaleString()} + 输入 ${inputTokens.toLocaleString()} = ${totalInTokens.toLocaleString()} tokens（输入侧）\n` +
+    `输入 $${inPrice}/M · 输出 $${(outPrice || inPrice * 5)}/M\n` +
+    `预估发送费用 ≈ $${estUsd.toFixed(5)}（模型：${modelLabel}）`;
 }
 function refreshSendBtn() {
   const hasText = $("input").value.trim().length > 0;
@@ -1937,6 +1966,7 @@ function renderCostReadout() {
     "\n" +
     trf("计费等效 ≈ {0} tokens · 估算 ${1}", billed.toLocaleString(), c.costUsd.toFixed(4)) +
     (big ? "\n" + tr("⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token") : "");
+  updateConvEstCost(); // ctx 更新后同步刷新下一次发送的预估
 }
 // 对话底部 token 统计条 + 裁剪按钮
 function renderCtxFooter() {
@@ -3639,6 +3669,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) load
     if (r && r.ok) {
       $("status").textContent = trf("已切换模型：{0}（下一轮对话生效）", sel.value || tr("默认"));
       loadUsage(true); // 顺带刷新用量/费用展示
+      updateConvEstCost(); // 全局模型改变时同步更新预估
     }
   };
 })();
