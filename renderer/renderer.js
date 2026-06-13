@@ -1061,7 +1061,9 @@ async function scAutoRefresh() {
 // 主进程文件监听：工作区变化时即时刷新（不依赖轮询）
 window.api.on("git:changed", (repo) => { if (repo === activeRepo) scAutoRefresh(); });
 // 低频轮询兜底（监听漏报 / 远端 ahead-behind 变化）
-setInterval(scAutoRefresh, 10000);
+if (window._scAutoRefreshTimer) clearInterval(window._scAutoRefreshTimer);
+window._scAutoRefreshTimer = setInterval(scAutoRefresh, 10000);
+window.addEventListener("beforeunload", () => clearInterval(window._scAutoRefreshTimer), { once: true });
 // 窗口重新获得焦点 / 标签页变可见时立即刷新（切回应用马上同步）
 window.addEventListener("focus", scAutoRefresh);
 document.addEventListener("visibilitychange", () => { if (!document.hidden) scAutoRefresh(); });
