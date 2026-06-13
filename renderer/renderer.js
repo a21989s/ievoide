@@ -2064,21 +2064,30 @@ async function saveFileAsAttachment(file) {
 const fileUrl = (p) => "file://" + encodeURI(p);
 async function addAttachment(file) {
   try {
-    pendingAttachments.push(await saveFileAsAttachment(file));
+    const a = await saveFileAsAttachment(file);
+    a.size = file.size || 0;
+    pendingAttachments.push(a);
     renderAttachList();
   } catch (e) {
     toast(tr("附件保存失败：") + e, "error");
   }
 }
+function fmtAttTok(bytes) {
+  const t = Math.round((bytes || 0) / 4);
+  return t >= 1000 ? `≈${(t / 1000).toFixed(1)}k tok` : `≈${t} tok`;
+}
 function renderAttachList() {
   const el = $("attachList");
   el.innerHTML = "";
+  let totalBytes = 0;
   pendingAttachments.forEach((a, i) => {
+    totalBytes += a.size || 0;
     const chip = document.createElement("div");
     chip.className = "attach-chip";
     chip.innerHTML =
       (a.dataUrl ? `<img src="${a.dataUrl}">` : `<span>📎</span>`) +
       `<span class="an" title="${esc(a.name)}">${esc(a.name)}</span>` +
+      `<span class="att-tok">${fmtAttTok(a.size)}</span>` +
       `<span class="ax" title="${tr("移除")}">×</span>`;
     chip.querySelector(".ax").onclick = () => {
       pendingAttachments.splice(i, 1);
@@ -2086,6 +2095,15 @@ function renderAttachList() {
     };
     el.appendChild(chip);
   });
+  const tot = $("attTokTotal");
+  if (tot) {
+    if (pendingAttachments.length > 1) {
+      tot.textContent = `附件合计 ${fmtAttTok(totalBytes)}`;
+      tot.style.display = "";
+    } else {
+      tot.style.display = "none";
+    }
+  }
 }
 // 粘贴
 $("input").addEventListener("paste", (e) => {
