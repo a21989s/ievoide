@@ -1603,8 +1603,12 @@ function newConversation() {
 function switchConv(id) {
   const c = getConv(id);
   if (!c || c === activeConv) return;
+  if (activeConv) activeConv._draft = $('input').value;
   activeConv = c;
   showActive();
+  const inp = $('input');
+  inp.value = c._draft || '';
+  inp.dispatchEvent(new Event('input'));
   renderConvList();
   persistConvs();
 }
