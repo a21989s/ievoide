@@ -63,6 +63,7 @@ contextBridge.exposeInMainWorld("api", {
   clearEvolveBacklog: () => ipcRenderer.invoke("clearEvolveBacklog"),
   removeEvolveBacklog: (id) => ipcRenderer.invoke("removeEvolveBacklog", id),
   updateEvolveBacklog: (id, patch) => ipcRenderer.invoke("updateEvolveBacklog", { id, patch }),
+  evolveBacklogMove: (id, direction) => ipcRenderer.invoke("evolveBacklogMove", { id, direction }),
   gitRepos: () => ipcRenderer.invoke("gitRepos"),
   gitWatch: (repo) => ipcRenderer.invoke("gitWatch", repo),
   gitBranches: (repo) => ipcRenderer.invoke("gitBranches", repo),

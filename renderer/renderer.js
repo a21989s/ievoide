@@ -3537,10 +3537,14 @@ async function loadBacklog() {
     d.className = "bk sev-" + (it.severity || "medium") + stCls;
     d.innerHTML =
       `<span class="bk-sev"></span><span class="bk-title"></span>` +
+      `<span class="bk-act bk-up" title="上移">↑</span>` +
+      `<span class="bk-act bk-dn" title="下移">↓</span>` +
       `<span class="bk-act bk-run" data-i18n-title="解决这一条" title="解决这一条">▶</span>` +
       `<span class="bk-act bk-del" data-i18n-title="移除" title="移除">✕</span>`;
     d.querySelector(".bk-title").textContent = it.title;
     d.title = it.requirement + (it.status && it.status !== "open" ? "\n[" + it.status + "]" : "");
+    d.querySelector(".bk-up").onclick = async () => { await window.api.evolveBacklogMove(it.id, "up"); loadBacklog(); };
+    d.querySelector(".bk-dn").onclick = async () => { await window.api.evolveBacklogMove(it.id, "down"); loadBacklog(); };
     d.querySelector(".bk-run").onclick = () => solveBacklogItem(it);
     d.querySelector(".bk-del").onclick = async () => { await window.api.removeEvolveBacklog(it.id); loadBacklog(); };
     el.appendChild(d);

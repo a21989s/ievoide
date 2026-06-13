@@ -1782,6 +1782,16 @@ ipcMain.handle("getEvolveBacklog", () => readBacklog());
 ipcMain.handle("clearEvolveBacklog", () => { writeBacklog([]); return { ok: true }; });
 ipcMain.handle("removeEvolveBacklog", (_e, id) => { writeBacklog(readBacklog().filter((x) => x.id !== id)); return { ok: true }; });
 ipcMain.handle("updateEvolveBacklog", (_e, { id, patch }) => { updateBacklog(id, patch || {}); return { ok: true }; });
+ipcMain.handle("evolveBacklogMove", (_e, { id, direction }) => {
+  const list = readBacklog();
+  const idx = list.findIndex((x) => x.id === id);
+  if (idx === -1) return { ok: false };
+  const swap = direction === "up" ? idx - 1 : idx + 1;
+  if (swap < 0 || swap >= list.length) return { ok: true };
+  [list[idx], list[swap]] = [list[swap], list[idx]];
+  writeBacklog(list);
+  return { ok: true };
+});
 
 // 巡检：让 Claude 只读地审视源码，给自己提出一批具体的优化需求，写入优化清单
 let auditing = false;
