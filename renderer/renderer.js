@@ -2780,6 +2780,19 @@ $("send").onclick = () => {
   else if (activeConv?.busy) window.api.stop(activeConv.id);
 };
 
+$("pasteTerminal").onclick = async () => {
+  try {
+    const text = await navigator.clipboard.readText();
+    if (!text) return;
+    const ta = $("input");
+    const prefix = ta.value ? ta.value + "\n" : "";
+    ta.value = prefix + "```\n" + text.trimEnd() + "\n```";
+    ta.focus();
+    ta.setSelectionRange(ta.value.length, ta.value.length);
+    ta.dispatchEvent(new Event("input"));
+  } catch { /* 用户拒绝剪贴板权限时静默 */ }
+};
+
 // 计划模式：开启后发送的查询会先要求模型给出分步方案待确认，不直接改动（状态跨会话保留）
 let planMode = false;
 try { planMode = localStorage.getItem("claudeTools.planMode") === "1"; } catch {}

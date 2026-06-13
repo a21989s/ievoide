@@ -49,6 +49,8 @@
       button:disabled { opacity: 0.5; cursor: default; }
       #send { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 14px; line-height: 1; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: flex-end; background: #4a4a4a; }
       #send:hover:not(:disabled) { background: var(--accent); }
+      #pasteTerminal { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: flex-end; background: #4a4a4a; margin-right: 4px; cursor: pointer; border: none; color: inherit; }
+      #pasteTerminal:hover { background: #5a5a5a; }
       .folder { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       .usage { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; white-space: nowrap; }
       .usage:hover { color: var(--fg); border-color: var(--accent); }
@@ -975,6 +977,7 @@
               <span id="costReadout" class="cost-readout"></span>
             </div>
           </div>
+          <button id="pasteTerminal" title="粘贴终端输出（自动加代码围栏）">⌗</button>
           <button id="send" data-i18n-title="发送（Ctrl/⌘+Enter）" title="发送（Ctrl/⌘+Enter）">↑</button>
         </div>
       </div>
