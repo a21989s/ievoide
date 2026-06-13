@@ -1535,11 +1535,51 @@ function scrollIfActive(conv) {
   const nearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 40;
   if (nearBottom) chat.scrollTop = chat.scrollHeight;
 }
+const LAZY_PAGE = 100; // 每次加载条数
+
+function _buildLoadEarlierBtn(conv) {
+  const btn = document.createElement("button");
+  btn.className = "load-earlier-btn";
+  btn.onclick = () => {
+    const batch = conv._hiddenHtml.splice(-LAZY_PAGE);
+    const frag = document.createDocumentFragment();
+    batch.forEach(html => {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      frag.appendChild(tmp.firstChild);
+    });
+    const prevH = conv.pane.scrollHeight;
+    conv.pane.insertBefore(frag, btn.nextSibling);
+    // 保持视口位置不跳
+    chat.scrollTop += conv.pane.scrollHeight - prevH;
+    if (!conv._hiddenHtml.length) btn.remove();
+    else btn.textContent = `加载更早消息（还有 ${conv._hiddenHtml.length} 条）`;
+  };
+  btn.textContent = `加载更早消息（还有 ${conv._hiddenHtml.length} 条）`;
+  return btn;
+}
+
 function ensurePane(conv) {
   if (conv.pane) return conv.pane;
   const p = document.createElement("div");
   p.className = "conv-pane";
-  if (conv._html) p.innerHTML = conv._html;
+  if (conv._html) {
+    const tmp = document.createElement("div");
+    tmp.innerHTML = conv._html;
+    const allMsgs = [...tmp.children];
+    if (allMsgs.length > LAZY_PAGE) {
+      conv._hiddenHtml = allMsgs.slice(0, allMsgs.length - LAZY_PAGE).map(n => n.outerHTML);
+      allMsgs.slice(allMsgs.length - LAZY_PAGE).forEach(n => p.appendChild(n));
+    } else {
+      conv._hiddenHtml = [];
+      p.innerHTML = conv._html;
+    }
+  } else {
+    conv._hiddenHtml = [];
+  }
+  if (conv._hiddenHtml && conv._hiddenHtml.length) {
+    p.insertBefore(_buildLoadEarlierBtn(conv), p.firstChild);
+  }
   conv.pane = p;
   conv.currentBubble = null;
   conv.toolCards = {};
