@@ -2019,7 +2019,7 @@ $("input").addEventListener("paste", (e) => {
 // 拖拽
 setupDropZone($("inputbar"), addAttachment);
 
-function send() {
+function send(light = false) {
   const input = $("input");
   const text = input.value.trim();
   const atts = pendingAttachments.slice();
@@ -2068,7 +2068,7 @@ function send() {
     startTurn(conv, "/compact");
     return;
   }
-  startTurn(conv, promptToSend);
+  startTurn(conv, promptToSend, { light });
 }
 
 function attachNote(list) {
@@ -2120,7 +2120,8 @@ function startTurn(conv, text, opts) {
   const plan = opts && "plan" in opts ? opts.plan : planMode;
   conv._planTurn = plan; // 记录本轮是否计划模式：chat:done 时据此渲染「按计划执行」操作条
   // 续聊时带上本对话存下的 cwd，让主进程沿用同一目录找到对应 session（新对话为 null，主进程回退到当前 workdir）
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, cwd: conv.cwd || null });
+  const light = !!(opts && opts.light);
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null });
   persistConvs();
 }
 
@@ -3188,6 +3189,7 @@ $("settingsBtn").onclick = async () => {
     const c = await window.api.getConfig();
     $("setPrompt").value = c.systemPromptAppend || "";
     $("setPerm").value = c.permissionMode || "bypassPermissions";
+    $("setLightModel").value = c.lightModel || "";
     $("setPlanModel").value = c.planModel || "";
     $("setBudget").value = c.dailyBudgetUsd ?? "";
     $("setAutoRestart").checked = !!c.evolveAutoRestart;
@@ -3201,6 +3203,7 @@ $("setSave").onclick = async () => {
   const r = await window.api.setConfig({
     systemPromptAppend: $("setPrompt").value,
     permissionMode: $("setPerm").value,
+    lightModel: $("setLightModel").value || null,
     planModel: $("setPlanModel").value || null,
     dailyBudgetUsd: parseFloat($("setBudget").value) > 0 ? parseFloat($("setBudget").value) : null,
     evolveAutoRestart: $("setAutoRestart").checked,
@@ -4350,7 +4353,7 @@ function runQuickSkill(q, insertOnly = false) {
   $("input").value = q.prompt;
   $("input").focus();
   $("input").dispatchEvent(new Event("input"));
-  if (!insertOnly) send();
+  if (!insertOnly) send(true);
 }
 function persistQuickSkills() {
   try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {}

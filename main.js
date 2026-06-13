@@ -920,7 +920,7 @@ ipcMain.handle("codemap", async () => {
         maxTurns: 15, // 限制工具循环轮数，控制 token 消耗
         abortController: abort,
         systemPrompt: { type: "preset", preset: "claude_code" },
-        ...((appConfig.evolveModel || appConfig.model) ? { model: appConfig.evolveModel || appConfig.model } : {}),
+        ...((appConfig.lightModel || appConfig.model) ? { model: appConfig.lightModel || appConfig.model } : {}),
         ...tokenOpts(appConfig),
       },
     });
@@ -1003,7 +1003,7 @@ async function releaseConvLock(convId, owner) {
   } catch {}
 }
 
-ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
+ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd }) => {
   if (plan) prompt = PLAN_PREAMBLE + prompt;
   let abort = new AbortController(); // 可重建：续接失败重试时若旧控制器已中止，换新的（见下方 catch）
   let stopped = false; // 用户是否已主动停止（避免重复发 chat:stopped）
@@ -1078,8 +1078,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, cwd: reqCwd }) => {
           preset: "claude_code",
           append: appConfig.systemPromptAppend || "",
         },
-        // plan 轮只读规划，可用 planModel 降档省钱；执行轮（plan=false）仍用主力模型
-        ...(((plan && appConfig.planModel) || appConfig.model) ? { model: (plan && appConfig.planModel) || appConfig.model } : {}),
+        // plan 轮用 planModel；轻量请求（快捷技能）用 lightModel；其余用主模型
+        ...(((plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model) ? { model: (plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model } : {}),
         ...tokenOpts(appConfig),
         ...(mcpServers ? { mcpServers } : {}),
         abortController: abort,
@@ -1382,6 +1382,7 @@ ipcMain.handle("getConfig", () => ({
   maxThinkingTokens: appConfig.maxThinkingTokens || null,
   evolveModel: appConfig.evolveModel || null,
   planModel: appConfig.planModel || null,
+  lightModel: appConfig.lightModel || null,
   dailyBudgetUsd: appConfig.dailyBudgetUsd || null,
 }));
 ipcMain.handle("setConfig", (_e, patch) => {
@@ -1395,6 +1396,8 @@ ipcMain.handle("setConfig", (_e, patch) => {
     appConfig.evolveModel = patch.evolveModel || null;
   if (patch.planModel === null || typeof patch.planModel === "string")
     appConfig.planModel = patch.planModel || null;
+  if (patch.lightModel === null || typeof patch.lightModel === "string")
+    appConfig.lightModel = patch.lightModel || null;
   if (patch.dailyBudgetUsd === null || typeof patch.dailyBudgetUsd === "number") {
     appConfig.dailyBudgetUsd = patch.dailyBudgetUsd > 0 ? patch.dailyBudgetUsd : null;
     budgetAlertedDay = null; // 阈值变更后允许按新阈值重新触发
@@ -1411,6 +1414,7 @@ ipcMain.handle("setConfig", (_e, patch) => {
       maxThinkingTokens: appConfig.maxThinkingTokens,
       evolveModel: appConfig.evolveModel,
       planModel: appConfig.planModel,
+      lightModel: appConfig.lightModel,
       dailyBudgetUsd: appConfig.dailyBudgetUsd,
     }, null, 2));
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
