@@ -5205,6 +5205,20 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
   if (conv && conv._planTurn && turnWrap && !conv.queue.length) addPlanActions(conv, turnWrap);
   // 非计划轮、无排队消息 => 追加 follow-up 快捷按钮
   if (conv && !conv._planTurn && turnWrap && !conv.queue.length) addFollowUpBtns(conv, turnWrap);
+  // 本轮输入 token 超过 CTX_WARN => 在聊天区底部插入系统提示，引导用户主动 /compact
+  if (conv && _inT >= CTX_WARN && !conv._compacting) {
+    const notice = document.createElement("div");
+    notice.className = "msg system ctx-warn-notice";
+    notice.innerHTML =
+      `<div class="bubble">⚠ 上下文已用 <b>${fmtTok(_inT)}</b> token，建议执行 /compact 压缩以降低后续费用` +
+      ` <button type="button" class="compact-now-btn">立即 /compact</button></div>`;
+    notice.querySelector(".compact-now-btn").addEventListener("click", () => {
+      notice.remove();
+      startTurn(conv, "/compact");
+    });
+    conv.pane.appendChild(notice);
+    scrollIfActive(conv);
+  }
   renderCostReadout(); // 刷新输入区底部的会话累计读数
   loadUsageThrottled(); // 刷新右上角用量
   // 队列里还有追问 => 合并成一轮发出（续接同一 session）；否则推进需求清单。
