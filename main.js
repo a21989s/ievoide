@@ -1072,7 +1072,7 @@ async function releaseConvLock(convId, owner) {
   } catch {}
 }
 
-ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd, projectMemory }) => {
+ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd, projectMemory, convModel }) => {
   // 硬性每日消费上限：发 API 前检查，超限直接拦截，不发请求
   const maxSpend = appConfig.maxDailySpendUSD;
   if (maxSpend > 0) {
@@ -1174,8 +1174,8 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
           preset: "claude_code",
           append: (projectMemory ? "# 项目记忆\n" + projectMemory + "\n\n" : "") + (appConfig.systemPromptAppend || ""),
         },
-        // plan 轮用 planModel；轻量请求（快捷技能）用 lightModel；其余用主模型
-        ...(((plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model) ? { model: (plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model } : {}),
+        // 优先级：对话级 convModel > plan/light 专用模型 > 全局 model
+        ...((convModel || (plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model) ? { model: convModel || (plan && appConfig.planModel) || (light && appConfig.lightModel) || appConfig.model } : {}),
         ...tokenOpts(appConfig),
         ...(mcpServers ? { mcpServers } : {}),
         abortController: abort,

@@ -1522,6 +1522,44 @@ function showActive() {
   refreshSendBtn();
   renderCostReadout(); // 同步显示该会话累计用量
   renderCtxFooter();
+  syncConvModelSel(); // 同步本对话的模型选择器
+}
+
+// 每条对话可单独选模型，不影响全局设置
+// 价格单位：USD / 1M tokens（输入侧，与 Anthropic 定价一致）
+const CONV_MODEL_PRICE = {
+  "claude-haiku-4-5-20251001": 0.80,
+  "claude-sonnet-4-6": 3.00,
+  "claude-opus-4-8": 15.00,
+};
+function syncConvModelSel() {
+  const sel = $("convModelSel");
+  if (!sel) return;
+  sel.value = (activeConv && activeConv._convModel) || "";
+  updateConvEstCost();
+}
+function updateConvEstCost() {
+  const sel = $("convModelSel");
+  if (!sel) return;
+  const model = sel.value;
+  const price = CONV_MODEL_PRICE[model];
+  const readout = $("costReadout");
+  if (!readout) return;
+  let estEl = $("convEstCost");
+  if (!price) {
+    if (estEl) estEl.remove();
+    return;
+  }
+  const inputTxt = ($("input") && $("input").value) || "";
+  const estTokens = Math.max(1, Math.round(inputTxt.length / 4));
+  const estUsd = (estTokens / 1e6) * price;
+  if (!estEl) {
+    estEl = document.createElement("span");
+    estEl.id = "convEstCost";
+    readout.parentElement.insertBefore(estEl, readout);
+  }
+  estEl.textContent = estUsd < 0.0001 ? `预估 <$0.0001` : `预估 $${estUsd.toFixed(4)}`;
+  estEl.title = `当前输入约 ${estTokens} tokens × $${price}/M = $${estUsd.toFixed(6)}`;
 }
 function refreshSendBtn() {
   const hasText = $("input").value.trim().length > 0;
@@ -2334,7 +2372,7 @@ function startTurn(conv, text, opts) {
   conv._planTurn = plan; // 记录本轮是否计划模式：chat:done 时据此渲染「按计划执行」操作条
   // 续聊时带上本对话存下的 cwd，让主进程沿用同一目录找到对应 session（新对话为 null，主进程回退到当前 workdir）
   const light = !!(opts && opts.light);
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null, projectMemory: getProjectMemory() });
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null, projectMemory: getProjectMemory(), convModel: conv._convModel || null });
   persistConvs();
 }
 
@@ -5187,7 +5225,18 @@ $("input").addEventListener("input", () => {
   updateSlash();
   updateMention();
   refreshSendBtn(); // 输入时切换 发送/停止 按钮态
+  updateConvEstCost(); // 输入变化时更新预估费用
 });
+
+// 本对话模型选择器：仅影响当前对话后续请求，不修改全局 config
+(function () {
+  const sel = $("convModelSel");
+  if (!sel) return;
+  sel.addEventListener("change", () => {
+    if (activeConv) activeConv._convModel = sel.value || null;
+    updateConvEstCost();
+  });
+})();
 
 // ── @ 文件引用补全 ─────────────────────────────────────────
 let fileMatches = [];
