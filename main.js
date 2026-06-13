@@ -2340,7 +2340,7 @@ ipcMain.handle("gitWatch", (_e, repo) => {
         const absPath = path.join(repo, f);
         if (contentCache.has(absPath)) {
           const cached = contentCache.get(absPath);
-          if (cached) contentCacheBytes -= cached.join("\n").length;
+          if (cached && Array.isArray(cached)) contentCacheBytes -= cached.join("\n").length;
           contentCache.delete(absPath);
         }
       }
