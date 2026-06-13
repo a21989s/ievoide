@@ -1554,6 +1554,7 @@ function showActive() {
   renderCostReadout(); // 同步显示该会话累计用量
   renderCtxFooter();
   syncConvModelSel(); // 同步本对话的模型选择器
+  syncTokenLimitInput(); // 同步 token 上限输入框
 }
 
 // 每条对话可单独选模型，不影响全局设置
@@ -1673,6 +1674,7 @@ function makeConv(seed) {
     tokens: seed?.tokens || 0, // 本会话累计 token（输入+输出+缓存，全价口径，兼容旧存档）
     usage: seed?.usage || { in: 0, out: 0, cw: 0, cr: 0 }, // 分项累计：输入/输出/缓存写/缓存读，用于按真实计费比例折算
     ctx: seed?.ctx || 0, // 当前上下文规模（最近一轮最后一次请求的输入侧 token），超阈值时提示压缩
+    tokenLimit: seed?.tokenLimit || 0, // 本对话 token 上限（0=不限），超出后警告条提示
   };
 }
 // 清掉某对话所有未结束的 AskUserQuestion 倒计时，避免 timer 在 conv 卸载后仍跑到超时
@@ -1696,6 +1698,7 @@ function buildConvState() {
       tokens: c.tokens,
       usage: c.usage,
       ctx: c.ctx,
+      tokenLimit: c.tokenLimit || 0,
       promptHist: c.promptHist,
       html: c.pane ? c.pane.innerHTML : c._html || "",
       ...(c.remoteRunning ? { running: true } : {}), // 保留手机端进行中标记，避免本端落盘把它抹掉
@@ -1977,7 +1980,35 @@ function renderCostReadout() {
     trf("计费等效 ≈ {0} tokens · 估算 ${1}", billed.toLocaleString(), c.costUsd.toFixed(4)) +
     (big ? "\n" + tr("⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token") : "");
   updateConvEstCost(); // ctx 更新后同步刷新下一次发送的预估
+  checkTokenLimit(); // 检查是否超过本对话 token 上限
 }
+
+function checkTokenLimit() {
+  const warn = $("tokenLimitWarn");
+  const msg = $("tokenLimitMsg");
+  if (!warn || !msg) return;
+  const c = activeConv;
+  if (!c || !c.tokenLimit) { warn.classList.remove("visible"); return; }
+  const u = c.usage || { in: 0, out: 0, cw: 0, cr: 0 };
+  const billed = Math.round(u.in + u.out + u.cw * 1.25 + u.cr * 0.1) || c.tokens;
+  if (billed > c.tokenLimit) {
+    msg.textContent = trf(
+      "已消耗 {0} token，超出设定上限 {1}，继续发送将产生额外费用",
+      billed.toLocaleString(), c.tokenLimit.toLocaleString()
+    );
+    warn.classList.add("visible");
+  } else {
+    warn.classList.remove("visible");
+  }
+}
+
+function syncTokenLimitInput() {
+  const inp = $("tokenLimitInput");
+  if (!inp) return;
+  const c = activeConv;
+  inp.value = (c && c.tokenLimit) ? String(c.tokenLimit) : "";
+}
+
 // 对话底部 token 统计条 + 裁剪按钮
 function renderCtxFooter() {
   const footer = $("ctxFooter");
@@ -2906,6 +2937,21 @@ $("planToggle").onclick = () => {
   refreshPlanToggle();
 };
 refreshPlanToggle();
+
+// token 上限输入框：输入后写入 conv.tokenLimit 并立即检测
+$("tokenLimitInput").addEventListener("change", () => {
+  const inp = $("tokenLimitInput");
+  const val = parseInt(inp.value.replace(/[^0-9]/g, ""), 10);
+  if (activeConv) {
+    activeConv.tokenLimit = isNaN(val) || val <= 0 ? 0 : val;
+    persistConvs();
+    checkTokenLimit();
+  }
+});
+$("tokenLimitClose").addEventListener("click", () => {
+  $("tokenLimitWarn").classList.remove("visible");
+});
+
 $("input").addEventListener("keydown", (e) => {
   // @ 文件引用补全打开时，方向键/回车/Tab/Esc 优先操作候选
   const fpop = $("filePopup");

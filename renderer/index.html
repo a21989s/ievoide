@@ -491,6 +491,16 @@
       .plan-actions button { padding: 4px 12px; font-size: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--fg); cursor: pointer; }
       .plan-actions button:first-child { background: var(--accent); border-color: var(--accent); color: #fff; }
       .plan-actions button:hover { filter: brightness(1.12); }
+      /* token 上限警告条 */
+      #tokenLimitWarn { display: none; align-items: center; gap: 8px; padding: 6px 12px; font-size: 12px; color: #1b1b1b; background: #e8a500; border-top: 1px solid #c88a00; flex-shrink: 0; }
+      #tokenLimitWarn.visible { display: flex; }
+      #tokenLimitWarn .tlw-close { margin-left: auto; cursor: pointer; opacity: 0.7; font-size: 14px; padding: 0 4px; background: none; border: none; color: inherit; }
+      #tokenLimitWarn .tlw-close:hover { opacity: 1; }
+      /* token 上限输入框 */
+      #tokenLimitWrap { display: flex; align-items: center; gap: 4px; margin-left: auto; font-size: 11px; color: var(--muted); white-space: nowrap; }
+      #tokenLimitInput { width: 72px; padding: 2px 5px; font-size: 11px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 4px; outline: none; text-align: right; }
+      #tokenLimitInput:focus { border-color: var(--accent); }
+      #tokenLimitInput::placeholder { color: var(--muted); font-size: 10px; }
       .followup-bar { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
       .followup-btn { padding: 3px 10px; font-size: 12px; border: 1px solid var(--border); border-radius: 12px; background: transparent; color: var(--fg); cursor: pointer; opacity: .75; transition: opacity .15s, background .15s; }
       .followup-btn:hover { opacity: 1; background: var(--panel); }
@@ -971,6 +981,10 @@
         <div id="reqMini" class="req-mini hidden"></div>
         <div id="slashPopup"></div>
         <div id="filePopup"></div>
+        <div id="tokenLimitWarn">
+          <span id="tokenLimitMsg"></span>
+          <button class="tlw-close" id="tokenLimitClose" title="关闭警告">✕</button>
+        </div>
         <div id="inputbar">
           <div class="input-col">
             <div id="quickbar"></div>
@@ -991,6 +1005,10 @@
               <button id="convModelBtn" class="conv-model-btn" title="切换本对话模型（不影响全局设置）">默认</button>
               <div id="convModelPopup" class="conv-model-popup" style="display:none"></div>
               <span id="costReadout" class="cost-readout"></span>
+              <span id="tokenLimitWrap">
+                <label for="tokenLimitInput" title="设置本对话 token 消耗上限（超出后警告，不阻断）">上限:</label>
+                <input id="tokenLimitInput" type="text" inputmode="numeric" placeholder="不限" title="本对话 token 上限（留空=不限，如 50000）">
+              </span>
             </div>
           </div>
           <button id="pasteTerminal" title="粘贴终端输出（自动加代码围栏）">⌗</button>
