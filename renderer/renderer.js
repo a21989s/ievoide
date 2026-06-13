@@ -862,6 +862,7 @@ function hlBlocks(root) {
 }
 
 // 给 pre 代码块加一个悬浮「复制」按钮（mermaid 块跳过，由图形渲染接管）
+// 超过 40 行时默认折叠，只显示前 ~20 行，并在底部附「展开/折叠」按钮
 function addCopyBtn(code) {
   const pre = code.closest("pre");
   if (!pre || pre.querySelector(".copy-btn") || code.classList.contains("language-mermaid")) return;
@@ -870,6 +871,20 @@ function addCopyBtn(code) {
   btn.className = "copy-btn";
   btn.textContent = tr("复制");
   pre.appendChild(btn);
+
+  const lines = code.textContent.split("\n").length;
+  if (lines > 40 && !pre.nextElementSibling?.classList.contains("expand-btn")) {
+    pre.classList.add("pre-collapsed");
+    const expBtn = document.createElement("button");
+    expBtn.type = "button";
+    expBtn.className = "expand-btn";
+    expBtn.textContent = tr("展开") + ` (${lines} 行)`;
+    expBtn.addEventListener("click", () => {
+      const collapsed = pre.classList.toggle("pre-collapsed");
+      expBtn.textContent = collapsed ? tr("展开") + ` (${lines} 行)` : tr("折叠");
+    });
+    pre.after(expBtn);
+  }
 }
 
 // 复制文本到剪贴板，并在按钮上短暂回显「已复制」+ 复用 toast 提示

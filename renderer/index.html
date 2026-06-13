@@ -353,6 +353,10 @@
       .bubble.md pre:hover .copy-btn { opacity: 1; }
       .copy-btn:hover { color: var(--fg); border-color: var(--accent); }
       .copy-btn.copied { color: #3a3; border-color: #3a3; opacity: 1; }
+      pre.pre-collapsed { max-height: 360px; overflow: hidden; }
+      pre.pre-collapsed::after { content: ''; position: absolute; bottom: 0; left: 0; right: 0; height: 56px; background: linear-gradient(transparent, #1b1b1b); pointer-events: none; }
+      .expand-btn { display: block; width: 100%; margin: 2px 0 6px; padding: 3px 0; font-size: 11px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; text-align: center; }
+      .expand-btn:hover { color: var(--fg); border-color: var(--accent); }
       .msg.assistant .role { display: flex; align-items: center; gap: 8px; }
       .reply-copy { padding: 1px 7px; font-size: 11px; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s; }
       .msg.assistant:hover .reply-copy { opacity: 1; }
