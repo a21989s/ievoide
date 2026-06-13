@@ -94,6 +94,9 @@ const DEFAULT_CONFIG = {
   // 每日费用预算（美元）。null=关闭。当日 chat+evolve 累计费用首次超过阈值时
   // 推送一次 budget:exceeded：toast+系统通知、用量标红、自动暂停持续进化（纯本地判断零额外 token）
   dailyBudgetUsd: null,
+  // 每日硬性消费上限（美元）。null/0=不限。每次 send() 前检查当日累计费用，
+  // 超限则直接拦截（不发 API 请求）并在对话框弹警告。
+  maxDailySpendUSD: null,
   // 进化改完后是否立即重启/重载来生效。默认 false：不打断进化循环——主进程改动
   // 下次重启时由 bootGuard 自检/回滚，渲染层改动下次重载生效。设 true 恢复"改完即重启/重载"。
   evolveAutoRestart: false,
@@ -1020,6 +1023,22 @@ async function releaseConvLock(convId, owner) {
 }
 
 ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd }) => {
+  // 硬性每日消费上限：发 API 前检查，超限直接拦截，不发请求
+  const maxSpend = appConfig.maxDailySpendUSD;
+  if (maxSpend > 0) {
+    const s = loadCostStats();
+    const today = localDay();
+    const todaySpent = s.days[today]
+      ? Object.values(s.days[today]).reduce((a, v) => a + (v.cost || 0), 0)
+      : 0;
+    if (todaySpent >= maxSpend) {
+      e.sender.send("chat:error", {
+        convId,
+        message: `今日消费已达 $${maxSpend} 上限，请在设置中调整「每日消费硬上限」。`,
+      });
+      return;
+    }
+  }
   if (plan) prompt = PLAN_PREAMBLE + prompt;
   let abort = new AbortController(); // 可重建：续接失败重试时若旧控制器已中止，换新的（见下方 catch）
   let stopped = false; // 用户是否已主动停止（避免重复发 chat:stopped）
@@ -1400,6 +1419,7 @@ ipcMain.handle("getConfig", () => ({
   planModel: appConfig.planModel || null,
   lightModel: appConfig.lightModel || null,
   dailyBudgetUsd: appConfig.dailyBudgetUsd || null,
+  maxDailySpendUSD: appConfig.maxDailySpendUSD || null,
 }));
 ipcMain.handle("setConfig", (_e, patch) => {
   patch = patch || {};
@@ -1418,6 +1438,8 @@ ipcMain.handle("setConfig", (_e, patch) => {
     appConfig.dailyBudgetUsd = patch.dailyBudgetUsd > 0 ? patch.dailyBudgetUsd : null;
     budgetAlertedDay = null; // 阈值变更后允许按新阈值重新触发
   }
+  if (patch.maxDailySpendUSD === null || typeof patch.maxDailySpendUSD === "number")
+    appConfig.maxDailySpendUSD = patch.maxDailySpendUSD > 0 ? patch.maxDailySpendUSD : null;
   try {
     const file = path.join(TOOLS_DIR, "config.json");
     let cur = {};
@@ -1432,6 +1454,7 @@ ipcMain.handle("setConfig", (_e, patch) => {
       planModel: appConfig.planModel,
       lightModel: appConfig.lightModel,
       dailyBudgetUsd: appConfig.dailyBudgetUsd,
+      maxDailySpendUSD: appConfig.maxDailySpendUSD,
     }, null, 2));
   } catch (e) { return { ok: false, error: String(e?.message || e) }; }
   return { ok: true };

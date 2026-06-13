@@ -3329,6 +3329,7 @@ $("settingsBtn").onclick = async () => {
     $("setLightModel").value = c.lightModel || "";
     $("setPlanModel").value = c.planModel || "";
     $("setBudget").value = c.dailyBudgetUsd ?? "";
+    $("setMaxSpend").value = c.maxDailySpendUSD ?? "";
     $("setAutoRestart").checked = !!c.evolveAutoRestart;
   } catch {}
   $("setMsg").textContent = "";
@@ -3343,6 +3344,7 @@ $("setSave").onclick = async () => {
     lightModel: $("setLightModel").value || null,
     planModel: $("setPlanModel").value || null,
     dailyBudgetUsd: parseFloat($("setBudget").value) > 0 ? parseFloat($("setBudget").value) : null,
+    maxDailySpendUSD: parseFloat($("setMaxSpend").value) > 0 ? parseFloat($("setMaxSpend").value) : null,
     evolveAutoRestart: $("setAutoRestart").checked,
   });
   if (r && r.ok) {
