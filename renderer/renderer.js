@@ -4984,6 +4984,18 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
   else {
     notifyBgTurnEnd(conv, true, ms); // 后台对话真正闲下来才提醒，排队续跑时不打扰
     reqOnTurnEnd(conv, true);
+    // 首轮完成后自动用轻量模型生成标题（仅一次，不覆盖用户手动重命名）
+    if (conv && !conv._aiTitled && conv.promptHist && conv.promptHist.length === 1) {
+      conv._aiTitled = true;
+      const firstMsg = conv.promptHist[0];
+      window.api.convAutoTitle(firstMsg).then((r) => {
+        if (r && r.title && conv.title !== r.title) {
+          conv.title = r.title;
+          renderConvList();
+          persistConvs();
+        }
+      }).catch(() => {});
+    }
   }
 });
 window.api.on("chat:stopped", ({ convId }) => {

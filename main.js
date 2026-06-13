@@ -977,6 +977,40 @@ ipcMain.handle("codemapStop", () => {
   return { ok: true };
 });
 
+// ── 自动命名对话：首轮完成后用轻量模型生成 ≤8 字标题，成本极低 ──
+ipcMain.handle("convAutoTitle", async (_e, text) => {
+  if (!text || typeof text !== "string") return { error: "无效输入" };
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 15000); // 15s 兜底
+  try {
+    const prompt = `用8字以内概括以下对话主题，只输出标题文字不加标点：${text.slice(0, 300)}`;
+    const response = query({
+      prompt,
+      options: {
+        cwd: workdir || process.cwd(),
+        permissionMode: "bypassPermissions",
+        allowedTools: [],
+        maxTurns: 1,
+        abortController: abort,
+        systemPrompt: { type: "text", text: "你是对话标题生成助手，只输出简短标题，不解释、不加标点。" },
+        ...((appConfig.lightModel || appConfig.model) ? { model: appConfig.lightModel || appConfig.model } : {}),
+      },
+    });
+    let title = "";
+    for await (const msg of response) {
+      if (msg.type === "assistant") {
+        for (const b of msg.message.content) if (b.type === "text") title += b.text;
+      }
+    }
+    title = title.trim().replace(/["""''【】「」《》\n]/g, "").slice(0, 20);
+    return { title: title || null };
+  } catch {
+    return { error: "生成失败" };
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // ── 对话：支持多个并发查询，按 convId 隔离；事件都带上 convId ───
 const runs = new Map(); // convId -> AbortController
 

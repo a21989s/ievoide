@@ -92,5 +92,6 @@ contextBridge.exposeInMainWorld("api", {
   gitResetHard: (repo, sha) => ipcRenderer.invoke("gitResetHard", repo, sha),
   gitResetSoft: (repo, sha) => ipcRenderer.invoke("gitResetSoft", repo, sha),
   gitCheckoutCommit: (repo, sha) => ipcRenderer.invoke("gitCheckoutCommit", repo, sha),
+  convAutoTitle: (text) => ipcRenderer.invoke("convAutoTitle", text),
   on: (channel, cb) => ipcRenderer.on(channel, (_e, data) => cb(data)),
 });
