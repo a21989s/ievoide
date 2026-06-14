@@ -2832,8 +2832,8 @@ function addFollowUpBtns(conv, wrap) {
     btn.textContent = label;
     btn.title = prompt;
     btn.onclick = () => {
-      bar.remove();
       if (conv !== activeConv) return;
+      bar.remove();
       const inp = $("input");
       inp.value = prompt;
       inp.focus();
