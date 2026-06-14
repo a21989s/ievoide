@@ -654,6 +654,11 @@
       .plib-send { font-size: 10px; padding: 0 6px; border-radius: 8px; background: rgba(80,160,90,.18); color: #4caf50; flex: none; }
       .plib-star { width: 26px; height: 26px; border: none; background: none; color: var(--fg); opacity: .4; font-size: 14px; cursor: pointer; border-radius: 6px; flex: none; }
       .plib-star:hover { opacity: 1; background: rgba(230,180,60,.18); }
+      .plib-del { width: 26px; height: 26px; border: none; background: none; color: var(--fg); opacity: .35; font-size: 14px; cursor: pointer; border-radius: 6px; flex: none; }
+      .plib-del:hover { opacity: 1; background: rgba(220,60,60,.18); }
+      .plib-footer { padding: 8px 12px; border-top: 1px solid var(--border); flex: none; }
+      #plibAdd { width: 100%; padding: 6px 14px; border: 1px dashed var(--border); background: none; color: var(--fg); border-radius: 6px; cursor: pointer; font-size: 13px; opacity: .7; }
+      #plibAdd:hover { background: rgba(127,127,127,.1); opacity: 1; }
       .plib-empty { text-align: center; opacity: .55; padding: 36px 0; }
       #mcpModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
       #mcpModal.open { display: flex; }
@@ -1173,6 +1178,7 @@
         <div class="vhead"><span data-i18n="📚 编程 Prompt 库">📚 编程 Prompt 库</span><button id="plibClose" data-i18n-title="关闭" title="关闭">✕</button></div>
         <input id="plibSearch" data-i18n-ph="搜索场景或关键词…" placeholder="搜索场景或关键词…" />
         <div id="plibList"></div>
+        <div class="plib-footer"><button id="plibAdd" data-i18n="+ 存入我的提示词">+ 存入我的提示词</button></div>
       </div>
     </div>
     <div id="mcpModal">

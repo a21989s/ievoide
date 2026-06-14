@@ -5877,6 +5877,14 @@ const PROMPT_LIBRARY = [
       prompt: "对比当前分支与主分支（main/master）的差异：按功能归组总结，标出风险点与需要重点 review 的文件" },
   ]},
 ];
+let MY_PROMPTS;
+try {
+  const _mp = JSON.parse(localStorage.getItem("claudeTools.myPrompts") || "null");
+  MY_PROMPTS = Array.isArray(_mp) ? _mp : [];
+} catch { MY_PROMPTS = []; }
+function persistMyPrompts() {
+  try { localStorage.setItem("claudeTools.myPrompts", JSON.stringify(MY_PROMPTS)); } catch {}
+}
 function openPromptLib() {
   $("plibModal").classList.add("open");
   $("plibSearch").value = "";
@@ -5929,11 +5937,56 @@ function renderPromptLib(kw) {
       el.appendChild(row);
     });
   });
+  // ── 我的提示词（自定义，存于 localStorage） ──
+  const myFiltered = MY_PROMPTS.reduce((acc, p, i) => {
+    if (!q || (p.label + p.prompt).toLowerCase().includes(q)) acc.push({ p, i });
+    return acc;
+  }, []);
+  if (myFiltered.length) {
+    const mh = document.createElement("div");
+    mh.className = "plib-cat";
+    mh.textContent = "⭐ 我的提示词";
+    el.appendChild(mh);
+    myFiltered.forEach(({ p, i }) => {
+      shown++;
+      const row = document.createElement("div");
+      row.className = "plib-row";
+      row.innerHTML =
+        `<div class="plib-main"><div class="plib-label"></div><div class="plib-prompt"></div></div>` +
+        `<button class="plib-del" title="删除">🗑</button>`;
+      row.querySelector(".plib-label").textContent = `${p.icon || "📌"} ${p.label}`;
+      row.querySelector(".plib-prompt").textContent = p.prompt;
+      row.onclick = () => {
+        $("plibModal").classList.remove("open");
+        const input = $("input");
+        input.value = p.prompt;
+        input.focus();
+        input.setSelectionRange(p.prompt.length, p.prompt.length);
+      };
+      row.querySelector(".plib-del").onclick = (e) => {
+        e.stopPropagation();
+        MY_PROMPTS.splice(i, 1);
+        persistMyPrompts();
+        renderPromptLib($("plibSearch").value.trim());
+      };
+      el.appendChild(row);
+    });
+  }
   if (!shown) el.innerHTML = `<div class="plib-empty">${tr("无匹配")}</div>`;
 }
 $("plibClose").onclick = () => $("plibModal").classList.remove("open");
 $("plibModal").onclick = (e) => { if (e.target.id === "plibModal") $("plibModal").classList.remove("open"); };
 $("plibSearch").oninput = () => renderPromptLib($("plibSearch").value.trim());
+$("plibAdd").onclick = async () => {
+  const label = await modalPrompt(tr("提示词名称："), "");
+  if (label === null || !label.trim()) return;
+  const content = await modalTextarea(tr("提示词内容："), "");
+  if (!content) return;
+  MY_PROMPTS.push({ icon: "📌", label: label.trim(), prompt: content });
+  persistMyPrompts();
+  renderPromptLib($("plibSearch").value.trim());
+  toast(tr("已存入我的提示词"));
+};
 
 // ── 斜杠命令 / skills / subagent 补全 ───────────────────────
 let slashCommands = []; // [{ name, kind: 'command'|'skill'|'agent' }]
