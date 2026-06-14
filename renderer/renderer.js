@@ -282,11 +282,59 @@ async function refreshFileTree() {
   const activePath = tree.querySelector(".node.active")?.dataset.path;
   tree.innerHTML = "";
   await renderChildren(tree, currentFolder, 0, expandSet);
+  for (const af of additionalFolders) await renderAdditionalFolderSection(tree, af, expandSet);
   if (activePath)
     tree.querySelector(`.node.file[data-path="${CSS.escape(activePath)}"]`)?.classList.add("active");
 }
 
+async function renderAdditionalFolderSection(tree, folder, expandSet) {
+  const label = folder.replace(/\\/g, "/").split("/").pop() || folder;
+  const sep = document.createElement("div");
+  sep.className = "tree-section-header";
+  sep.title = folder;
+  sep.textContent = "📂 " + label;
+  tree.appendChild(sep);
+  const sub = document.createElement("div");
+  sub.className = "tree-section-body";
+  tree.appendChild(sub);
+  await renderChildren(sub, folder, 0, expandSet);
+}
+
 let currentFolder = null; // 当前打开的工作目录（用于语言无关地判断是否已选目录）
+let additionalFolders = []; // 额外参考目录列表
+
+function renderAdditionalFoldersBar() {
+  const bar = $("additionalFoldersBar");
+  bar.innerHTML = additionalFolders.map((f, i) => {
+    const label = f.replace(/\\/g, "/").split("/").pop() || f;
+    return `<span class="add-folder-chip" title="${f}">📂 ${label}<span class="chip-del" data-idx="${i}">✕</span></span>`;
+  }).join("");
+  bar.querySelectorAll(".chip-del").forEach(el => {
+    el.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const idx = +el.dataset.idx;
+      const removed = additionalFolders[idx];
+      additionalFolders.splice(idx, 1);
+      await window.api.removeAdditionalDir(removed);
+      renderAdditionalFoldersBar();
+      refreshFileTree();
+    });
+  });
+}
+
+$("addFolderBtn").onclick = async () => {
+  const folder = await window.api.pickFolder();
+  if (!folder) return;
+  if (folder === currentFolder || additionalFolders.includes(folder)) {
+    toast(tr("该目录已添加"), "info"); return;
+  }
+  const result = await window.api.addAdditionalDir(folder);
+  if (!result) { toast(tr("无法添加该目录"), "error"); return; }
+  additionalFolders = result;
+  renderAdditionalFoldersBar();
+  refreshFileTree();
+};
+
 async function openFolderUI(folder) {
   currentFolder = folder;
   const fEl = $("folder");
@@ -296,6 +344,7 @@ async function openFolderUI(folder) {
   fEl.removeAttribute("data-i18n");
   $("tree").innerHTML = "";
   await renderChildren($("tree"), folder, 0);
+  for (const af of additionalFolders) await renderAdditionalFolderSection($("tree"), af);
   await loadRepos();
   // 加载该 workdir 对应的项目记忆
   loadProjectMemoryUI();
@@ -2732,8 +2781,11 @@ function appendTool(conv, id, name, inputObj) {
 // 把绝对路径缩成相对当前文件夹的短路径（不在文件夹内则原样返回）
 function shortPath(p) {
   let s = String(p || "");
-  const root = currentFolder ? currentFolder.replace(/\/+$/, "") + "/" : null;
-  if (root && s.startsWith(root)) s = s.slice(root.length);
+  for (const f of [currentFolder, ...additionalFolders]) {
+    if (!f) continue;
+    const root = f.replace(/\/+$/, "") + "/";
+    if (s.startsWith(root)) return s.slice(root.length);
+  }
   return s;
 }
 

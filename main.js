@@ -137,6 +137,8 @@ const appConfig = loadConfig();
 let win;
 /** 当前打开的工作目录（folder），传给 SDK 当 cwd */
 let workdir = null;
+/** 额外参考目录列表（可多选，与 workdir 并列供 @ 搜索和文件树使用）*/
+let additionalDirs = [];
 /** 最近一次 chat:init 报告的 MCP 连接状态（[{name,status}]），供 MCP 面板显示可用/失败 */
 let lastMcpStatus = [];
 
@@ -485,6 +487,21 @@ ipcMain.handle("setWorkdir", async (_e, p) => {
   }
 });
 
+// ── 额外参考目录管理 ───────────────────────────────────────────
+ipcMain.handle("addAdditionalDir", async (_e, p) => {
+  try {
+    const st = await fs.stat(p);
+    if (!st.isDirectory()) return null;
+    if (!additionalDirs.includes(p)) additionalDirs.push(p);
+    return additionalDirs;
+  } catch { return null; }
+});
+ipcMain.handle("removeAdditionalDir", (_e, p) => {
+  additionalDirs = additionalDirs.filter(d => d !== p);
+  return additionalDirs;
+});
+ipcMain.handle("getAdditionalDirs", () => additionalDirs);
+
 // ── 努力程度切换：读/写 config.json 的 effort 字段（省 token 的主旋钮，下一轮对话即生效）──
 ipcMain.handle("getEffort", () => appConfig.effort || "");
 ipcMain.handle("setEffort", async (_e, effort) => {
@@ -744,30 +761,72 @@ async function listWorkdirFiles() {
   return all;
 }
 
+// 遍历单个目录，返回文件/目录条目列表（rel 相对于 rootDir）
+async function listDirFiles(rootDir) {
+  const ignRules = await loadAiIgnoreRules(rootDir).catch(() => []);
+  function isAiIgnored(rel) {
+    if (!ignRules.length) return false;
+    let ignored = false;
+    for (const { negate, re } of ignRules) { if (re.test(rel)) ignored = !negate; }
+    return ignored;
+  }
+  const all = [], dirs = [];
+  const visited = new Set();
+  async function walk(dir, depth = 0) {
+    if (all.length >= FILE_CACHE_MAX || depth > 20) return;
+    let real; try { real = await fs.realpath(dir); } catch { return; }
+    if (visited.has(real)) return; visited.add(real);
+    let entries; try { entries = await fs.readdir(dir, { withFileTypes: true }); } catch { return; }
+    for (const d of entries) {
+      if (all.length >= FILE_CACHE_MAX) return;
+      if (IGNORE.has(d.name)) continue;
+      const full = path.join(dir, d.name);
+      const rel = path.relative(rootDir, full).replace(/\\/g, "/");
+      if (isAiIgnored(rel)) continue;
+      if (d.isDirectory()) {
+        if (SKIP_DIRS.has(d.name)) continue;
+        dirs.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase(), rootDir });
+        await walk(full, depth + 1);
+      } else {
+        all.push({ name: d.name, path: full, rel, relLower: rel.toLowerCase(), rootDir });
+      }
+    }
+  }
+  await walk(rootDir);
+  return { all, dirs };
+}
+
 ipcMain.handle("searchFiles", async (_e, query) => {
   if (!workdir) return [];
   const q = String(query || "").toLowerCase();
   const all = await listWorkdirFiles();
   const dirs = fileCache.dirs || [];
-  const MAX = 50; // 最多返回 50 条，避免大仓库卡顿
-  // 全量过滤后统一打分排序再截断：命中位置越靠前越优、相对路径越短越优，
-  // 避免遍历序靠后的更优匹配（如文件名开头命中）被提前 break 永远挤掉。
+
+  // 合并 additionalDirs 的文件
+  const addAll = [], addDirs = [];
+  for (const d of additionalDirs) {
+    const r = await listDirFiles(d).catch(() => ({ all: [], dirs: [] }));
+    addAll.push(...r.all); addDirs.push(...r.dirs);
+  }
+
+  const MAX = 50;
   const rank = (items) =>
     items
       .filter((it) => !q || it.relLower.includes(q))
       .sort((a, b) => {
         if (q) {
-          const pa = a.relLower.indexOf(q);
-          const pb = b.relLower.indexOf(q);
+          const pa = a.relLower.indexOf(q), pb = b.relLower.indexOf(q);
           if (pa !== pb) return pa - pb;
         }
         return a.relLower.length - b.relLower.length;
       })
       .slice(0, MAX);
-  // 目录优先排在前面，选中后插入 @相对目录/ 让模型把整个目录纳入上下文
+
+  const allFiles = [...all, ...addAll];
+  const allDirs = [...dirs, ...addDirs];
   return [
-    ...rank(dirs).map(({ name, path, rel }) => ({ name, path, rel, dir: true })),
-    ...rank(all).map(({ name, path, rel }) => ({ name, path, rel })),
+    ...rank(allDirs).map(({ name, path, rel, rootDir }) => ({ name, path, rel, dir: true, rootDir })),
+    ...rank(allFiles).map(({ name, path, rel, rootDir }) => ({ name, path, rel, rootDir })),
   ].slice(0, MAX);
 });
 

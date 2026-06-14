@@ -51,7 +51,12 @@
       #send:hover:not(:disabled) { background: var(--accent); }
       #pasteTerminal { width: 26px; height: 26px; padding: 0; border-radius: 50%; font-size: 13px; line-height: 1; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; align-self: flex-end; background: #4a4a4a; margin-right: 4px; cursor: pointer; border: none; color: inherit; }
       #pasteTerminal:hover { background: #5a5a5a; }
-      .folder { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .folder { color: var(--muted); font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+      .add-folder-chip { display:inline-flex;align-items:center;gap:3px;font-size:11px;background:#2a3a2a;border:1px solid #3a5a3a;border-radius:10px;padding:2px 6px;color:#7ec87e;white-space:nowrap;max-width:140px;overflow:hidden;text-overflow:ellipsis;cursor:default; }
+      .add-folder-chip .chip-del { cursor:pointer;opacity:0.6;margin-left:2px;font-size:10px; }
+      .add-folder-chip .chip-del:hover { opacity:1;color:#c33; }
+      #addFolderBtn { -webkit-app-region:no-drag;font-size:13px;padding:2px 6px;border-radius:4px;background:#2a2a2a;border:1px solid var(--border);color:var(--muted);cursor:pointer; }
+      #addFolderBtn:hover { color:var(--fg);border-color:var(--accent); }
       .usage { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 10px; white-space: nowrap; }
       .usage:hover { color: var(--fg); border-color: var(--accent); }
       .model-select { -webkit-app-region: no-drag; cursor: pointer; font-size: 11px; color: #9a9a9a; background: #2a2a2a; border: 1px solid var(--border); border-radius: 12px; padding: 3px 8px; white-space: nowrap; outline: none; }
@@ -330,6 +335,7 @@
       .cs-hit .loc { color: var(--muted); font-family: ui-monospace, monospace; margin-right: 6px; }
       .cs-hit .txt { color: #cfe6ff; }
       .cs-empty { padding: 4px 6px; color: var(--muted); }
+      .tree-section-header { padding: 5px 8px 2px; font-size: 11px; color: #7ec87e; letter-spacing: .4px; border-top: 1px solid #2a3a2a; margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: default; }
       .node { padding: 2px 8px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .node:hover { background: #2a2d2e; }
       .node.active { background: #094771; color: #fff; }
@@ -851,6 +857,8 @@
         <div id="recentFoldersMenu"></div>
       </div>
       <span class="folder" id="folder" data-i18n="未选择目录">未选择目录</span>
+      <div id="additionalFoldersBar" style="display:flex;align-items:center;gap:4px;flex-shrink:0;"></div>
+      <button id="addFolderBtn" title="添加参考目录" style="font-size:13px;padding:2px 6px;flex-shrink:0">＋</button>
       <span class="meta" id="status"></span>
       <span class="usage" id="usage" data-i18n-title="点击刷新用量" title="点击刷新用量">用量…</span>
       <select class="model-select" id="modelSelect" data-i18n-title="切换模型（下一轮对话生效）控制费用" title="切换模型（下一轮对话生效）控制费用">
