@@ -5353,6 +5353,7 @@ loadEvolveHistory();
 // 视图切换（VSCode 式：源代码管理 / 需求，二者在侧栏中互相覆盖）
 document.querySelectorAll("#activitybar .act-btn[data-view]").forEach((tab) => {
   tab.onclick = () => {
+    if (tab.dataset.view === 'sc') tab.classList.remove('has-changes'); // 点击 SC 按钮时清除变更提示
     // 再次点击当前视图图标 → 折叠/展开侧栏（VSCode 行为）
     if (tab.classList.contains("active")) {
       $("sidebar").classList.toggle("collapsed");
@@ -6442,7 +6443,13 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
     `${tr("用时 ")}${ms}ms · $${cost?.toFixed?.(4) ?? cost}${_crT > 0 ? " ⚡cached" : ""}${_tokStr}` +
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
-  if (checkpoint) { refreshFileTree(); showScPanel(); scAutoRefresh(); } // 本轮改动了文件 => 重建文件树 + 自动切到 Source Control 视图
+  if (checkpoint) {
+    refreshFileTree();
+    const _scBtn = document.querySelector('#activitybar .act-btn[data-view="sc"]');
+    if (_scBtn?.classList.contains('active')) { showScPanel(); } // SC 已在活跃 → 正常展开
+    else { _scBtn?.classList.add('has-changes'); } // 当前在其他面板 → 仅在 SC 按钮上加圆点提示
+    scAutoRefresh();
+  }
   // 计划模式轮 & 没有排队消息 => 渲染「按计划执行 / 继续调整」操作条
   if (conv && conv._planTurn && turnWrap && !conv.queue.length) addPlanActions(conv, turnWrap);
   // 非计划轮、无排队消息 => 追加 follow-up 快捷按钮
