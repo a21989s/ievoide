@@ -2157,6 +2157,8 @@ const CTX_WARN = 100000;
 // 超过该规模后，用户下次发消息时先自动 /compact 再发（与 Claude Code 自动压缩同思路，
 // 但提前到更省钱的时点：不等到逼近模型上限才压）
 const CTX_AUTOCOMPACT = 130000;
+// Claude 4 Opus/Sonnet/Haiku 实际上下文上限（进度条满格对应此值，非压缩阈值）
+const CTX_MAX = 200000;
 const TURN_COMPRESS_THRESHOLD = 30; // 满 30 轮触发历史摘要压缩
 const TURN_COMPRESS_BATCH = 10;     // 每次压缩最旧的 10 条消息
 
@@ -2206,7 +2208,7 @@ function renderCostReadout() {
   const u = c.usage || { in: 0, out: 0, cw: 0, cr: 0 };
   const billed = Math.round(u.in + u.out + u.cw * 1.25 + u.cr * 0.1) || c.tokens;
   const big = c.ctx >= CTX_WARN;
-  const pct = c.ctx ? Math.min(100, Math.round(c.ctx / CTX_AUTOCOMPACT * 100)) : 0;
+  const pct = c.ctx ? Math.min(100, Math.round(c.ctx / CTX_MAX * 100)) : 0;
   const barHtml = c.ctx
     ? `<span class="ctx-bar-wrap" title=""><span class="ctx-bar-fill${big ? " warn" : ""}" style="width:${pct}%"></span></span>`
     : "";
@@ -2224,6 +2226,7 @@ function renderCostReadout() {
       u.in.toLocaleString(), u.out.toLocaleString(), u.cw.toLocaleString(), u.cr.toLocaleString()) +
     "\n" +
     trf("计费等效 ≈ {0} tokens · 估算 ${1}", billed.toLocaleString(), c.costUsd.toFixed(4)) +
+    "\n" + trf("模型上限 200k（进度条满格）· 自动压缩阈值 130k · 当前已用 {0}%", Math.round((c.ctx || 0) / CTX_MAX * 100)) +
     (big ? "\n" + tr("⚠ 上下文已较大：发送 /compact 压缩历史，或新开对话更省 token") : "");
   updateConvEstCost(); // ctx 更新后同步刷新下一次发送的预估
   checkTokenLimit(); // 检查是否超过本对话 token 上限
