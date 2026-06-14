@@ -2885,10 +2885,12 @@ async function resolveMentionedFiles(text) {
       }
       for (const f of files.slice(0, 20)) {
         const content = await window.api.readWorkdirFile(f.path);
+        if (content.startsWith("(")) { toast(`@${f.path} 未找到或无法读取，已跳过`, "warn"); continue; }
         parts.push(`=== @${f.path} ===\n${content}\n=== end ===`);
       }
     } else {
       const content = await window.api.readWorkdirFile(ref);
+      if (content.startsWith("(")) { toast(`@${ref} 未找到或无法读取，已跳过`, "warn"); continue; }
       parts.push(`=== @${ref} ===\n${content}\n=== end ===`);
     }
   }
