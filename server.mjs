@@ -36,6 +36,8 @@ const GUARDRAILS = [
   "调用 gh 前先确认已登录，未登录则停下来告知用户而非反复重试。",
   "Bash 每次调用 cwd 都会重置，不要反复 cd 同一目录；用绝对路径或在单条命令内 cd。",
   "禁止把 API key/密钥明文写进命令（会进 transcript 被缓存重读且泄露），用环境变量引用。",
+  "相互独立的工具调用（多个 Read/Grep/Bash）放在同一轮里并行发出，别一轮一个——每多一轮都会把全上下文重读一遍。",
+  "同一文件不要反复整体 Read；先用 Grep 定位行号，再带 offset/limit 针对性读；已读过的内容靠上下文，不要重复读。",
 ].join("\n");
 
 function tokenOpts(cfg) {
