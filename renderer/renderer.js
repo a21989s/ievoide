@@ -1135,6 +1135,12 @@ chat.addEventListener("click", (e) => {
     setTimeout(() => { saveMemBtn.textContent = orig; }, 1200);
     return;
   }
+  const forkBtn = e.target.closest(".fork-msg");
+  if (forkBtn) {
+    const msg = forkBtn.closest(".msg.user");
+    if (msg) forkFromMsg(msg);
+    return;
+  }
 });
 
 // 汇总一条 Claude 回复里所有文字气泡的纯文本（剔除复制按钮自身的文案）
@@ -1751,6 +1757,34 @@ function injectDeleteBtns(pane) {
     btn.textContent = "×";
     role.appendChild(btn);
   });
+  pane.querySelectorAll(".msg.user .role").forEach(role => {
+    if (role.querySelector(".fork-msg")) return;
+    const fBtn = document.createElement("button");
+    fBtn.type = "button";
+    fBtn.className = "fork-msg";
+    fBtn.title = tr("从此处分叉新对话");
+    fBtn.textContent = "⑂";
+    role.insertBefore(fBtn, role.querySelector(".reply-del"));
+  });
+}
+
+function forkFromMsg(msgEl) {
+  const conv = activeConv;
+  if (!conv || !conv.pane) return;
+  const msgs = [...conv.pane.querySelectorAll(":scope > .msg")];
+  const idx = msgs.indexOf(msgEl);
+  if (idx < 0) return;
+  const hiddenHtml = (conv._hiddenHtml || []).join("");
+  const visibleHtml = msgs.slice(0, idx + 1).map(n => n.outerHTML).join("");
+  const forked = makeConv({
+    title: (conv.title || tr("新对话")) + "(fork)",
+    html: hiddenHtml + visibleHtml,
+    cwd: conv.cwd,
+  });
+  forked._convModel = conv._convModel || null;
+  conversations.unshift(forked);
+  switchConv(forked.id);
+  persistConvs();
 }
 
 function ensurePane(conv) {
@@ -2655,7 +2689,8 @@ window.api.on("convs:changed", syncConvsFromDisk);
 function addMsg(conv, role, text) {
   const wrap = document.createElement("div");
   wrap.className = "msg " + role;
-  wrap.innerHTML = `<div class="role">${role === "user" ? tr("你") : "Claude"}<button type="button" class="reply-del" title="${tr("删除此条消息")}">×</button></div>`;
+  const forkBtnHtml = role === "user" ? `<button type="button" class="fork-msg" title="${tr("从此处分叉新对话")}">⑂</button>` : "";
+  wrap.innerHTML = `<div class="role">${role === "user" ? tr("你") : "Claude"}${forkBtnHtml}<button type="button" class="reply-del" title="${tr("删除此条消息")}">×</button></div>`;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   if (text) bubble.textContent = text;
