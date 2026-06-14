@@ -304,12 +304,19 @@
 
   // ── Public API ─────────────────────────────────────────────────────────────
   window.QRCanvas = {
-    draw(text, canvas, { light = '#ffffff', dark = '#000000', margin = 2 } = {}) {
+    draw(text, canvas, { light = '#ffffff', dark = '#000000', margin = 4 } = {}) {
+      // margin=4：QR 规范要求的静默区（quiet zone）至少 4 个模块，少于此扫码器易识别失败。
       const { matrix, size } = encode(text);
       const total = size + margin * 2;
-      const px = Math.floor(Math.min(canvas.width, canvas.height) / total);
+      // 以传入 canvas 尺寸为目标，但每模块至少 4px 保证清晰度；
+      // 取整 px 后内部位图 dim 几乎不会正好等于目标尺寸——必须让 CSS 显示尺寸与
+      // 内部位图 1:1（写回 style.width/height），否则浏览器分数缩放 + 抗锯齿会把模块糊掉，
+      // 表现为「生成出来但扫不出」。这是只设 canvas.width 不改 style 的经典坑。
+      const target = Math.min(canvas.width, canvas.height) || 200;
+      const px = Math.max(4, Math.floor(target / total));
       const dim = px * total;
       canvas.width = canvas.height = dim;
+      canvas.style.width = canvas.style.height = dim + 'px';
       const ctx = canvas.getContext('2d');
       ctx.fillStyle = light;
       ctx.fillRect(0, 0, dim, dim);

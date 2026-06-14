@@ -1535,6 +1535,27 @@ function scrollIfActive(conv) {
   const nearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 40;
   if (nearBottom) chat.scrollTop = chat.scrollHeight;
 }
+
+// 滚动时只让"当前这轮"的用户消息钉在顶部：取最后一条已滚到/滚过顶部的用户消息钉住，其余取消，
+// 实现"我的对话滚到顶就 hook，滚到下一条自动切换"，且避免多条同时 sticky 在 top:0 互相遮挡。
+let _stickRaf = 0;
+function updateStickyUser() {
+  _stickRaf = 0;
+  if (!activeConv) return;
+  const users = activeConv.pane.querySelectorAll(":scope > .msg.user");
+  if (!users.length) return;
+  const top = chat.getBoundingClientRect().top;
+  let active = null;
+  for (const u of users) {
+    if (u.getBoundingClientRect().top <= top + 1) active = u; else break;
+  }
+  for (const u of users) u.classList.toggle("stick", u === active);
+}
+chat.addEventListener("scroll", () => {
+  if (_stickRaf) return;
+  _stickRaf = requestAnimationFrame(updateStickyUser);
+});
+
 const LAZY_PAGE = 100; // 每次加载条数
 
 function _buildLoadEarlierBtn(conv) {
@@ -1590,6 +1611,7 @@ function showActive() {
   ensurePane(activeConv);
   chat.replaceChildren(activeConv.pane); // 仅切换显示，不打断后台对话
   chat.scrollTop = chat.scrollHeight;
+  requestAnimationFrame(updateStickyUser); // 切换对话后重算钉顶的用户消息
   refreshSendBtn();
   renderCostReadout(); // 同步显示该会话累计用量
   renderCtxFooter();

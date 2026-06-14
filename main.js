@@ -155,6 +155,13 @@ function crashLog(source, message) {
     const line = `[${new Date().toISOString()}] ${source}: ${String(message ?? "").slice(0, 8000)}\n`;
     fsSync.mkdirSync(path.dirname(crashLogPath()), { recursive: true });
     fsSync.appendFileSync(crashLogPath(), line); // 同步写，确保进程退出前已落盘
+    // 高频退出/崩溃事件都往这里写，无上限会无限增长。超阈值截尾保留后半段（同步，兼容 exit 钩子）。
+    try {
+      if (fsSync.statSync(crashLogPath()).size > 512 * 1024) {
+        const buf = fsSync.readFileSync(crashLogPath());
+        fsSync.writeFileSync(crashLogPath(), buf.subarray(buf.length - 256 * 1024));
+      }
+    } catch {}
   } catch {}
 }
 ipcMain.handle("getCrashLog", () => { try { return fsSync.readFileSync(crashLogPath(), "utf8"); } catch { return ""; } });
@@ -1907,7 +1914,15 @@ function rollback(sha) {
   try {
     gitT(["reset", "--hard", sha]);
     gitT(["clean", "-fd"]);
-  } catch {}
+    return true;
+  } catch (e) {
+    // 回滚是进化安全网核心：失败必须留痕并告警，否则坏改动残留工作区、
+    // 下一轮 checkpoint 会把它提交进历史，bootGuard 也救不回。
+    crashLog("rollback", `FAILED sha=${sha}: ${e?.stderr || e?.message || e}`);
+    if (win && !win.isDestroyed())
+      win.webContents.send("evolve:log", "⚠️ 回滚失败，工作区可能残留改动：" + String(e?.stderr || e?.message || e).slice(0, 200));
+    return false;
+  }
 }
 ipcMain.handle("getIssues", () => issues);
 ipcMain.handle("clearIssues", () => {
@@ -2121,12 +2136,13 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory, e
   try {
     // 1) 检查点
     if (ensureRepo()) log("📦 未检测到 git 仓库，已自动初始化");
-    try {
-      gitT(["add", "-A"]);
-      // 不加 --allow-empty：无未提交改动时此 commit 会失败并被忽略，
-      // checkpoint 回退为当前 HEAD，既能用于 diff/回滚，又不会在历史里堆积空的 checkpoint 提交。
-      gitT(["commit", "-m", "evolve: checkpoint"]);
-    } catch {}
+    // add 失败（仓库锁/权限/损坏）必须中断：否则后续 checkpoint=HEAD 仍成立，
+    // 进化照跑，最终 reset --hard 会回滚到错误基线、冲掉本不该动的改动。
+    try { gitT(["add", "-A"]); }
+    catch (e) { throw new Error("检查点暂存失败，已中止进化：" + String(e?.stderr || e?.message || e)); }
+    // 不加 --allow-empty：无未提交改动时此 commit 会失败，仅这步允许被忽略，
+    // checkpoint 回退为当前 HEAD，既能用于 diff/回滚，又不会在历史里堆积空的 checkpoint 提交。
+    try { gitT(["commit", "-m", "evolve: checkpoint"]); } catch {}
     checkpoint = gitT(["rev-parse", "HEAD"]).trim();
     log(`📌 检查点 ${checkpoint.slice(0, 7)}`);
 
@@ -2303,7 +2319,9 @@ ipcMain.handle("evolve", async (_e, { requirement, attachments, projectMemory, e
       return { ok: true, stopped: true };
     }
     const m = String(err?.stack || err);
-    recordEvolve({ requirement, status: "error", error: m });
+    // 异常路径必须回滚半成品，否则坏改动会被下一轮 checkpoint 提交进历史。
+    if (checkpoint) rollback(checkpoint);
+    recordEvolve({ requirement, checkpoint, status: "error", error: m });
     send("evolve:done", { error: m });
     return { error: m };
   } finally {

@@ -381,7 +381,9 @@
       .msg { margin-bottom: 14px; max-width: 90%; }
       .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
       .bubble { padding: 9px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
-      .msg.user { margin-left: auto; position: sticky; top: 0; z-index: 2; background: var(--bg); }
+      .msg.user { margin-left: auto; }
+      /* 滚动时只钉当前这轮的用户消息（由 JS 切换 .stick），避免多条同时钉在 top:0 互相遮挡 */
+      .msg.user.stick { position: sticky; top: 0; z-index: 2; background: var(--bg); }
       .msg.user .bubble { background: var(--user); }
       .msg.assistant .bubble { background: var(--panel); border: 1px solid var(--border); }
       /* 聊天气泡里的 Markdown 渲染 */
@@ -460,8 +462,8 @@
       #inputbar { display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--border); background: var(--panel); }
       #inputbar.dragover { outline: 2px dashed var(--accent); outline-offset: -4px; }
       .input-col { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-      #input { resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; padding-right: 32px; font: inherit; }
-      .input-wrap { position: relative; }
+      #input { width: 100%; box-sizing: border-box; resize: none; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; padding-right: 32px; font: inherit; }
+      .input-wrap { position: relative; width: 100%; }
       #attachList { display: flex; flex-wrap: wrap; gap: 6px; }
       #attachList:empty { display: none; }
       /* 计划模式开关：开启后本对话发送的查询会先要求模型给出分步方案待确认 */
