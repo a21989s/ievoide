@@ -341,7 +341,8 @@ ipcMain.handle("pickFolder", async () => {
   if (r.canceled || !r.filePaths[0]) return null;
   workdir = r.filePaths[0];
   fileCache = { dir: null, list: null, time: 0 }; // 切换目录失效文件缓存
-  saveConfig({ workdir });
+  // 注：workdir 的持久化由渲染层 localStorage(claudeTools.folder)+restoreFolder 负责，
+  // 此处无需写 config（曾误调用不存在的 saveConfig 导致 invoke 抛错、pickFolder 形同失效）。
   return workdir;
 });
 
@@ -1644,6 +1645,11 @@ function appendActivity(entry) {
   });
 }
 
+// UI 操作埋点：renderer 调 window.api.uiLog({...}) → 落 activity.log（source:"ui"），用于诊断目录/对话切换
+ipcMain.on("uiLog", (_e, entry) => {
+  try { appendActivity({ source: "ui", ...(entry && typeof entry === "object" ? entry : { msg: String(entry) }) }); } catch {}
+});
+
 ipcMain.handle("getActivityLog", async (_e, { days = 7 } = {}) => {
   try {
     const raw = await fs.readFile(activityLogPath(), "utf8");
@@ -2509,6 +2515,21 @@ ipcMain.handle("gitRepos", async () => {
       if (await isGitRepo(child)) repos.push({ name: e.name, path: child });
     }
   } catch {}
+  // 附加工作目录也纳入仓库列表，使其在 SC 面板可点击切换（与 workdir 同等对待）：
+  // 目录本身是仓库则列出，并扫描其直接子目录，按 path 去重。
+  for (const dir of additionalDirs) {
+    try {
+      if (!repos.some((r) => r.path === dir) && (await isGitRepo(dir)))
+        repos.push({ name: path.basename(dir), path: dir });
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+      for (const e of entries) {
+        if (!e.isDirectory() || IGNORE.has(e.name)) continue;
+        const child = path.join(dir, e.name);
+        if (!repos.some((r) => r.path === child) && (await isGitRepo(child)))
+          repos.push({ name: e.name, path: child });
+      }
+    } catch {}
+  }
   for (const r of repos) r.current = await currentBranch(r.path);
   return repos;
 });

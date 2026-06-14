@@ -452,6 +452,14 @@
       .editcard .add { color: #73c991; } .editcard .del { color: #e57373; }
       .editcard .at { color: #c586c0; } .editcard .hdr { color: #888; }
       .editcard pre { margin: 0; padding: 6px 9px; max-height: 280px; overflow: auto; white-space: pre-wrap; word-break: break-all; border-top: 1px dashed #444; line-height: 1.5; }
+      .editcard .sb-toggle { float: right; margin-left: 8px; cursor: pointer; color: #888; user-select: none; }
+      .editcard .sb-toggle:hover, .editcard .sb-toggle.on { color: #cdba7a; }
+      .sbdiff { display: grid; grid-template-columns: auto 1fr auto 1fr; max-height: 360px; overflow: auto; border-top: 1px dashed #444; line-height: 1.5; font-size: 11px; }
+      .sbdiff .sb-ln { padding: 0 6px; text-align: right; color: #555; user-select: none; background: #161616; }
+      .sbdiff .sb-code { padding: 0 8px; white-space: pre-wrap; word-break: break-all; }
+      .sbdiff .sb-old { background: #3a1d1d; } .sbdiff .sb-new { background: #1d3a22; }
+      .sbdiff .sb-empty { background: repeating-linear-gradient(45deg, #1b1b1b, #1b1b1b 6px, #222 6px, #222 12px); }
+      .sbdiff .sb-sep { grid-column: 1 / -1; padding: 2px 9px; color: #c586c0; background: #161616; }
       .todocard { background: #1b1b1b; border: 1px solid #555; border-radius: 6px; margin: 6px 0; padding: 7px 10px; font-size: 12px; color: var(--fg); }
       .todocard .head { font-weight: 600; color: #cdba7a; margin-bottom: 4px; }
       .todocard .item { display: flex; gap: 6px; padding: 2px 0; line-height: 1.45; }

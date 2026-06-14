@@ -8,7 +8,8 @@
     "start": "node start.mjs",
     "restart": "bash dev-restart.sh",
     "dev": "node dev-watch.mjs",
-    "dryrun": "node --check main.js && node --check preload.cjs && node --check renderer/renderer.js && node --check renderer/pdfeditor.js && echo 'dry-run OK'"
+    "dryrun": "node --check main.js && node --check preload.cjs && node --check renderer/renderer.js && node --check renderer/pdfeditor.js && echo 'dry-run OK'",
+    "test": "node --test \"test/**/*.test.mjs\""
   },
   "keywords": [],
   "author": "",

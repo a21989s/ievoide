@@ -336,6 +336,7 @@ $("addFolderBtn").onclick = async () => {
 };
 
 async function openFolderUI(folder) {
+  try { window.api.uiLog({ ev: "openFolder", folder, prevFolder: currentFolder, activeConvCwd: activeConv?.cwd ?? null }); } catch {}
   currentFolder = folder;
   const fEl = $("folder");
   fEl.textContent = folder;
@@ -358,6 +359,7 @@ async function openFolderUI(folder) {
       }
     } catch {}
   }
+  reconcileActiveConvToFolder(); // 切目录后让活动对话与该目录保持一致
 }
 
 // ── 最近目录工具（零 token，纯 localStorage）──────────────────
@@ -1139,13 +1141,31 @@ async function loadRepos() {
     row.innerHTML =
       `<span>🗂</span><span class="repo-name">${esc(repo.name)}</span>` +
       `<span class="repo-branch">⎇ ${esc(repo.current || "—")}</span>`;
-    row.onclick = () => selectRepo(repo.path);
+    row.onclick = () => onRepoRowClick(repo.path);
     listEl.appendChild(row);
   }
 
   // 保持原选中仓库；否则选第一个
   if (!repoList.some((r) => r.path === activeRepo)) activeRepo = repoList[0].path;
   await selectRepo(activeRepo);
+}
+
+// 手点仓库行：若该仓库不是当前工作目录，则连同工作目录一起切过去（顶部路径标签 +
+// currentFolder + 对话列表跟随切换），与 📁/recent 切目录走同一套流程；setWorkdir 失败时
+// 退回仅切 git 视图。程序内部调用 selectRepo（渲染默认选中、自动刷新等）不走这里，行为不变。
+async function onRepoRowClick(repoPath) {
+  try { window.api.uiLog({ ev: "selectRepo", repo: repoPath, currentFolder }); } catch {}
+  if (repoPath && repoPath !== currentFolder) {
+    const ok = await window.api.setWorkdir(repoPath);
+    if (ok) {
+      saveRecentFolder(repoPath);
+      activeRepo = repoPath;        // 让切目录后 loadRepos 默认选中该仓库
+      await openFolderUI(repoPath); // 路径/currentFolder/对话一起跟随，openFolderUI 内会重载并选中该仓库
+      return;
+    }
+    // setWorkdir 失败（路径已不存在等）：退回仅切 git 视图，不动工作目录
+  }
+  await selectRepo(repoPath);
 }
 
 // 选中某个仓库 → 高亮 + 加载分支图 + 工作区状态
@@ -1596,6 +1616,18 @@ let activeConv = null;
 let convSearchQuery = "";
 
 const getConv = (id) => conversations.find((c) => c.id === id);
+// 对话归属判断：cwd 为空（新对话/旧数据/手机端）视为不限目录，随当前目录显示；否则须与当前 workdir 一致
+const convInCurrentFolder = (c) => !c.cwd || !currentFolder || c.cwd === currentFolder;
+// 切目录/删对话后让活动对话与当前 workdir 保持一致：活动对话不属于当前目录时，切到属于的，没有则新建
+function reconcileActiveConvToFolder() {
+  if (!currentFolder || !conversations.length) return;
+  if (activeConv && convInCurrentFolder(activeConv)) { renderConvList(); return; }
+  // 切到属于该目录的对话；目标目录尚无对话则开一个空白新对话，让对话区跟随目录切换、不停留在别目录的对话上
+  const belong = conversations.find((c) => c.cwd === currentFolder) // 优先精确归属当前目录的
+    || conversations.find((c) => !c.cwd);                            // 退而求其次：无归属（新对话/旧数据）
+  if (belong) { activeConv = belong; showActive(); renderConvList(); }
+  else newConversation(); // 内部已 showActive + renderConvList，新对话 cwd 记为当前目录
+}
 function scrollIfActive(conv) {
   if (conv !== activeConv) return;
   // 仅当用户已接近底部时才自动滚到底，向上翻看历史时不强制跳转
@@ -1869,6 +1901,7 @@ window.addEventListener("pagehide", () => {
 
 function newConversation() {
   const c = makeConv();
+  c.cwd = currentFolder || null; // 新对话归属当前 workdir，避免切目录后漂浮在错误的目录下
   conversations.unshift(c);
   activeConv = c;
   showActive();
@@ -1881,6 +1914,7 @@ function newConversation() {
 function switchConv(id) {
   const c = getConv(id);
   if (!c || c === activeConv) return;
+  try { window.api.uiLog({ ev: "switchConv", to: id, convCwd: c.cwd ?? null, currentFolder }); } catch {}
   if (activeConv) {
     const draftVal = $('input').value;
     activeConv._draft = draftVal;
@@ -1911,7 +1945,7 @@ function deleteConv(id) {
   conversations.splice(i, 1);
   if (wasActive) {
     if (conversations.length) {
-      activeConv = conversations[0];
+      activeConv = conversations.find(convInCurrentFolder) || conversations[0]; // 优先选属于当前目录的，保持目录一致
       showActive();
     } else {
       newConversation();
@@ -2024,6 +2058,7 @@ function restoreFromHistory(id) {
   const c = makeConv({ id: h.id, title: h.title, sessionId: h.sessionId, html: h.html, inited: !!h.sessionId });
   conversations.unshift(c);
   activeConv = c;
+  removedIds.delete(id); // 重新打开即"复活"，撤销之前删除时打的墓碑标记，否则同步逻辑会再次把它过滤掉
   archived = archived.filter((x) => x.id !== id); // 移出历史，回到打开状态
   showActive();
   renderConvList();
@@ -2251,8 +2286,8 @@ function renderConvList() {
         const title = (c.title || "").toLowerCase();
         const paneText = (c.pane ? c.pane.textContent : "").toLowerCase();
         return title.indexOf(q) !== -1 || paneText.indexOf(q) !== -1;
-      })
-    : conversations;
+      }) // 搜索时跨目录显示全部，方便找回
+    : conversations.filter((c) => convInCurrentFolder(c) || c === activeConv); // 非搜索态只显示属于当前 workdir 的对话；活动对话始终可见，避免切目录后凭空消失
   for (const c of filtered) {
     const el = document.createElement("div");
     el.className = "conv-tab" + (c.id === activeConv?.id ? " active" : "");
@@ -2291,6 +2326,7 @@ function renderConvList() {
   // when searching, also show matching archived (history) conversations
   if (q) {
     const archMatches = archived.filter((h) => {
+      if (getConv(h.id)) return false; // 已作为活动对话显示的，不再以历史项重复列出
       const title = (h.title || "").toLowerCase();
       const text = histPlainText(h).toLowerCase();
       return title.indexOf(q) !== -1 || text.indexOf(q) !== -1;
@@ -2411,15 +2447,19 @@ $("ctxTrimBtn").onclick = async () => {
   }
   try { localStorage.removeItem("claudeTools.convs"); } catch {}
   if (d && Array.isArray(d.list) && d.list.length) {
-    conversations = d.list.map(makeConv);
+    // 按 id 去重：合并/同步等历史路径可能让同一对话在 list 里出现两次，否则会渲染出重复 tab
+    const seen = new Set();
+    conversations = d.list.filter((it) => it && it.id && !seen.has(it.id) && seen.add(it.id)).map(makeConv);
     activeConv = getConv(d.active) || conversations[0];
   }
-  if (d && Array.isArray(d.history)) archived = d.history;
+  // 归档历史里剔除已在活动列表中的 id，避免同一对话既是 tab 又是历史项（搜索时会重复显示）
+  if (d && Array.isArray(d.history)) archived = d.history.filter((h) => h && h.id && !getConv(h.id));
   if (!activeConv) {
     activeConv = makeConv();
     conversations = [activeConv];
   }
   showActive();
+  reconcileActiveConvToFolder(); // 与 restoreFolder 竞速：谁后完成谁负责对齐目录（currentFolder 未就绪时本次空跑）
   renderConvList();
   persistConvs(); // 首次把数据落到磁盘
 })();
@@ -2927,22 +2967,87 @@ function editLines(oldStr, newStr) {
   return out;
 }
 
+// 行级 LCS：把 old/new 两组行对齐成 [{t:'='|'-'|'+', l, r}]；规模过大时退化为「先删后增」避免卡顿
+function lcsDiff(a, b) {
+  const n = a.length, m = b.length;
+  if (n * m > 250000) {
+    const out = [];
+    a.forEach((l) => out.push({ t: "-", l }));
+    b.forEach((r) => out.push({ t: "+", r }));
+    return out;
+  }
+  const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+  for (let i = n - 1; i >= 0; i--)
+    for (let j = m - 1; j >= 0; j--)
+      dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+  const out = [];
+  let i = 0, j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ t: "=", l: a[i], r: b[j] }); i++; j++; }
+    else if (dp[i + 1][j] >= dp[i][j + 1]) { out.push({ t: "-", l: a[i] }); i++; }
+    else { out.push({ t: "+", r: b[j] }); j++; }
+  }
+  while (i < n) out.push({ t: "-", l: a[i++] });
+  while (j < m) out.push({ t: "+", r: b[j++] });
+  return out;
+}
+
+// 把 LCS 结果压成并排行：未变行 l=r；变更区把删/增按序两两配对（多出的一侧对空白格）
+function sideRows(oldStr, newStr) {
+  const ops = lcsDiff(String(oldStr || "").split("\n"), String(newStr || "").split("\n"));
+  const rows = [];
+  let dels = [], adds = [];
+  const flush = () => {
+    const k = Math.max(dels.length, adds.length);
+    for (let i = 0; i < k; i++) rows.push({ l: dels[i] ?? null, r: adds[i] ?? null });
+    dels = []; adds = [];
+  };
+  for (const o of ops) {
+    if (o.t === "=") { flush(); rows.push({ l: o.l, r: o.r, same: true }); }
+    else if (o.t === "-") dels.push(o.l);
+    else adds.push(o.r);
+  }
+  flush();
+  return rows;
+}
+
+// 渲染左右并排 diff：4 列网格（行号|旧码|行号|新码），缺失的一侧标 sb-empty 显示为斜纹空白
+function renderSideBySide(blocks) {
+  let ln = 0, rn = 0, html = "";
+  blocks.forEach((b, bi) => {
+    if (bi) html += `<div class="sb-sep">@@ #${bi + 1} @@</div>`;
+    sideRows(b.o, b.n).forEach((r) => {
+      const hasL = r.l != null, hasR = r.r != null;
+      const lnum = hasL ? ++ln : "";
+      const rnum = hasR ? ++rn : "";
+      const lcls = !hasL ? "sb-empty" : r.same ? "" : "sb-old";
+      const rcls = !hasR ? "sb-empty" : r.same ? "" : "sb-new";
+      html += `<div class="sb-ln">${lnum}</div><div class="sb-code ${lcls}">${hasL ? esc(r.l) || "&nbsp;" : ""}</div>` +
+        `<div class="sb-ln">${rnum}</div><div class="sb-code ${rcls}">${hasR ? esc(r.r) || "&nbsp;" : ""}</div>`;
+    });
+  });
+  return html;
+}
+
 // Edit/Write/MultiEdit 工具调用 → diff 卡片：标题行显示相对路径与 +增/−删 行数，点击展开红删绿增详情
 function appendEditCard(conv, id, name, input) {
   const root = currentFolder ? currentFolder.replace(/\/+$/, "") + "/" : null;
   let rel = String(input.file_path);
   if (root && rel.startsWith(root)) rel = rel.slice(root.length);
-  let lines = [];
+  // blocks：统一 diff 与并排视图共用的数据源（每个 block 一段 old→new）
+  let blocks = [];
   if (name === "MultiEdit" && Array.isArray(input.edits)) {
-    input.edits.forEach((e, i) => {
-      if (i) lines.push(`@@ #${i + 1} @@`); // 多处编辑之间的分隔线（@@ 走 at 紫色样式）
-      lines.push(...editLines(e.old_string, e.new_string));
-    });
+    blocks = input.edits.map((e) => ({ o: e.old_string, n: e.new_string }));
   } else if (name === "Write") {
-    lines = editLines("", input.content); // 整份新内容按全新增展示
+    blocks = [{ o: "", n: input.content }];
   } else {
-    lines = editLines(input.old_string, input.new_string);
+    blocks = [{ o: input.old_string, n: input.new_string }];
   }
+  let lines = [];
+  blocks.forEach((b, i) => {
+    if (i) lines.push(`@@ #${i + 1} @@`); // 多处编辑之间的分隔线（@@ 走 at 紫色样式）
+    lines.push(...editLines(b.o, b.n));
+  });
   const adds = lines.filter((l) => l[0] === "+").length;
   const dels = lines.filter((l) => l[0] === "-").length;
   if (lines.length > 400) lines = lines.slice(0, 400).concat(tr("…（已截断）"));
@@ -2952,10 +3057,28 @@ function appendEditCard(conv, id, name, input) {
   const label = name === "Write" ? tr("写入") : tr("修改");
   el.innerHTML =
     `<summary>📝 ${label} <span class="path">${esc(rel)}</span>` +
-    `<span class="stat"><span class="add">+${adds}</span> <span class="del">−${dels}</span></span></summary>`;
+    `<span class="stat"><span class="add">+${adds}</span> <span class="del">−${dels}</span></span>` +
+    `<span class="sb-toggle" data-i18n-title="切换并排/统一视图" title="切换并排/统一视图">⇄</span></summary>`;
   const pre = document.createElement("pre");
   pre.innerHTML = diffToHtml(lines.join("\n"));
   el.appendChild(pre);
+  // ⇄：首次点击惰性构建并排视图，之后在并排/统一间切换（不展开/收起 details）
+  const toggle = el.querySelector(".sb-toggle");
+  let sbEl = null, sbOn = false;
+  toggle.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (!el.open) el.open = true;
+    if (!sbEl) {
+      sbEl = document.createElement("div");
+      sbEl.className = "sbdiff";
+      sbEl.innerHTML = renderSideBySide(blocks);
+      el.appendChild(sbEl);
+    }
+    sbOn = !sbOn;
+    sbEl.style.display = sbOn ? "" : "none";
+    pre.style.display = sbOn ? "none" : "";
+    toggle.classList.toggle("on", sbOn);
+  };
   conv.currentBubble.appendChild(el);
   if (id) conv.toolCards[id] = el;
   scrollIfActive(conv);
@@ -4193,13 +4316,15 @@ function dispatchHKAction(id) {
   if (id === "new-conv") { newConversation(); return true; }
   if (id === "stop-gen") { if (activeConv?.busy) window.api.stop(activeConv.id); return true; }
   if (id === "prev-conv") {
-    const idx = conversations.findIndex(c => c.id === activeConv?.id);
-    if (idx > 0) switchConv(conversations[idx - 1].id);
+    const vis = conversations.filter(c => convInCurrentFolder(c) || c === activeConv); // 与 tab 可见集一致，避免跳到被隐藏的对话
+    const idx = vis.findIndex(c => c.id === activeConv?.id);
+    if (idx > 0) switchConv(vis[idx - 1].id);
     return true;
   }
   if (id === "next-conv") {
-    const idx = conversations.findIndex(c => c.id === activeConv?.id);
-    if (idx >= 0 && idx < conversations.length - 1) switchConv(conversations[idx + 1].id);
+    const vis = conversations.filter(c => convInCurrentFolder(c) || c === activeConv);
+    const idx = vis.findIndex(c => c.id === activeConv?.id);
+    if (idx >= 0 && idx < vis.length - 1) switchConv(vis[idx + 1].id);
     return true;
   }
   if (id === "focus-input") { $("input").focus(); return true; }
@@ -5515,7 +5640,7 @@ try {
 // 点一下即把对应指令填入输入框并直接发送，省去手敲斜杠命令。
 // 列表存于 localStorage，可通过「＋」新增、右键编辑/删除，按个人工作流自由组装。
 const DEFAULT_QUICK_SKILLS = [
-  { icon: "🚀", label: "推送代码", prompt: "/git-sync" },
+  { icon: "🚀", label: "推送代码", prompt: "action:gitsync" },
   { icon: "🔍", label: "Copilot Review", prompt: "/code-review" },
   { icon: "🧪", label: "运行测试", prompt: "运行本项目的测试用例，并把结果汇报给我" },
   { icon: "🔀", label: "建 PR", prompt: "/pr" },
@@ -5553,9 +5678,18 @@ if (!localStorage.getItem("claudeTools.quickSkills.v2Seeded")) {
   try { localStorage.setItem("claudeTools.quickSkills.v2Seeded", "1"); } catch {}
   persistQuickSkills();
 }
+// 把旧「推送代码」的 /git-sync（只是给 AI 发条不存在的斜杠命令）升级为内置动作，
+// 直接 commit 当前改动再 push。仅迁移一次，之后用户自定义不再被覆盖。
+if (!localStorage.getItem("claudeTools.quickSkills.gitSyncSeeded")) {
+  let changed = false;
+  for (const q of QUICK_SKILLS) if (q.prompt === "/git-sync") { q.prompt = "action:gitsync"; changed = true; }
+  try { localStorage.setItem("claudeTools.quickSkills.gitSyncSeeded", "1"); } catch {}
+  if (changed) persistQuickSkills();
+}
 // 执行快捷技能：action: 开头的是内置动作，其余作为 prompt 发起对话
 // insertOnly=true 时仅填入输入框（Shift+点击 / 命令面板 Shift+↵），让用户追加上下文后再手动发送
 function runQuickSkill(q, insertOnly = false) {
+  if (q.prompt === "action:gitsync") { if (!insertOnly) gitSyncAction(); return; }
   if (q.prompt === "action:codemap") { if (!insertOnly) genCodemap(); return; }
   if (q.prompt === "action:audit") {
     if (!insertOnly) { $("evolveModal").classList.add("open"); syncEvDock(); window.api.evolveAudit().then(() => loadBacklog()); }
@@ -5568,6 +5702,28 @@ function runQuickSkill(q, insertOnly = false) {
 }
 function persistQuickSkills() {
   try { localStorage.setItem("claudeTools.quickSkills", JSON.stringify(QUICK_SKILLS)); } catch {}
+}
+// 「推送代码」内置动作：真正 commit 当前改动再 push（非给 AI 发斜杠命令）。
+// 流程：暂存全部 → AI 生成可编辑的提交信息 → 提交 → 推送，全程复用 SC 的 doGit（含错误 toast + 状态刷新）。
+// 无未提交改动时跳过提交，直接推送已有本地提交；用户在确认框取消则整体中止、不推送。
+async function gitSyncAction() {
+  if (!activeRepo) { toast(tr("请先选择仓库"), "error"); return; }
+  showScPanel(); // 切到 Source Control 面板，便于看到状态与结果
+  const st = await window.api.gitStatus(activeRepo);
+  if (st && st.error) { toast(tr("Git 操作失败：") + "\n" + st.error, "error"); return; }
+  const hasChanges = !!(st && ((st.changes && st.changes.length) || (st.staged && st.staged.length)));
+  if (hasChanges) {
+    if (!(await doGit(() => window.api.gitStageAll(activeRepo)))) return;
+    let msg = "";
+    try { const r = await window.api.gitGenCommitMsg(activeRepo); msg = (r && r.message) || ""; } catch {}
+    const confirmed = await modalTextarea(tr("确认提交信息（Ctrl+Enter 提交，Esc 取消）"), msg);
+    if (!confirmed || !confirmed.trim()) return; // 取消：不提交也不推送
+    if (!(await doGit(() => window.api.gitCommit(activeRepo, confirmed.trim()), tr("已提交")))) return;
+  } else if (!(st && st.ahead)) {
+    toast(tr("没有需要提交或推送的改动"), "info");
+    return;
+  }
+  await doGit(() => window.api.gitPush(activeRepo), tr("已推送"));
 }
 // idx>=0 为编辑现有项；idx=-1 为新增。编辑时清空「名称」与「命令」即删除该项。
 async function editQuickSkill(idx) {
