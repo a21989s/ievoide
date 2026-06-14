@@ -381,7 +381,7 @@
       .msg { margin-bottom: 14px; max-width: 90%; }
       .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
       .bubble { padding: 9px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
-      .msg.user { margin-left: auto; }
+      .msg.user { margin-left: auto; position: sticky; top: 0; z-index: 2; background: var(--bg); }
       .msg.user .bubble { background: var(--user); }
       .msg.assistant .bubble { background: var(--panel); border: 1px solid var(--border); }
       /* 聊天气泡里的 Markdown 渲染 */

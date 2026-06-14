@@ -4434,10 +4434,19 @@ async function runEvolve(requirement, { _planOnly } = {}) {
   // evolve:done 事件通常会兜底设状态；但无改动等分支不发该事件，这里据返回值兜底，
   // 避免忙状态卡死（也让持续进化能据返回值推进下一条）。relaunch 会重启，无需处理。
   if (!(r && r.relaunch)) setEvolveBusy(false);
-  // 仅出方案：方案输出完毕后弹确认框，用户确认才发第二轮真正执行
+  // 仅出方案：方案输出完毕后弹确认框，用户确认才发第二轮真正执行。
+  // 第二轮是全新会话（不带 resume），看不到第一轮上下文，故把第一轮输出的方案
+  // （即 r.summary，仅出方案时不写文件 → noChange 分支原样返回方案全文）拼进需求，
+  // 确保「确认的就是执行的」，而非凭同一需求重新决策。
   if (planOnly && !(r && r.relaunch) && !(r && r.error)) {
     const ok = await modalConfirm(tr("方案已输出，确认执行？"));
-    if (ok) runEvolve(requirement, { _planOnly: false });
+    if (ok) {
+      const plan = ((r && r.summary) || "").trim();
+      const req2 = plan
+        ? requirement + "\n\n【已确认方案】请严格按以下方案执行（这是上一轮你输出、并经用户确认的方案，不要重新设计）：\n" + plan
+        : requirement;
+      runEvolve(req2, { _planOnly: false });
+    }
   }
   return r;
 }
