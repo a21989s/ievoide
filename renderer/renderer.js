@@ -289,7 +289,11 @@ async function refreshFileTree() {
 let currentFolder = null; // 当前打开的工作目录（用于语言无关地判断是否已选目录）
 async function openFolderUI(folder) {
   currentFolder = folder;
-  $("folder").textContent = folder;
+  const fEl = $("folder");
+  fEl.textContent = folder;
+  fEl.title = folder;
+  // 已选目录后移除 data-i18n，否则 applyI18n()（初始化/切换语言）会把路径覆盖回「未选择目录」
+  fEl.removeAttribute("data-i18n");
   $("tree").innerHTML = "";
   await renderChildren($("tree"), folder, 0);
   await loadRepos();
