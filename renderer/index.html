@@ -587,6 +587,10 @@
       /* 选中 → 加入对话：浮在选区上方的小按钮（需盖过 viewer(30) 与 evDiffModal(50)） */
       #quoteBtn { position: fixed; z-index: 60; padding: 3px 10px; font-size: 12px; border-radius: 6px; border: 1px solid var(--accent); background: var(--accent); color: #fff; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.35); white-space: nowrap; }
       #quoteBtn:hover { filter: brightness(1.1); }
+      /* 选中 AI 回复 → 快捷操作浮条（解释/写测试/重构） */
+      .sel-action-bar { position: fixed; z-index: 61; display: none; gap: 4px; padding: 3px 5px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,.45); }
+      .sel-action-bar button { padding: 3px 9px; font-size: 12px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg); color: var(--fg); cursor: pointer; white-space: nowrap; }
+      .sel-action-bar button:hover { border-color: var(--accent); color: var(--accent); }
       /* 搜索直达定位：目标行背景闪烁 */
       #vbody .cl.line-flash { animation: line-flash 1.6s ease-out; border-radius: 3px; }
       @keyframes line-flash { 0%, 45% { background: rgba(86, 156, 214, 0.35); } 100% { background: transparent; } }

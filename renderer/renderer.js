@@ -949,6 +949,59 @@ document.addEventListener("mousedown", (e) => { if (e.target !== quoteBtn) hideQ
 vbody.addEventListener("scroll", hideQuoteBtn);
 $("evDiffBody").addEventListener("scroll", hideQuoteBtn);
 
+// ── 选中 AI 回复内容 → 浮出快捷操作栏（解释 / 写测试 / 重构）──
+const selActionBar = document.createElement("div");
+selActionBar.className = "sel-action-bar";
+const SEL_ACTIONS = [
+  { icon: "💡", label: "解释",   tpl: (t) => `解释以下代码/文本：\n\`\`\`\n${t}\n\`\`\`` },
+  { icon: "🧪", label: "写测试", tpl: (t) => `为以下代码写单元测试：\n\`\`\`\n${t}\n\`\`\`` },
+  { icon: "✏️", label: "重构",   tpl: (t) => `重构以下代码，保持功能不变：\n\`\`\`\n${t}\n\`\`\`` },
+];
+for (const act of SEL_ACTIONS) {
+  const btn = document.createElement("button");
+  btn.textContent = `${act.icon} ${act.label}`;
+  btn.addEventListener("mousedown", (e) => e.preventDefault()); // 防止点击瞬间清掉选区
+  btn.addEventListener("click", () => {
+    const sel = window.getSelection();
+    const text = sel && sel.rangeCount ? sel.toString().replace(/\n+$/, "") : "";
+    if (!text) return;
+    const inp = $("input");
+    inp.value = (inp.value ? inp.value.replace(/\n*$/, "\n") : "") + act.tpl(text) + "\n";
+    inp.focus();
+    inp.setSelectionRange(inp.value.length, inp.value.length);
+    inp.dispatchEvent(new Event("input"));
+    window.getSelection()?.removeAllRanges();
+    hideSelActionBar();
+  });
+  selActionBar.appendChild(btn);
+}
+document.body.appendChild(selActionBar);
+
+function hideSelActionBar() { selActionBar.style.display = "none"; }
+
+chat.addEventListener("mouseup", () => {
+  setTimeout(() => {
+    const sel = window.getSelection();
+    const text = sel && !sel.isCollapsed && sel.rangeCount ? sel.toString() : "";
+    if (text.length < 15) { hideSelActionBar(); return; }
+    const anchor = sel.anchorNode;
+    const el = anchor ? (anchor.nodeType === 1 ? anchor : anchor.parentElement) : null;
+    if (!el || !el.closest(".msg.assistant .bubble")) { hideSelActionBar(); return; }
+    const range = sel.getRangeAt(0);
+    const rect = range.getBoundingClientRect();
+    const barW = 230;
+    selActionBar.style.left = Math.min(window.innerWidth - barW - 8, Math.max(8, rect.left + rect.width / 2 - barW / 2)) + "px";
+    selActionBar.style.top = Math.max(8, rect.top - 40) + "px";
+    selActionBar.style.display = "flex";
+  }, 0);
+});
+document.addEventListener("mousedown", (e) => { if (!selActionBar.contains(e.target)) hideSelActionBar(); });
+document.addEventListener("selectionchange", () => {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.toString()) hideSelActionBar();
+});
+chat.addEventListener("scroll", hideSelActionBar);
+
 // ── Git 面板：仓库行 + 分支下拉 + 提交图 ───────────────────
 function esc(s) {
   return (s || "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
