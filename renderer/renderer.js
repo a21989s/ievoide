@@ -118,6 +118,50 @@ function modalDialog(text, def) {
 const modalPrompt = (title, def = "") => modalDialog(title, def == null ? "" : def);
 const modalConfirm = (msg) => modalDialog(msg, null);
 
+// 多按钮选择弹窗：choices=[{label,value}]，取消返回 null
+function modalChoice(text, choices) {
+  return new Promise((resolve) => {
+    let ov = $("modalDialog");
+    if (!ov) {
+      ov = document.createElement("div");
+      ov.id = "modalDialog";
+      (document.body || document.documentElement).appendChild(ov);
+    }
+    const box = document.createElement("div");
+    box.className = "box";
+    const msg = document.createElement("div");
+    msg.className = "md-msg";
+    msg.textContent = text;
+    box.appendChild(msg);
+    const btns = document.createElement("div");
+    btns.className = "md-btns";
+    const close = (val) => {
+      document.removeEventListener("keydown", onKey, true);
+      ov.classList.remove("open");
+      ov.innerHTML = "";
+      resolve(val);
+    };
+    const cancel = document.createElement("button");
+    cancel.className = "md-cancel";
+    cancel.textContent = tr("取消");
+    cancel.onclick = () => close(null);
+    btns.appendChild(cancel);
+    choices.forEach((c) => {
+      const b = document.createElement("button");
+      b.textContent = c.label;
+      b.onclick = () => close(c.value);
+      btns.appendChild(b);
+    });
+    box.appendChild(btns);
+    const onKey = (e) => { if (e.key === "Escape") { e.preventDefault(); cancel.click(); } };
+    document.addEventListener("keydown", onKey, true);
+    ov.innerHTML = "";
+    ov.appendChild(box);
+    ov.classList.add("open");
+    btns.lastChild.focus();
+  });
+}
+
 // 可编辑多行文本框确认弹窗（用于提交信息预览/修改）
 function modalTextarea(title, def = "") {
   return new Promise((resolve) => {
@@ -6397,26 +6441,40 @@ function addRewindBtn(wrap, cpId) {
   btn.title = tr("把工作区文件还原到本轮开始前");
   btn.textContent = tr("↩ 撤销本轮改动");
   btn.onclick = async () => {
-    if (!(await modalConfirm(tr("将丢弃本轮（及其之后）对文件的全部改动，恢复到本轮开始前。\n此操作不可撤销！"))))
-      return;
+    const choice = await modalChoice(
+      tr("将丢弃本轮（及其之后）对文件的全部改动，恢复到本轮开始前。\n此操作不可撤销！"),
+      [
+        { label: tr("仅还原文件"), value: "files" },
+        { label: tr("还原文件 + 删除本轮消息"), value: "full" },
+      ]
+    );
+    if (!choice) return;
     btn.disabled = true;
     btn.textContent = tr("撤销中…");
     const r = await window.api.chatRewind(cpId);
     if (r && r.ok) {
-      btn.textContent = tr("✓ 已撤销");
-      btn.classList.add("copied");
-      toast(tr("已恢复到本轮开始前"), "success");
       refreshFileTree(); // 文件已还原 => 同步重建文件树
-      if (activeRepo) { loadStatus(activeRepo); loadGraph(activeRepo); } // git 面板若开着则刷新
-      // 把触发本轮的原始用户消息回填到输入框，方便修改后重发
-      const userMsg = wrap.previousElementSibling;
-      if (userMsg && userMsg.classList.contains("user")) {
-        const origText = userMsg.querySelector(".bubble")?.textContent || "";
-        if (origText) {
-          const inp = $("input");
-          inp.value = origText;
-          inp.dispatchEvent(new Event("input"));
-          inp.focus();
+      if (activeRepo) { loadStatus(activeRepo); loadGraph(activeRepo); }
+      if (choice === "full") {
+        // 删除本轮 AI 回复气泡及触发它的用户消息，让视图与代码重新对齐
+        const userMsg = wrap.previousElementSibling;
+        if (userMsg && userMsg.classList.contains("user")) userMsg.remove();
+        wrap.remove();
+        toast(tr("已恢复到本轮开始前，本轮消息已删除"), "success");
+      } else {
+        btn.textContent = tr("✓ 已撤销");
+        btn.classList.add("copied");
+        toast(tr("已恢复到本轮开始前"), "success");
+        // 把触发本轮的原始用户消息回填到输入框，方便修改后重发
+        const userMsg = wrap.previousElementSibling;
+        if (userMsg && userMsg.classList.contains("user")) {
+          const origText = userMsg.querySelector(".bubble")?.textContent || "";
+          if (origText) {
+            const inp = $("input");
+            inp.value = origText;
+            inp.dispatchEvent(new Event("input"));
+            inp.focus();
+          }
         }
       }
     } else {
