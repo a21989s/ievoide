@@ -1916,7 +1916,7 @@ function refreshSendBtn() {
   // 有文字 => 发送（忙碌则排队）；无文字且忙碌 => 停止
   if (hasText || !busy) {
     btn.textContent = "↑";
-    btn.title = tr("发送（Ctrl/⌘+Enter）");
+    btn.title = tr("发送（Ctrl/⌘+Enter）· Alt+Enter = 轻量省 token");
     btn.style.background = "";
   } else {
     btn.textContent = "⏹";
@@ -3780,6 +3780,7 @@ const KBD_SHORTCUTS = [
     [[KBD_MOD, "Shift", "F"], "全文搜索文件内容"],
     [[KBD_MOD, "B"], "折叠 / 展开左侧栏"],
     [["Esc"], "关闭当前弹层（查看器 / 历史 / 菜单等）"],
+    [["Alt", "←/→"], "切换上/下一个对话"],
   ]],
   ["对话", [
     [[KBD_MOD, "Enter"], "发送消息"],
@@ -3787,6 +3788,7 @@ const KBD_SHORTCUTS = [
     [["↑", "↓"], "在斜杠 / 文件补全弹窗中选择"],
     [["Enter", "Tab"], "确认补全项"],
     [["Shift", "点击快捷技能"], "仅填入输入框（可追加上下文后再发送）"],
+    [["Alt", "Enter"], "用轻量模型发送（省 token）"],
   ]],
   ["命令面板", [
     [["Enter"], "执行选中项"],
