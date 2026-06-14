@@ -842,6 +842,10 @@ ipcMain.handle("grepFiles", async (_e, query) => {
   const MAX_PER_FILE = 20; // 单文件命中上限，防止单文件霸占结果
   const MAX_FILE_SIZE = 1_000_000; // 超过 1MB 的文件跳过
   const all = await listWorkdirFiles();
+  for (const d of additionalDirs) {
+    const r = await listDirFiles(d).catch(() => ({ all: [] }));
+    all.push(...r.all);
+  }
   const out = [];
   for (const f of all) {
     if (out.length >= MAX_RESULTS) break;
