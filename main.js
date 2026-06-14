@@ -116,6 +116,9 @@ function tokenOpts(c) {
   else if (Number.isFinite(c.maxThinkingTokens)) o.maxThinkingTokens = c.maxThinkingTokens; // 旧配置兼容
   if (Array.isArray(c.allowedTools) && c.allowedTools.length) o.allowedTools = c.allowedTools;
   if (Array.isArray(c.disallowedTools) && c.disallowedTools.length) o.disallowedTools = c.disallowedTools;
+  // 特意关闭 CLI 子进程的自动压缩（上下文一长会被悄悄 compact，丢上下文）：
+  // SDK 无 compaction_control 选项，只能靠 env 透传给 CLI；DISABLE_AUTO_COMPACT 是当前正确变量名。
+  o.env = { ...process.env, DISABLE_AUTO_COMPACT: "true" };
   return o;
 }
 let configLoadError = null;

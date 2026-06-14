@@ -308,24 +308,26 @@
       // margin=4：QR 规范要求的静默区（quiet zone）至少 4 个模块，少于此扫码器易识别失败。
       const { matrix, size } = encode(text);
       const total = size + margin * 2;
-      // 以传入 canvas 的 CSS 显示尺寸为目标（data-size 属性），每模块至少 6px 保证清晰度。
-      // 关键：用 devicePixelRatio 放大位图分辨率，CSS 显示尺寸保持不变，
-      // 避免高 DPI / Retina 屏幕下位图被拉伸导致模糊而无法扫码。
+      // 关键：每个模块取「整数个设备像素」绘制，全程用整数设备坐标、且不做 ctx.scale，
+      // 杜绝模块边界落在亚像素上被 canvas 抗锯齿渲染成灰边/发虚——这正是 Android 扫码器
+      // （比 iOS 苛刻）识别失败、需反复对角度距离的根因。Windows 125%/150% 缩放（dpr=1.25/1.5）
+      // 下旧实现 px*dpr 非整数，边缘必然发灰；改为设备像素整数倍后边缘绝对锐利。
       const dpr = window.devicePixelRatio || 1;
       const target = parseInt(canvas.dataset.size || canvas.style.width || '280', 10) || 280;
-      const px = Math.max(6, Math.floor(target / total));
-      const dim = px * total;
-      canvas.width = canvas.height = Math.round(dim * dpr);
-      canvas.style.width = canvas.style.height = dim + 'px';
+      const modDev = Math.max(6, Math.round(target * dpr / total)); // 每模块设备像素数（整数）
+      const dimDev = modDev * total;                                // 位图边长（设备像素，整数）
+      canvas.width = canvas.height = dimDev;
+      // CSS 显示尺寸 = 位图设备像素 / dpr，使位图 1:1 映射物理像素，避免浏览器再次缩放发虚。
+      canvas.style.width = canvas.style.height = (dimDev / dpr) + 'px';
       const ctx = canvas.getContext('2d');
-      ctx.scale(dpr, dpr);
+      ctx.imageSmoothingEnabled = false;
       ctx.fillStyle = light;
-      ctx.fillRect(0, 0, dim, dim);
+      ctx.fillRect(0, 0, dimDev, dimDev);
       ctx.fillStyle = dark;
       for (let r = 0; r < size; r++)
         for (let c = 0; c < size; c++)
           if (matrix[r][c])
-            ctx.fillRect((c + margin) * px, (r + margin) * px, px, px);
+            ctx.fillRect((c + margin) * modDev, (r + margin) * modDev, modDev, modDev);
     }
   };
 })();

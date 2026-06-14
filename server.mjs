@@ -511,6 +511,9 @@ const server = http.createServer(async (req, res) => {
           cwd: effCwd || scratchDir(),
           permissionMode: cfg.permissionMode || "bypassPermissions",
           includePartialMessages: true,
+          // 特意关闭 CLI 子进程的自动压缩（上下文一长会被悄悄 compact，丢上下文）：
+          // SDK 没有 compaction_control 选项，只能靠 env 透传给 CLI；DISABLE_AUTO_COMPACT 是当前正确的变量名。
+          env: { ...process.env, DISABLE_AUTO_COMPACT: "true" },
           systemPrompt: {
             type: "preset",
             preset: "claude_code",
