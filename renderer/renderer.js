@@ -3415,6 +3415,11 @@ $("input").addEventListener("keydown", (e) => {
       return;
     }
   }
+  if (e.key === "Enter" && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+    e.preventDefault();
+    send(true); // Alt+Enter 轻量模型发送（省 token）
+    return;
+  }
   if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
     e.preventDefault();
     send(); // Ctrl/⌘+Enter 发送（忙碌时 send() 内部会自动排队）
