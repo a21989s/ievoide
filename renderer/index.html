@@ -385,7 +385,7 @@
       .chat-search-hit { background: #7d5a00; border-radius: 2px; }
       .chat-search-hit.current { background: #b38200; outline: 2px solid #f0b429; outline-offset: 1px; }
       .msg { margin-bottom: 14px; max-width: 90%; }
-      .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; }
+      .msg .role { font-size: 11px; color: var(--muted); margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
       .bubble { padding: 9px 12px; border-radius: 8px; white-space: pre-wrap; word-break: break-word; }
       .msg.user { margin-left: auto; }
       /* 滚动时只钉当前这轮的用户消息（由 JS 切换 .stick），避免多条同时钉在 top:0 互相遮挡 */
@@ -412,12 +412,15 @@
       .compact-now-btn:hover { background: #9a6800; border-color: #e09000; }
       .load-earlier-btn { display: block; width: 100%; padding: 6px; font-size: 12px; text-align: center; background: var(--panel); border: 1px solid var(--border); border-radius: 6px; color: var(--muted); cursor: pointer; margin-bottom: 8px; }
       .load-earlier-btn:hover { color: var(--fg); border-color: var(--accent); }
-      .msg.assistant .role { display: flex; align-items: center; gap: 8px; }
+      .msg.assistant .role { gap: 8px; }
       .reply-copy, .reply-save-mem { padding: 2px 6px; font-size: 13px; line-height: 1; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s; }
       .msg.assistant:hover .reply-copy, .msg.assistant:hover .reply-save-mem { opacity: 1; }
       .reply-copy:hover { color: var(--fg); border-color: var(--accent); }
       .reply-copy.copied { color: #3a3; border-color: #3a3; opacity: 1; }
       .reply-save-mem:hover { color: var(--fg); border-color: #c8a000; }
+      .reply-del { padding: 2px 5px; font-size: 11px; line-height: 1; color: var(--muted); background: var(--panel); border: 1px solid var(--border); border-radius: 5px; cursor: pointer; opacity: 0; transition: opacity .15s; margin-left: auto; }
+      .msg:hover .reply-del { opacity: 1; }
+      .reply-del:hover { color: #e55; border-color: #e55; }
       .rewind-btn { opacity: 1; margin-left: 6px; } /* 撤销是安全动作，始终可见便于发现 */
       .rewind-btn:hover { color: #d08; border-color: #d08; }
       .bubble.md code { background: #1b1b1b; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 12px; }

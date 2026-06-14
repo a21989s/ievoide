@@ -1058,6 +1058,12 @@ chat.addEventListener("click", (e) => {
     const code = codeBtn.closest("pre")?.querySelector("code");
     return copyToClipboard(code ? code.textContent : "", codeBtn);
   }
+  const delBtn = e.target.closest(".reply-del");
+  if (delBtn) {
+    const msg = delBtn.closest(".msg");
+    if (msg) { msg.remove(); persistConvs(); }
+    return;
+  }
   const replyBtn = e.target.closest(".reply-copy");
   if (replyBtn) {
     const wrap = replyBtn.closest(".msg.assistant");
@@ -1624,6 +1630,7 @@ function _buildLoadEarlierBtn(conv) {
     });
     const prevH = conv.pane.scrollHeight;
     conv.pane.insertBefore(frag, btn.nextSibling);
+    injectDeleteBtns(conv.pane);
     // 保持视口位置不跳
     chat.scrollTop += conv.pane.scrollHeight - prevH;
     if (!conv._hiddenHtml.length) btn.remove();
@@ -1631,6 +1638,18 @@ function _buildLoadEarlierBtn(conv) {
   };
   btn.textContent = `加载更早消息（还有 ${conv._hiddenHtml.length} 条）`;
   return btn;
+}
+
+function injectDeleteBtns(pane) {
+  pane.querySelectorAll(".msg .role").forEach(role => {
+    if (role.querySelector(".reply-del")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "reply-del";
+    btn.title = tr("删除此条消息");
+    btn.textContent = "×";
+    role.appendChild(btn);
+  });
 }
 
 function ensurePane(conv) {
@@ -1655,6 +1674,7 @@ function ensurePane(conv) {
     p.insertBefore(_buildLoadEarlierBtn(conv), p.firstChild);
   }
   conv.pane = p;
+  injectDeleteBtns(p);
   conv.currentBubble = null;
   conv.toolCards = {};
   return p;
@@ -2394,7 +2414,7 @@ window.api.on("convs:changed", syncConvsFromDisk);
 function addMsg(conv, role, text) {
   const wrap = document.createElement("div");
   wrap.className = "msg " + role;
-  wrap.innerHTML = `<div class="role">${role === "user" ? tr("你") : "Claude"}</div>`;
+  wrap.innerHTML = `<div class="role">${role === "user" ? tr("你") : "Claude"}<button type="button" class="reply-del" title="${tr("删除此条消息")}">×</button></div>`;
   const bubble = document.createElement("div");
   bubble.className = "bubble";
   if (text) bubble.textContent = text;
@@ -2625,7 +2645,7 @@ function startTurn(conv, text, opts) {
   conv.todoCard = null; // 新一轮重新建卡，避免跨轮原位覆盖旧清单
   const wrap = document.createElement("div");
   wrap.className = "msg assistant";
-  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}" data-copied="✓">📋</button><button type="button" class="reply-save-mem" title="${tr("保存到项目记忆")}">📌</button></div>`;
+  wrap.innerHTML = `<div class="role">Claude<button type="button" class="reply-copy" title="${tr("复制整条回复")}" data-copied="✓">📋</button><button type="button" class="reply-save-mem" title="${tr("保存到项目记忆")}">📌</button><button type="button" class="reply-del" title="${tr("删除此条消息")}">×</button></div>`;
   conv.pane.appendChild(wrap);
   conv.currentBubble = wrap;
   conv.busy = true;
