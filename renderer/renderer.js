@@ -4479,7 +4479,6 @@ function renderMobile(info) {
     $("mobLan").textContent = info.lanUrl ? tr("同一 Wi-Fi 可直连：") + info.lanUrl : "";
     // 本地 canvas 生成二维码：URL 含全权限令牌，绝不外发给第三方二维码服务
     const canvas = $("mobQr");
-    canvas.width = canvas.height = 200;
     try { window.QRCanvas.draw(info.url, canvas); } catch (e) { console.error("QR draw:", e); }
   }
 }

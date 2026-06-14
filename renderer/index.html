@@ -712,7 +712,7 @@
       #mobBody { padding: 14px 16px; }
       #mobBody .mob-tip { font-size: 12px; color: var(--muted, #999); line-height: 1.5; margin: 0 0 12px; }
       #mobBody .mob-row { display: flex; align-items: center; gap: 8px; margin: 10px 0; }
-      #mobBody #mobQr { display: block; width: 200px; height: 200px; margin: 6px auto; background: #fff; border-radius: 6px; }
+      #mobBody #mobQr { display: block; width: 280px; height: 280px; margin: 6px auto; background: #fff; border-radius: 6px; image-rendering: pixelated; }
       #mobBody .mob-url { text-align: center; word-break: break-all; font-size: 12px; margin: 8px 0; }
       #settingsModal { position: fixed; inset: 0; background: rgba(0,0,0,.6); display: none; align-items: center; justify-content: center; z-index: 46; }
       #settingsModal.open { display: flex; }
@@ -1107,7 +1107,7 @@
             <span id="mobState" class="meta"></span>
           </div>
           <div id="mobConn" style="display:none">
-            <canvas id="mobQr" width="200" height="200"></canvas>
+            <canvas id="mobQr" data-size="280"></canvas>
             <div class="mob-url"><code id="mobUrl"></code></div>
             <div class="mob-url" style="opacity:.6"><code id="mobLan"></code></div>
             <div class="mob-row">
