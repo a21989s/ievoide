@@ -5339,6 +5339,11 @@ const DEFAULT_QUICK_SKILLS = [
   { icon: "🧪", label: "运行测试", prompt: "运行本项目的测试用例，并把结果汇报给我" },
   { icon: "🔀", label: "建 PR", prompt: "/pr" },
   { icon: "🗺", label: "生成代码地图", prompt: "action:codemap" },
+  { icon: "🐛", label: "调试报错", prompt: "帮我分析以下报错，找出根因并给出最小修复方案（不要改动无关代码）：\n" },
+  { icon: "💰", label: "找 token 浪费", prompt: "审查当前工作目录的实现，找出造成不必要 token/cache_read 消耗的地方（重复读文件、冗余请求、未复用的结果等），按影响大小排序列出，每条给出文件:行号与具体改法" },
+  { icon: "🧹", label: "找死代码", prompt: "扫描当前工作目录，找出可安全删除的死代码、重复逻辑、过期注释，列出 文件:行号，每条说明为何可删，不要自动修改" },
+  { icon: "📝", label: "解释代码", prompt: "解释以下代码的作用与关键逻辑（先一句话说用途，再列关键流程与边界条件，文件:行号）：\n" },
+  { icon: "⚡", label: "进化巡检", prompt: "action:audit" },
 ];
 let QUICK_SKILLS;
 try {
@@ -5354,10 +5359,27 @@ if (!localStorage.getItem("claudeTools.quickSkills.codemapSeeded")) {
   try { localStorage.setItem("claudeTools.quickSkills.codemapSeeded", "1"); } catch {}
   persistQuickSkills();
 }
+// v2：补充基于使用习惯分析的常用技能（调试、token优化、死代码、进化巡检）
+if (!localStorage.getItem("claudeTools.quickSkills.v2Seeded")) {
+  const seeds = [
+    { icon: "🐛", label: "调试报错", prompt: "帮我分析以下报错，找出根因并给出最小修复方案（不要改动无关代码）：\n" },
+    { icon: "💰", label: "找 token 浪费", prompt: "审查当前工作目录的实现，找出造成不必要 token/cache_read 消耗的地方（重复读文件、冗余请求、未复用的结果等），按影响大小排序列出，每条给出文件:行号与具体改法" },
+    { icon: "🧹", label: "找死代码", prompt: "扫描当前工作目录，找出可安全删除的死代码、重复逻辑、过期注释，列出 文件:行号，每条说明为何可删，不要自动修改" },
+    { icon: "📝", label: "解释代码", prompt: "解释以下代码的作用与关键逻辑（先一句话说用途，再列关键流程与边界条件，文件:行号）：\n" },
+    { icon: "⚡", label: "进化巡检", prompt: "action:audit" },
+  ];
+  seeds.forEach((s) => { if (!QUICK_SKILLS.some((q) => q.prompt === s.prompt)) QUICK_SKILLS.push(s); });
+  try { localStorage.setItem("claudeTools.quickSkills.v2Seeded", "1"); } catch {}
+  persistQuickSkills();
+}
 // 执行快捷技能：action: 开头的是内置动作，其余作为 prompt 发起对话
 // insertOnly=true 时仅填入输入框（Shift+点击 / 命令面板 Shift+↵），让用户追加上下文后再手动发送
 function runQuickSkill(q, insertOnly = false) {
   if (q.prompt === "action:codemap") { if (!insertOnly) genCodemap(); return; }
+  if (q.prompt === "action:audit") {
+    if (!insertOnly) { $("evolveModal").classList.add("open"); syncEvDock(); window.api.evolveAudit().then(() => loadBacklog()); }
+    return;
+  }
   $("input").value = q.prompt;
   $("input").focus();
   $("input").dispatchEvent(new Event("input"));
