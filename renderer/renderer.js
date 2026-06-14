@@ -2384,6 +2384,13 @@ function renderConvList() {
       (c.ctx >= CTX_WARN ? `<span class="conv-ctx-warn" title="${trf('上下文 {0}，建议 /compact 或新开对话', fmtTokens(c.ctx))}">⚠</span>` : "") +
       `<span class="conv-del" title="${tr("关闭")}">×</span>`;
     el.dataset.cid = c.id;
+    if (c.ctx > 0) {
+      const bar = document.createElement("div");
+      bar.className = "conv-tab-ctx-bar";
+      bar.style.width = Math.min(100, c.ctx / CTX_MAX * 100) + "%";
+      bar.style.background = c.ctx >= CTX_AUTOCOMPACT ? "#f85149" : c.ctx >= CTX_WARN ? "#e8a500" : "var(--accent)";
+      el.appendChild(bar);
+    }
     el.onclick = (e) => {
       if (e.target.classList.contains("conv-del")) {
         e.stopPropagation();
