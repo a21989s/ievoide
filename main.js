@@ -709,7 +709,6 @@ async function listWorkdirFiles() {
   if (fileCache.dir === workdir && fileCache.list && now - fileCache.time < FILE_CACHE_TTL) {
     return fileCache.list;
   }
-  fileCache.dirs = null;
   contentCache = new Map(); // 文件树重建时一并失效内容缓存
   contentCacheBytes = 0;
   // 重建时同步失效 .aiignore 缓存，使规则随文件树刷新
@@ -1350,12 +1349,18 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
   const run = async (resumeId) => {
     const CHAT_STREAM_TIMEOUT_MS = (appConfig.chatStreamTimeoutSec ?? 120) * 1000;
     let lastChunkTime = Date.now();
+    // 流超时兜底：SDK 中止后迭代器有时会悬挂、永不返回（见上方 stop() 注释）。
+    // 单靠 abort 无法让 run() 返回，界面就会永远卡在“思考中”。故用一个可被 watchdog
+    // 主动 reject 的 stallGuard 与消费循环赛跑——即便迭代器悬挂也能让 run() 抛错收尾。
+    let stallReject = null;
+    const stallGuard = new Promise((_, rej) => { stallReject = rej; });
     const watchdog = setInterval(() => {
       if (Date.now() - lastChunkTime > CHAT_STREAM_TIMEOUT_MS) {
         timedOut = true;
         try { abort.abort(); } catch {}
+        stallReject?.(new Error("stream stalled"));
       }
-    }, CHAT_STREAM_TIMEOUT_MS);
+    }, Math.min(CHAT_STREAM_TIMEOUT_MS, 10000)); // 检查更勤，缩短“卡死→报错”的延迟（原来最坏要 2× 超时）
     const response = query({
       prompt,
       options: {
@@ -1378,7 +1383,7 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
         ...(resumeId ? { resume: resumeId } : {}),
       },
     });
-    try { for await (const msg of response) {
+    const consume = (async () => { for await (const msg of response) {
       lastChunkTime = Date.now();
       if (stopped) break; // 已停止：不再转发后续事件（含 chat:done），避免界面被重新锁回忙碌
       if (msg.type === "system" && msg.subtype === "init") {
@@ -1455,7 +1460,11 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
           checkpoint,
         });
       }
-    } } finally { clearInterval(watchdog); }
+    } })();
+    // stallGuard 若先赢，consume 仍悬挂，其迟到的 rejection 不应冒泡成 unhandledRejection
+    consume.catch(() => {});
+    try { await Promise.race([consume, stallGuard]); }
+    finally { clearInterval(watchdog); }
   };
 
   try {

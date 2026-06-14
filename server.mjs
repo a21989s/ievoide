@@ -459,6 +459,7 @@ const server = http.createServer(async (req, res) => {
         return res.end();
       }
       let abort = new AbortController(); // 可重建：续接失败重试时若旧控制器已被（误）中止，换新的
+      let timedOut = false; // 流超时标志（区别于客户端断开/其它错误，用于给出友好提示）
       // 客户端断开连接才中止（监听响应连接，不是请求体——请求体读完就会触发 req close）。
       // 经 Cloudflare Tunnel 等代理时，close 可能在会话仍需继续时被提前触发，故重试逻辑不死守它。
       res.on("close", () => abort.abort());
@@ -529,8 +530,24 @@ const server = http.createServer(async (req, res) => {
         const runOnce = async (opts) => {
           asstText = ""; extraHtml = ""; // 重试会产出全新回复，清掉上一次的累积
           flush(); // 开聊即落盘：桌面端立刻看到这个（新）对话和用户消息
+          // 流超时兜底（与桌面端 main.js 同源）：SDK 中止后迭代器有时会悬挂、永不返回，
+          // 单靠 res.on("close")/abort 救不了 for-await——runOnce 永不 resolve，对话就永远卡在
+          // running（桌面端一直显示"手机端进行中"、看起来在跑却没新输出）。故用一个可被
+          // watchdog 主动 reject 的 stallGuard 与消费循环赛跑，即便迭代器悬挂也必定收尾。
+          const STREAM_TIMEOUT_MS = (cfg.chatStreamTimeoutSec ?? 120) * 1000;
+          let lastChunkTime = Date.now();
+          let stallReject = null;
+          const stallGuard = new Promise((_, rej) => { stallReject = rej; });
+          const watchdog = setInterval(() => {
+            if (Date.now() - lastChunkTime > STREAM_TIMEOUT_MS) {
+              timedOut = true;
+              try { opts.abortController?.abort(); } catch {}
+              stallReject?.(new Error("stream stalled"));
+            }
+          }, Math.min(STREAM_TIMEOUT_MS, 10000));
           const r = query({ prompt, options: opts });
-          for await (const msg of r) {
+          const consume = (async () => { for await (const msg of r) {
+            lastChunkTime = Date.now();
             if (msg.type === "stream_event") {
               const e = msg.event;
               if (e?.type === "content_block_delta" && e.delta?.type === "text_delta") {
@@ -559,7 +576,11 @@ const server = http.createServer(async (req, res) => {
                 },
               });
             }
-          }
+          } })();
+          // stallGuard 若先赢，consume 仍悬挂，其迟到的 rejection 不应冒泡成 unhandledRejection
+          consume.catch(() => {});
+          try { await Promise.race([consume, stallGuard]); }
+          finally { clearInterval(watchdog); }
         };
 
         // 认证失效（Pro 订阅 OAuth token 过期/失效）的特征。
@@ -594,6 +615,8 @@ const server = http.createServer(async (req, res) => {
             }
             if (!recovered && !abort.signal.aborted)
               sendErr("认证刷新失败：请在终端运行 `claude` 重新 /login 后再试。");
+          } else if (timedOut) {
+            sendErr(`流超时：${cfg.chatStreamTimeoutSec ?? 120}s 内未收到数据，网络可能已中断`);
           } else {
             sendErr(m);
           }
