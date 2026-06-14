@@ -506,6 +506,10 @@
       .ctx-bar-wrap { width: 60px; height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; flex-shrink: 0; }
       .ctx-bar-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .3s, background .3s; }
       .ctx-bar-fill.warn { background: #e8a500; }
+      .conv-sys-btn { padding: 2px 6px; font-size: 11px; white-space: nowrap; }
+      .conv-sys-btn.active { color: var(--accent); border-color: var(--accent); }
+      #convSysAppendWrap { display: none; }
+      #convSysAppendArea { width: 100%; box-sizing: border-box; resize: vertical; min-height: 48px; max-height: 160px; background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; font: inherit; font-size: 12px; }
       /* 对话底部 token 统计条 */
       #ctxFooter { display: none; align-items: center; gap: 8px; padding: 5px 12px; font-size: 11px; color: var(--muted); background: var(--panel); border-top: 1px solid var(--border); flex-shrink: 0; }
       #ctxFooter.visible { display: flex; }
@@ -1043,6 +1047,9 @@
               <textarea id="input" rows="2" data-i18n-ph="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）" placeholder="问点什么…（可粘贴/拖入 图片·PDF·Word 作为上下文；Ctrl/⌘+Enter 发送）"></textarea>
               <button id="savePromptBtn" type="button" title="收藏当前输入为 Prompt 片段">⭐</button>
             </div>
+            <div id="convSysAppendWrap">
+              <textarea id="convSysAppendArea" rows="2" placeholder="本对话专属系统补充指令（如：请用英文回答 / 输出 JSON 格式 / 遵循特定规范…）"></textarea>
+            </div>
             <div class="input-foot">
               <button id="planToggle" type="button" data-i18n-title="计划模式：先给出分步方案待确认，不直接改动" title="计划模式：先给出分步方案待确认，不直接改动">📋 <span data-i18n="计划模式">计划模式</span></button>
               <select id="convModelSel" class="model-select conv-model-sel" style="display:none">
@@ -1053,6 +1060,7 @@
               </select>
               <button id="convModelBtn" class="conv-model-btn" title="切换本对话模型（不影响全局设置）">默认</button>
               <div id="convModelPopup" class="conv-model-popup" style="display:none"></div>
+              <button id="convSysAppendBtn" class="conv-model-btn conv-sys-btn" title="设置本对话专属系统补充指令（不影响全局）">指令</button>
               <span id="costReadout" class="cost-readout"></span>
               <span id="tokenLimitWrap">
                 <label for="tokenLimitInput" title="设置本对话 token 消耗上限（超出后警告，不阻断）">上限:</label>

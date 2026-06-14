@@ -1737,6 +1737,7 @@ function showActive() {
   renderCostReadout(); // 同步显示该会话累计用量
   renderCtxFooter();
   syncConvModelSel(); // 同步本对话的模型选择器
+  syncConvSysAppend(); // 同步本对话专属系统补充指令
   syncTokenLimitInput(); // 同步 token 上限输入框
 }
 
@@ -1775,6 +1776,16 @@ function syncConvModelSel() {
   if (sel) sel.value = cur;
   if (btn) btn.textContent = CONV_MODEL_SHORT[cur] || "默认";
   updateConvEstCost();
+}
+function syncConvSysAppend() {
+  const area = $("convSysAppendArea");
+  const wrap = $("convSysAppendWrap");
+  const btn = $("convSysAppendBtn");
+  if (!area) return;
+  const val = (activeConv && activeConv._sysAppend) || "";
+  area.value = val;
+  if (wrap) wrap.style.display = val ? "" : "none";
+  if (btn) btn.classList.toggle("active", !!val);
 }
 function updateConvEstCost() {
   const readout = $("costReadout");
@@ -2773,7 +2784,7 @@ function startTurn(conv, text, opts) {
   conv._planTurn = plan; // 记录本轮是否计划模式：chat:done 时据此渲染「按计划执行」操作条
   // 续聊时带上本对话存下的 cwd，让主进程沿用同一目录找到对应 session（新对话为 null，主进程回退到当前 workdir）
   const light = !!(opts && opts.light);
-  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null, projectMemory: getProjectMemory(), convModel: conv._convModel || null });
+  window.api.chat({ convId: conv.id, prompt: text, resume: conv.sessionId || null, plan, light, cwd: conv.cwd || null, projectMemory: getProjectMemory(), convModel: conv._convModel || null, convSysAppend: conv._sysAppend || null });
   persistConvs();
 }
 
@@ -5992,6 +6003,25 @@ $("input").addEventListener("input", () => {
   sel.addEventListener("change", () => {
     if (activeConv) activeConv._convModel = sel.value || null;
     updateConvEstCost();
+  });
+})();
+
+// 本对话专属系统补充指令：toggle 展开/收起，textarea 变更时写入 conv._sysAppend
+(function () {
+  const btn = $("convSysAppendBtn");
+  const wrap = $("convSysAppendWrap");
+  const area = $("convSysAppendArea");
+  if (!btn || !area) return;
+  btn.addEventListener("click", () => {
+    const opening = !wrap || wrap.style.display === "none";
+    if (wrap) wrap.style.display = opening ? "" : "none";
+    btn.classList.toggle("active", opening);
+    if (opening) area.focus();
+  });
+  area.addEventListener("input", () => {
+    if (activeConv) activeConv._sysAppend = area.value.trim() || null;
+    btn.classList.toggle("active", !!(activeConv && activeConv._sysAppend) || (wrap && wrap.style.display !== "none"));
+    persistConvs();
   });
 })();
 
