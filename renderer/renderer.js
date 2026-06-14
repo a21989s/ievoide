@@ -1875,6 +1875,7 @@ function clearAskTimers(conv) {
   conv.askTimers.length = 0;
 }
 let _saveTimer = null;
+let _draftTimer = null;
 let archived = []; // 已关闭对话的历史归档（与手机端共用同一份文件的 history 字段）
 const removedIds = new Set(); // 本端删除过的对话/归档 id：保存合并与手机端同步时防"复活"
 function buildConvState() {
@@ -3425,6 +3426,14 @@ $("input").addEventListener("input", () => {
     activeConv._histOrigPh = null;
   }
   if (activeConv) activeConv._histIdx = -1;
+  // 300ms debounce 写草稿，防止关闭应用时丢失输入
+  clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(() => {
+    if (!activeConv) return;
+    const v = $("input").value;
+    if (v) safeLocalSet('draft_' + activeConv.id, v);
+    else localStorage.removeItem('draft_' + activeConv.id);
+  }, 300);
 });
 
 // ── 左侧栏折叠/展开 ────────────────────────────────────────
