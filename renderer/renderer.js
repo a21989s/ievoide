@@ -5055,6 +5055,7 @@ async function loadEvolveHistory() {
       `<div class="evh-top"><span class="evh-badge">${tr(st.label)}</span>` +
       `<span class="evh-req"></span>` +
       (canDiff ? `<span class="evh-diff" data-i18n-title="查看本次改动的代码 diff" title="查看本次改动的代码 diff">🔍</span>` : "") +
+      `<span class="evh-rerun" title="重新执行此需求">↻</span>` +
       `<span class="evh-time"></span></div>` +
       (meta ? `<div class="evh-meta"></div>` : "");
     d.querySelector(".evh-req").textContent = req;
@@ -5070,6 +5071,15 @@ async function loadEvolveHistory() {
     if (canDiff) {
       d.querySelector(".evh-diff").onclick = (e) => { e.stopPropagation(); showEvolveDiff(h, req); };
     }
+    d.querySelector(".evh-rerun").onclick = (e) => {
+      e.stopPropagation();
+      $("evReq").value = h.requirement || "";
+      const m = $("evolveModal");
+      m.classList.add("open");
+      m.classList.remove("collapsed");
+      syncEvDock();
+      $("evReq").focus();
+    };
     el.appendChild(d);
   });
 }
