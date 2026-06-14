@@ -2870,14 +2870,27 @@ async function resolveMentionedFiles(text) {
   const re = /@([\S]+)/g;
   let m;
   while ((m = re.exec(text)) !== null) {
-    const ref = m[1].replace(/[.,!?;:'")\]>]+$/, ""); // 去掉句尾标点
+    const ref = m[1].replace(/[.,!?;:'")\]>]+$/, "").replace(/\/$/, ""); // 去掉句尾标点和末尾斜杠
     if (ref) seen.add(ref);
   }
   if (!seen.size) return "";
   const parts = [];
   for (const ref of seen) {
-    const content = await window.api.readWorkdirFile(ref);
-    parts.push(`=== @${ref} ===\n${content}\n=== end ===`);
+    const entries = await window.api.listDir(ref);
+    if (entries.length > 0) {
+      // ref 是目录：取第一层非目录文件（不递归），上限 20 个
+      const files = entries.filter((e) => !e.isDir);
+      if (files.length > 20) {
+        toast(`@${ref} 共 ${files.length} 个文件，仅引用前 20 个`, "info");
+      }
+      for (const f of files.slice(0, 20)) {
+        const content = await window.api.readWorkdirFile(f.path);
+        parts.push(`=== @${f.path} ===\n${content}\n=== end ===`);
+      }
+    } else {
+      const content = await window.api.readWorkdirFile(ref);
+      parts.push(`=== @${ref} ===\n${content}\n=== end ===`);
+    }
   }
   return "\n\n[以下为 @引用文件内容，请直接使用]\n" + parts.join("\n\n");
 }
