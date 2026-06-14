@@ -1313,7 +1313,7 @@ window.addEventListener("beforeunload", () => {
   [
     "git:changed", "convs:changed", "mcp:status", "evolve:backlog", "budget:exceeded",
     "evolve:log", "evolve:usage", "evolve:done", "evolve:rolledback", "issues:update",
-    "chat:init", "chat:chunk", "chat:tool", "chat:toolresult", "chat:done",
+    "chat:init", "chat:chunk", "chat:thinking", "chat:tool", "chat:toolresult", "chat:done",
     "chat:stopped", "chat:error",
   ].forEach((ch) => window.api.off(ch));
 }, { once: true });
@@ -3056,10 +3056,11 @@ function addFollowUpBtns(conv, wrap) {
 
 function appendText(conv, t) {
   if (!conv || !conv.currentBubble) return;
+  finalizeThinking(conv, true); // 正文到来 => 思考阶段结束，折叠思考块
   const cb = conv.currentBubble;
   let bubble = cb.querySelector(".bubble:last-of-type");
   const last = cb.lastElementChild;
-  if (!bubble || (last && last.classList.contains("toolcall"))) {
+  if (!bubble || (last && (last.classList.contains("toolcall") || last.classList.contains("thinking-block")))) {
     bubble = document.createElement("div");
     bubble.className = "bubble md";
     bubble._raw = "";
@@ -3076,6 +3077,52 @@ function appendText(conv, t) {
       scrollIfActive(conv);
     });
   }
+}
+
+// 思考增量：深度高时模型长时间思考却不产出正文，若界面只显示“思考中”会像卡死。
+// 这里把思考过程实时落到一个可折叠的暗色块，给用户“它在动”的反馈。
+function appendThinking(conv, t) {
+  if (!conv || !conv.currentBubble) return;
+  const cb = conv.currentBubble;
+  let block = cb.lastElementChild;
+  // 仅当最后一个元素就是“进行中”的思考块时续写；否则（正文/工具插入过后）另起新块
+  if (!block || !block.classList.contains("thinking-block") || block.dataset.done) {
+    block = document.createElement("details");
+    block.className = "thinking-block";
+    block.open = true;
+    block.style.cssText = "margin:4px 0;font-size:11px;color:#8a8a8a";
+    const sum = document.createElement("summary");
+    sum.style.cssText = "cursor:pointer;color:#9a9a9a;user-select:none";
+    sum.textContent = tr("💭 思考中…");
+    const pre = document.createElement("div");
+    pre.className = "thinking-text";
+    pre.style.cssText = "white-space:pre-wrap;margin-top:4px;padding-left:8px;border-left:2px solid #444;font-style:italic";
+    pre._raw = "";
+    block.appendChild(sum);
+    block.appendChild(pre);
+    cb.appendChild(block);
+  }
+  const pre = block.querySelector(".thinking-text");
+  pre._raw = (pre._raw || "") + t;
+  if (!pre._renderPending) {
+    pre._renderPending = true;
+    requestAnimationFrame(() => {
+      pre._renderPending = false;
+      pre.textContent = pre._raw;
+      scrollIfActive(conv);
+    });
+  }
+}
+
+// 思考结束（正文到来 / 本轮收尾）：把当前进行中的思考块标记为完成并折叠收起
+function finalizeThinking(conv, collapse) {
+  if (!conv || !conv.currentBubble) return;
+  conv.currentBubble.querySelectorAll(".thinking-block:not([data-done])").forEach((b) => {
+    b.dataset.done = "1";
+    const sum = b.querySelector("summary");
+    if (sum) sum.textContent = tr("💭 已思考");
+    if (collapse) b.open = false;
+  });
 }
 
 // 把 bubble._raw 按 Markdown 渲染进 bubble（marked 已加载则用之，否则转义纯文本）
@@ -3103,6 +3150,7 @@ function renderMermaidInBubble(container) {
 
 function appendTool(conv, id, name, inputObj) {
   if (!conv || !conv.currentBubble) return;
+  finalizeThinking(conv, true); // 工具调用到来 => 思考阶段结束，折叠思考块
   // AskUserQuestion：渲染成可点选的交互卡片（选完作为追问发回），而非普通工具行
   if (name === "AskUserQuestion" && inputObj && Array.isArray(inputObj.questions)) {
     return appendAskQuestion(conv, id, inputObj.questions);
@@ -4407,6 +4455,7 @@ async function openAcctMenu(anchor) {
     }
   }
   html += `<div class="sep"></div><div class="am-act" id="amSave">＋ ${tr("保存当前登录为账号")}</div>`;
+  html += `<div class="am-act" id="amOauth">🔗 ${tr("用授权链接登录新账号")}</div>`;
   m.innerHTML = html;
   m.classList.add("open");
   const b = anchor.getBoundingClientRect();
@@ -4450,6 +4499,27 @@ async function openAcctMenu(anchor) {
     if (r && r.ok) $("status").textContent = trf("✅ 已保存账号 {0}", r.email);
     else toast(tr("保存失败：") + (r?.error || tr("未知")), "error");
     clearStatusLater(5000);
+  };
+  $("amOauth").onclick = async () => {
+    m.classList.remove("open");
+    const s = await window.api.acctOauthStart();
+    if (!s || !s.url) { toast(tr("生成授权链接失败"), "error"); return; }
+    try { await navigator.clipboard.writeText(s.url); } catch {}
+    // 授权链接已复制到剪贴板：在浏览器打开 authorize，把回调页给出的授权码贴回来
+    const code = await modalPrompt(
+      tr("授权链接已复制到剪贴板。请在浏览器打开并完成授权，再把页面给出的授权码粘贴到这里："),
+      ""
+    );
+    if (!code || !code.trim()) return;
+    $("status").textContent = tr("正在用授权码换取登录凭证…");
+    const r = await window.api.acctOauthFinish(code.trim());
+    if (r && r.ok) {
+      $("status").textContent = trf("✅ 已添加账号 {0}（在账号菜单点击即可切换）", r.email);
+    } else {
+      $("status").textContent = "";
+      toast(tr("登录失败：") + (r?.error || tr("未知")), "error");
+    }
+    clearStatusLater(6000);
   };
 }
 $("acctBtn").onclick = (e) => {
@@ -6507,6 +6577,7 @@ function finishTurn(conv, metaText, errText) {
     meta.textContent = metaText;
     conv.currentBubble.appendChild(meta);
   }
+  finalizeThinking(conv, true); // 本轮收尾 => 思考块标记完成并折叠
   if (conv.currentBubble) {
     // flush 流式渲染：确保最后一帧未及渲染的 token 已落地，再渲染 mermaid
     conv.currentBubble.querySelectorAll(".bubble.md").forEach((b) => {
@@ -6553,6 +6624,7 @@ window.api.on("chat:init", ({ convId, model, tools, mcp, commands, skills, agent
 // token 数量缩写显示：1234 -> 1.2k
 const fmtTok = (n) => ((n = n || 0), n >= 1000 ? (n / 1000).toFixed(1) + "k" : String(n));
 window.api.on("chat:chunk", ({ convId, text }) => appendText(getConv(convId), text));
+window.api.on("chat:thinking", ({ convId, text }) => appendThinking(getConv(convId), text));
 window.api.on("chat:tool", ({ convId, id, name, input }) =>
   appendTool(getConv(convId), id, name, input)
 );

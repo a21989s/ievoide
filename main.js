@@ -7,6 +7,7 @@ import os from "node:os";
 import net from "node:net";
 import { execFile, execFileSync } from "node:child_process";
 import { promisify } from "node:util";
+import crypto from "node:crypto";
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { brainEvolveAppend, brainAuditPrompt } from "./brain-client.mjs";
 
@@ -1402,6 +1403,10 @@ ipcMain.on("chat", async (e, { prompt, resume, convId, plan, light, cwd: reqCwd,
         const ev = msg.event;
         if (ev?.type === "content_block_delta" && ev.delta?.type === "text_delta")
           send("chat:chunk", { text: ev.delta.text });
+        // 思考增量（effort/深度高时模型会长时间思考但不产出正文）：转发给界面做实时反馈，
+        // 否则界面全程只显示“思考中”、零进度，几分钟下来像卡死（见本轮排障）。
+        else if (ev?.type === "content_block_delta" && ev.delta?.type === "thinking_delta")
+          send("chat:thinking", { text: ev.delta.thinking || "" });
       } else if (msg.type === "assistant") {
         const u = msg.message.usage;
         if (u)
@@ -1914,6 +1919,101 @@ ipcMain.handle("acctSwitch", async (_e, email) => {
 ipcMain.handle("acctDelete", async (_e, email) => {
   saveAccts(loadAccts().filter((a) => a.email !== email));
   return { ok: true };
+});
+
+// ── 用授权链接登录新账号（仿 claude /login 的 OAuth 流程）─────────
+// 生成授权 URL → 用户在浏览器 authorize → 把回调页给出的 code 贴回来 → 换取 token。
+// CLIENT_ID 是 Claude Code 的公开 OAuth 客户端，与 CLI 同一套，换出的凭证可直接用。
+const OAUTH = {
+  clientId: "9d1c250a-e61b-44d9-88ed-5944d1962f5e",
+  authorizeUrl: "https://claude.ai/oauth/authorize",
+  tokenUrl: "https://console.anthropic.com/v1/oauth/token",
+  redirectUri: "https://console.anthropic.com/oauth/code/callback",
+  scope: "org:create_api_key user:profile user:inference",
+};
+const b64url = (buf) => buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+// 待完成的授权：state -> code_verifier（PKCE）。内存即可，App 重启则需重新生成 URL。
+const pendingOauth = new Map();
+
+// 生成授权链接（PKCE）。返回 { url }，前端展示供复制；code_verifier 留在主进程。
+ipcMain.handle("acctOauthStart", async () => {
+  const verifier = b64url(crypto.randomBytes(32));
+  const challenge = b64url(crypto.createHash("sha256").update(verifier).digest());
+  const state = b64url(crypto.randomBytes(32));
+  pendingOauth.set(state, verifier);
+  // 至多保留最近几条，避免内存里堆积过期 state（多并发生成链接时不丢 verifier）
+  if (pendingOauth.size > 5) {
+    const first = pendingOauth.keys().next().value;
+    if (first !== state) pendingOauth.delete(first);
+  }
+  const q = new URLSearchParams({
+    code: "true",
+    client_id: OAUTH.clientId,
+    response_type: "code",
+    redirect_uri: OAUTH.redirectUri,
+    scope: OAUTH.scope,
+    code_challenge: challenge,
+    code_challenge_method: "S256",
+    state,
+  });
+  return { url: `${OAUTH.authorizeUrl}?${q.toString()}`, state };
+});
+
+// 贴回授权码（格式通常是 "CODE#STATE"）→ 换 token → 存档为账号。
+ipcMain.handle("acctOauthFinish", async (_e, pasted) => {
+  try {
+    const raw = String(pasted || "").trim();
+    if (!raw) return { error: "请粘贴授权码" };
+    const [code, stateFromCode] = raw.split("#");
+    const state = stateFromCode || [...pendingOauth.keys()].pop();
+    const verifier = pendingOauth.get(state);
+    if (!verifier) return { error: "找不到对应的授权请求，请重新生成授权链接" };
+
+    const resp = await fetch(OAUTH.tokenUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        grant_type: "authorization_code",
+        code,
+        state,
+        client_id: OAUTH.clientId,
+        redirect_uri: OAUTH.redirectUri,
+        code_verifier: verifier,
+      }),
+    });
+    if (!resp.ok) {
+      const t = await resp.text().catch(() => "");
+      return { error: `换取 token 失败（${resp.status}）：${t.slice(0, 300)}` };
+    }
+    const tok = await resp.json();
+    pendingOauth.delete(state);
+
+    const credentials = {
+      claudeAiOauth: {
+        accessToken: tok.access_token,
+        refreshToken: tok.refresh_token,
+        expiresAt: Date.now() + (Number(tok.expires_in) || 0) * 1000,
+        scopes: (tok.scope || OAUTH.scope).split(" ").filter(Boolean),
+        subscriptionType: tok.account?.has_claude_max ? "max" : (tok.account?.has_claude_pro ? "pro" : undefined),
+      },
+    };
+    const email = tok.account?.email_address || tok.account?.email || "unknown";
+    const oauthAccount = {
+      accountUuid: tok.account?.uuid,
+      emailAddress: email,
+      displayName: tok.account?.display_name || tok.account?.full_name || email,
+      organizationUuid: tok.organization?.uuid,
+      organizationName: tok.organization?.name,
+    };
+
+    // 存档（按邮箱去重覆盖），不自动切换，由前端决定
+    const list = loadAccts().filter((a) => a.email !== email);
+    list.push({ email, name: oauthAccount.displayName, credentials, oauthAccount, savedAt: Date.now() });
+    saveAccts(list);
+    return { ok: true, email };
+  } catch (err) {
+    return { error: String(err?.message || err) };
+  }
 });
 
 // ── 打包：三种模式 → 桌面 zip ─────────────────────────────────

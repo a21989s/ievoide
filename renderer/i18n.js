@@ -229,6 +229,8 @@
     "发送": "Send",
     "思考中…（已排队 {0} 条）": "Thinking… ({0} queued)",
     "思考中…（可继续输入，自动排队）": "Thinking… (keep typing; auto-queued)",
+    "💭 思考中…": "💭 Thinking…",
+    "💭 已思考": "💭 Thought",
     "你": "You",
     "进行中": "Running",
     "手机端进行中": "Running on phone",
