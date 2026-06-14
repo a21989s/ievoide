@@ -1175,6 +1175,7 @@
             <button id="evRun" data-i18n-title="开始" title="开始">▶</button>
             <input id="evScope" type="text" placeholder="限定文件 glob，如 renderer/*.js" title="只允许 AI 修改匹配此 glob 的文件，留空不限制" style="flex:1;min-width:0;max-width:220px;font-size:12px;padding:2px 6px;border:1px solid var(--border);border-radius:4px;background:var(--input-bg,var(--bg));color:var(--fg);" />
             <button id="evStop" data-i18n-title="停止" title="停止" disabled>⏹</button>
+            <label title="勾选后 AI 先输出修改方案，确认后再执行"><input type="checkbox" id="evPlanOnly" /> <span data-i18n="仅出方案">仅出方案</span></label>
             <label><input type="checkbox" id="evAuto" /> <span data-i18n="自动修复运行时错误">自动修复运行时错误</span></label>
             <label><input type="checkbox" id="evPeriodic" /> <span data-i18n="定期自检">定期自检</span></label>
             <select id="evInterval">

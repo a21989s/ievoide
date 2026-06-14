@@ -4407,7 +4407,7 @@ $("evReq").addEventListener("paste", (e) => {
 // 拖入图片/文档
 setupDropZone($("evReq"), addEvolveFile);
 
-async function runEvolve(requirement) {
+async function runEvolve(requirement, { _planOnly } = {}) {
   if (evolveBusy || !requirement.trim()) return;
   $("evolveModal").classList.add("open");
   syncEvDock();
@@ -4416,7 +4416,10 @@ async function runEvolve(requirement) {
   // 读取限定文件 glob，非空时注入 system 约束到需求开头
   const scopeGlob = ($("evScope")?.value || "").trim();
   const scopeNote = scopeGlob ? `【限定文件】只允许修改匹配以下 glob 的文件：${scopeGlob}\n\n` : "";
-  const effectiveReq = scopeNote + requirement;
+  // 仅出方案模式：在需求末尾追加约束，AI 只输出方案不动文件
+  const planOnly = _planOnly ?? $("evPlanOnly")?.checked ?? false;
+  const planOnlyNote = planOnly ? "\n\n【仅出方案】只输出修改方案，不调用任何写文件工具。" : "";
+  const effectiveReq = scopeNote + requirement + planOnlyNote;
   // 每个问题都是独立的：开跑即清空上一个问题的日志与附件残留（收口到这里，
   // 覆盖手动/清单/持续进化/定期自检/自动修错所有入口）。模型侧本就是每次全新
   // 会话（query 不带 resume），这里把界面「会话」也对齐成一题一清。
@@ -4431,6 +4434,11 @@ async function runEvolve(requirement) {
   // evolve:done 事件通常会兜底设状态；但无改动等分支不发该事件，这里据返回值兜底，
   // 避免忙状态卡死（也让持续进化能据返回值推进下一条）。relaunch 会重启，无需处理。
   if (!(r && r.relaunch)) setEvolveBusy(false);
+  // 仅出方案：方案输出完毕后弹确认框，用户确认才发第二轮真正执行
+  if (planOnly && !(r && r.relaunch) && !(r && r.error)) {
+    const ok = await modalConfirm(tr("方案已输出，确认执行？"));
+    if (ok) runEvolve(requirement, { _planOnly: false });
+  }
   return r;
 }
 
