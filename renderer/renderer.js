@@ -2167,7 +2167,13 @@ async function maybeCompressHistory(conv) {
     summaryEl.className = "msg system history-summary";
     summaryEl.innerHTML =
       `<div class="bubble">📋 <b>历史摘要（已压缩 ${toCompress.length} 条消息）</b><br>` +
-      r.summary.replace(/\n/g, "<br>") + `</div>`;
+      r.summary.replace(/\n/g, "<br>") +
+      `<br><br><span class="compact-hint">💡 DOM 已瘦身，但 CLI session 仍携带完整历史。建议同时 /compact 以真正降低后续 token 消耗。</span>` +
+      `<br><button class="compact-btn" title="执行 /compact 压缩 CLI session 历史">⚡ /compact 一键压缩 session</button>` +
+      `</div>`;
+    summaryEl.querySelector(".compact-btn").addEventListener("click", () => {
+      startTurn(conv, "/compact");
+    });
     toCompress[0].before(summaryEl);
     toCompress.forEach(el => el.remove());
     persistConvs();
