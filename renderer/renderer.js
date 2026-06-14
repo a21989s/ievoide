@@ -1852,7 +1852,8 @@ function updateConvEstCost() {
   const inPrice = CONV_MODEL_PRICE[lookupModel] ?? 0;
   const outPrice = CONV_MODEL_OUT_PRICE[lookupModel] ?? 0;
   const inputTxt = ($("input") && $("input").value) || "";
-  const inputTokens = Math.round(inputTxt.length / 4);
+  const cjkCount = (inputTxt.match(/[⺀-﫿]/g) || []).length;
+  const inputTokens = Math.round(cjkCount * 1.5 + (inputTxt.length - cjkCount) * 0.25);
   const ctxTokens = (activeConv && activeConv.ctx) || 0;
   const totalInTokens = ctxTokens + inputTokens;
   // 输出侧粗估：按历史平均 500 tokens/回复
