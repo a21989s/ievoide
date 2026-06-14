@@ -242,6 +242,7 @@
       let convs = [];
       let activeId = null;
       let busy = false; // 流式进行中（同一时刻只让一个对话发请求，避免串台）
+      let myLastConvId = null; // 本端最近一次亲自流式回复的对话 id：其本地视图即真相，refreshConvs 不得用服务器 running 中间态覆盖
       function active() { return convs.find((c) => c.id === activeId); }
       async function loadConvs() {
         let d = null;
@@ -285,8 +286,11 @@
         const a = active();
         if (a) {
           const serverHtml = a.html || "";
-          if (a.running) {
-            // 别端(桌面/服务器)正在流式：采用服务器的实时进度
+          if (a.running && !(a.id === myLastConvId && keepHtml)) {
+            // 别端(桌面/服务器)正在流式：采用服务器的实时进度。
+            // 但本端刚亲自回复完这条对话(a.id===myLastConvId)且本地视图非空时，
+            // 磁盘可能还残留 running=true 的中间态(服务器收尾 flush 与本端 done 之间的窗口)，
+            // 此时本地视图才是真相，不能被服务器重建的 html 覆盖——否则发完消息视图就错乱。
             if (serverHtml !== chat.innerHTML) { chat.innerHTML = serverHtml; chat.scrollTop = chat.scrollHeight; }
           } else if (keepHtml) {
             // 本端有内容：以本端视图为真相写回 convs（防止切走再切回拿到旧/空版本）
@@ -354,7 +358,7 @@
         // 含用户消息、不含助手气泡的快照：服务器以此为底即时落盘对话进度，桌面端实时可见
         const baseHtml = chat.innerHTML;
         const bubble = addMsg("assistant", "");
-        busy = true; $("send").textContent = "…"; renderTabs();
+        busy = true; myLastConvId = conv.id; $("send").textContent = "…"; renderTabs();
         try {
           const resp = await fetch("/api/chat?token=" + encodeURIComponent(token), {
             method: "POST", headers: { "content-type": "application/json" },

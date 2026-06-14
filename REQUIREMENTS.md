@@ -90,6 +90,67 @@
 - sources:
   - https://www.nxcode.io/resources/news/best-ai-code-editor-2026-cursor-windsurf-copilot-zed-compared
 
+### req-surgical-minimal-diff — 精确最小 diff 模式（agent 不超范围改动）
+- status: new
+- category: 交互质量 / 可信度
+- 痛点：Windsurf/Cascade 被用户吐槽「sometimes makes more changes than requested, particularly on larger tasks」，偏好外科手术式修改的开发者高度不满。
+- acceptance：提供可配置的「minimal-diff 模式」，agent 改动严格限制在明确要求范围内；每轮结束后展示 diff 摘要，用户确认前不自动提交。
+- sources:
+  - https://blink.new/blog/windsurf-review-2026
+  - https://www.morphllm.com/comparisons/cursor-alternatives
+
+### req-session-context-persistence — 会话上下文跨重启持久化
+- status: new
+- category: UX / 生产力
+- 痛点：开发者在持续重构任务中反复遭遇「context reset」——重启或切会话后须从头解释背景，严重打断心流。Windsurf Cascade 的卖点之一就是「can look back through recent changes and continue from that context without you re-explaining」。
+- acceptance：会话重启/resume 后自动附加编辑历史摘要，无需用户手动重述任务背景。
+- sources:
+  - https://blink.new/blog/windsurf-review-2026
+  - https://lushbinary.com/blog/ai-coding-agents-comparison-cursor-windsurf-claude-copilot-kiro-2026/
+
+### req-spec-driven-development — 结构化规格驱动开发（Spec-first）
+- status: new
+- category: 功能（差异化）
+- 痛点：2026 年只有 Kiro 提供「first-class spec-driven development with event-driven hooks」，其他工具全靠自由对话，大型任务缺乏结构化规格跟踪。对文档维护型工作流尤其有价值。
+- acceptance：支持将任务描述保存为结构化 Spec 文件（标题/目标/验收标准/状态字段）；agent 执行时参照 spec，完成后自动更新状态字段；可与现有 REQUIREMENTS.md 格式对齐。
+- sources:
+  - https://lushbinary.com/blog/ai-coding-agents-comparison-cursor-windsurf-claude-copilot-kiro-2026/
+
+### req-predictive-budget-alert — 任务执行前 token 预算预警
+- status: new
+- category: 可观测性 / 成本控制
+- 痛点：Cursor/Copilot 用户普遍反映「bill shock」——agent 重度任务跑完才发现超支，而工具没有事前预警。用户需要「budget alerts before agent-heavy work surprises you」。
+- acceptance：长任务（多轮工具调用）启动前，给出 token 用量估算及成本区间提示；超过用户设定阈值时需确认才继续。
+- sources:
+  - https://lushbinary.com/blog/ai-coding-agents-comparison-cursor-windsurf-claude-copilot-kiro-2026/
+  - https://www.faros.ai/blog/best-ai-coding-agents-2026
+
+### req-multi-session-agent-view — 多会话并发管理视图
+- status: new
+- category: 功能 / 生产力
+- 痛点：Claude Code 六月更新新增「agent view」可管理多个并发 session，Cursor 支持最多 8 个并行 agent——孤立的单会话 UI 在并发场景下效率极低。
+- acceptance：UI 支持同时展示多个进行中会话的状态摘要；可在不中断任意会话的情况下切换焦点；后台任务状态可见（running / waiting / done）。
+- sources:
+  - https://help.apiyi.com/en/claude-code-changelog-2026-april-updates-en.html
+  - https://lushbinary.com/blog/ai-coding-agents-comparison-cursor-windsurf-claude-copilot-kiro-2026/
+
+### req-repo-wide-context-indexing — 仓库级代码库索引与理解
+- status: new
+- category: 功能 / 代码质量
+- 痛点：「context engineering」成为 2026 年 AI 编码工具最重要的差异化点——工具必须能「index repositories, track dependencies, and maintain multi-step reasoning」跨多文件。仅基于当前打开文件的工具质量明显落后。
+- acceptance：支持对本地项目文件夹建立向量/符号索引；提问时自动检索相关文件片段注入上下文，而非依赖用户手动 attach 文件。
+- sources:
+  - https://www.faros.ai/blog/best-ai-coding-agents-2026
+
+### req-privacy-local-model-option — 隐私模式 / 本地模型支持
+- status: new
+- category: 安全 / 企业需求
+- 痛点：Cursor 被批评「code is sent to third-party APIs, no local model support, no guaranteed data isolation」，对有敏感代码库的团队构成门槛。
+- acceptance：提供「不上传代码」的隐私模式（仅发送用户消息，不发送文件内容）；或支持配置本地/私有部署的 API endpoint（如 Ollama / 自托管 Anthropic proxy）。
+- sources:
+  - https://www.morphllm.com/comparisons/cursor-alternatives
+  - https://www.faros.ai/blog/best-ai-coding-agents-2026
+
 ---
 
 ## 已处理归档
