@@ -1519,11 +1519,14 @@ function commitMenu(c, x, y) {
 }
 
 let lastGraphSig = null; // 上次提交图签名：内容不变则跳过重建，避免闪烁
+let graphSeq = 0; // 请求序号：commit/push 时多条刷新并发，仅最新一次可改 DOM/签名，丢弃过期结果防图被清空
 async function loadGraph(repoPath) {
+  const seq = ++graphSeq;
   const graph = $("gitgraph");
   const dd = $("branchDropdown");
 
   const r = await window.api.gitGraph(repoPath);
+  if (seq !== graphSeq) return; // 已有更新的刷新在跑，过期结果直接丢弃，不动 DOM/签名
   if (!r || r.error) {
     lastGraphSig = null;
     dd.innerHTML = "";
@@ -1534,6 +1537,7 @@ async function loadGraph(repoPath) {
 
   // 分支下拉（切换图里没出现的分支）
   const b = await window.api.gitBranches(repoPath);
+  if (seq !== graphSeq) return; // 同上：等分支期间若有更新请求，丢弃过期结果
   // 内容签名：提交图 + 当前分支 + 分支列表，一致则不动 DOM
   const sig = repoPath + "|" + r.current + "|" + JSON.stringify(r.commits) + "|" + JSON.stringify(b?.branches || []);
   if (sig === lastGraphSig) return;
