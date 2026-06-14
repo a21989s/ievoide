@@ -93,6 +93,7 @@
     "全部取消暂存": "Unstage all",
     "更改": "Changes",
     "丢弃所有更改": "Discard all changes",
+    "仅回滚此文件，不影响其他改动": "Revert this file only (other changes unaffected)",
     "全部暂存": "Stage all",
     // —— 常用 skill 快捷按钮 ——
     "推送代码": "Push",

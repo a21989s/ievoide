@@ -1226,10 +1226,14 @@ function fileRow(f, staged) {
   el.title = f.path;
   const acts = staged
     ? `<span data-act="unstage" title="${tr("取消暂存")}">−</span>`
-    : `<span data-act="stage" title="${tr("暂存")}">＋</span><span data-act="discard" title="${tr("丢弃更改")}">↩</span>`;
+    : `<span data-act="stage" title="${tr("暂存")}">＋</span>`;
+  const revertChip = staged
+    ? ""
+    : `<span data-act="discard" class="sc-file-revert" title="${tr("仅回滚此文件，不影响其他改动")}">↩ 仅回滚</span>`;
   el.innerHTML =
     `<span class="sc-stat ${cls}">${cls}</span>` +
     `<span class="sc-name">${esc(f.path)}</span>` +
+    revertChip +
     `<span class="sc-fileact">${acts}</span>`;
   el.onclick = async (e) => {
     const act = e.target.dataset?.act;
