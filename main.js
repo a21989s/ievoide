@@ -1184,6 +1184,43 @@ ipcMain.handle("convAutoTitle", async (_e, text) => {
   }
 });
 
+// ── 历史摘要压缩：用轻量模型把最旧若干条消息浓缩成结构化摘要 ──
+ipcMain.handle("convSummarize", async (_e, messages) => {
+  if (!Array.isArray(messages) || !messages.length) return { error: "无效输入" };
+  const abort = new AbortController();
+  const timer = setTimeout(() => abort.abort(), 30000);
+  try {
+    const hist = messages.map(m => `[${m.role}]: ${m.text}`).join("\n");
+    const prompt =
+      "以下是一段对话历史，请用不超过200字输出结构化摘要，必须包含三项：" +
+      "①决策与结论 ②关键操作路径 ③已完成事项。只输出摘要内容，不加任何前缀说明。\n\n" + hist;
+    const response = query({
+      prompt,
+      options: {
+        cwd: workdir || process.cwd(),
+        permissionMode: "bypassPermissions",
+        allowedTools: [],
+        maxTurns: 1,
+        abortController: abort,
+        systemPrompt: { type: "text", text: "你是对话历史压缩助手，负责提炼对话要点，输出结构化摘要，不添加任何多余说明。" },
+        ...((appConfig.lightModel || appConfig.model) ? { model: appConfig.lightModel || appConfig.model } : {}),
+      },
+    });
+    let summary = "";
+    for await (const msg of response) {
+      if (msg.type === "assistant") {
+        for (const b of msg.message.content) if (b.type === "text") summary += b.text;
+      }
+    }
+    return { summary: summary.trim() || null };
+  } catch (err) {
+    if (abort.signal.aborted) return { error: "超时" };
+    return { error: String(err?.message || err) };
+  } finally {
+    clearTimeout(timer);
+  }
+});
+
 // ── 对话：支持多个并发查询，按 convId 隔离；事件都带上 convId ───
 const runs = new Map(); // convId -> AbortController
 

@@ -97,6 +97,7 @@ contextBridge.exposeInMainWorld("api", {
   gitResetSoft: (repo, sha) => ipcRenderer.invoke("gitResetSoft", repo, sha),
   gitCheckoutCommit: (repo, sha) => ipcRenderer.invoke("gitCheckoutCommit", repo, sha),
   convAutoTitle: (text) => ipcRenderer.invoke("convAutoTitle", text),
+  convSummarize: (msgs) => ipcRenderer.invoke("convSummarize", msgs),
   ...(() => {
     const listeners = new Map();
     return {

@@ -2105,6 +2105,38 @@ const CTX_WARN = 100000;
 // 超过该规模后，用户下次发消息时先自动 /compact 再发（与 Claude Code 自动压缩同思路，
 // 但提前到更省钱的时点：不等到逼近模型上限才压）
 const CTX_AUTOCOMPACT = 130000;
+const TURN_COMPRESS_THRESHOLD = 30; // 满 30 轮触发历史摘要压缩
+const TURN_COMPRESS_BATCH = 10;     // 每次压缩最旧的 10 条消息
+
+// 当对话消息数超过 TURN_COMPRESS_THRESHOLD 轮时，用轻量模型把最旧 TURN_COMPRESS_BATCH 条
+// 消息压缩成一条 system 摘要气泡，降低 DOM 体积（CLI session 的真实 token 压缩仍依赖 /compact）
+async function maybeCompressHistory(conv) {
+  if (!conv || conv._histCompressing || conv.busy) return;
+  const allMsgs = [...conv.pane.querySelectorAll(".msg.user, .msg.assistant")];
+  if (allMsgs.length < TURN_COMPRESS_THRESHOLD * 2) return; // 30轮=60条
+  const toCompress = allMsgs.slice(0, TURN_COMPRESS_BATCH);
+  const items = toCompress.map(el => ({
+    role: el.classList.contains("user") ? "user" : "assistant",
+    text: (el.querySelector(".bubble")?.textContent || "").slice(0, 600),
+  })).filter(m => m.text.trim());
+  if (items.length < 4) return;
+  conv._histCompressing = true;
+  try {
+    const r = await window.api.convSummarize(items);
+    if (!r || r.error || !r.summary) return;
+    const summaryEl = document.createElement("div");
+    summaryEl.className = "msg system history-summary";
+    summaryEl.innerHTML =
+      `<div class="bubble">📋 <b>历史摘要（已压缩 ${toCompress.length} 条消息）</b><br>` +
+      r.summary.replace(/\n/g, "<br>") + `</div>`;
+    toCompress[0].before(summaryEl);
+    toCompress.forEach(el => el.remove());
+    persistConvs();
+  } finally {
+    conv._histCompressing = false;
+  }
+}
+
 // 在输入区底部显示当前会话累计 token 与费用，让成本一目了然。
 // 计费等效口径：缓存读≈0.1×、缓存写≈1.25×（与 API 定价比例一致）；
 // 旧的四项全价累加会把便宜的缓存读也按全价算，数字虚高一个量级。
@@ -6115,6 +6147,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
         }
       }).catch(() => {});
     }
+    maybeCompressHistory(conv); // 超过 30 轮时异步压缩最旧 10 条消息（不阻塞后续流程）
   }
 });
 window.api.on("chat:stopped", ({ convId }) => {
