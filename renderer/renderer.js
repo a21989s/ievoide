@@ -2197,12 +2197,20 @@ function renderConvList() {
   const tabs = $("convTabs");
   tabs.innerHTML = "";
   const q = convSearchQuery.toLowerCase();
+
+  // highlight query match in display title
+  const hlTitle = (title) => {
+    if (!q) return esc(title);
+    const idx = title.toLowerCase().indexOf(q);
+    if (idx < 0) return esc(title);
+    return esc(title.slice(0, idx)) + `<mark>${esc(title.slice(idx, idx + q.length))}</mark>` + esc(title.slice(idx + q.length));
+  };
+
   const filtered = q
     ? conversations.filter((c) => {
         const title = (c.title || "").toLowerCase();
-        const first = (c.messages?.[0]?.content || "");
-        const firstText = (typeof first === "string" ? first : first?.[0]?.text || "").toLowerCase();
-        return title.indexOf(q) !== -1 || firstText.indexOf(q) !== -1;
+        const paneText = (c.pane ? c.pane.textContent : "").toLowerCase();
+        return title.indexOf(q) !== -1 || paneText.indexOf(q) !== -1;
       })
     : conversations;
   for (const c of filtered) {
@@ -2218,7 +2226,7 @@ function renderConvList() {
           : c.unread
             ? `<span class="conv-unread" title="${tr("有新结果，点击查看")}">●</span>`
           : "") +
-      `<span class="conv-title">${esc(dispTitle)}</span>` +
+      `<span class="conv-title">${hlTitle(dispTitle)}</span>` +
       (c.ctx >= CTX_WARN ? `<span class="conv-ctx-warn" title="${trf('上下文 {0}，建议 /compact 或新开对话', fmtTokens(c.ctx))}">⚠</span>` : "") +
       `<span class="conv-del" title="${tr("关闭")}">×</span>`;
     el.dataset.cid = c.id;
@@ -2238,6 +2246,24 @@ function renderConvList() {
     };
     tabs.appendChild(el);
     if (c.id === activeConv?.id) el.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }
+
+  // when searching, also show matching archived (history) conversations
+  if (q) {
+    const archMatches = archived.filter((h) => {
+      const title = (h.title || "").toLowerCase();
+      const text = histPlainText(h).toLowerCase();
+      return title.indexOf(q) !== -1 || text.indexOf(q) !== -1;
+    }).slice(0, 30);
+    for (const h of archMatches) {
+      const dispTitle = h.title || tr("新对话");
+      const el = document.createElement("div");
+      el.className = "conv-tab archived";
+      el.title = dispTitle + " (" + tr("历史") + ")";
+      el.innerHTML = `<span class="conv-arch-icon" title="${tr("历史")}">🕘</span><span class="conv-title">${hlTitle(dispTitle)}</span>`;
+      el.onclick = () => restoreFromHistory(h.id);
+      tabs.appendChild(el);
+    }
   }
 }
 
