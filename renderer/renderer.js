@@ -2880,7 +2880,7 @@ function addPlanActions(conv, wrap) {
   scrollIfActive(conv);
 }
 
-// follow-up 快捷按钮：每轮正常完成后追加，点击填入 prompt 并发送
+// follow-up 快捷按钮：每轮正常完成后追加，点击填入 prompt 并聚焦（不自动发送，由用户确认后手动发送）
 function addFollowUpBtns(conv, wrap) {
   const BTNS = [
     { label: "🧪 " + tr("生成测试"),       prompt: tr("请为上述实现生成完整的单元测试，覆盖主流程和边界情况。") },
@@ -2902,7 +2902,6 @@ function addFollowUpBtns(conv, wrap) {
       const inp = $("input");
       inp.value = prompt;
       inp.focus();
-      send();
     };
     bar.appendChild(btn);
   });
