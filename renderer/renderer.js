@@ -1159,6 +1159,14 @@ async function selectRepo(repoPath) {
   window.api.gitWatch(repoPath); // 切换仓库 → 主进程监听该仓库的文件变化
 }
 
+// ── Source Control 面板：切换到 git 视图（AI 改完文件后自动调用）──
+function showScPanel() {
+  const sb = $("sidebar");
+  sb.classList.remove("collapsed", "req-mode", "mem-mode");
+  document.querySelectorAll("#activitybar .act-btn[data-view]")
+    .forEach((x) => x.classList.toggle("active", x.dataset.view === "sc"));
+}
+
 // ── Source Control 自动刷新：文件监听即时刷新 + 低频轮询兜底 ──────
 let scRefreshing = false; // 正在刷新（避免并发/与 doGit 叠加）
 async function scAutoRefresh() {
@@ -6065,7 +6073,7 @@ window.api.on("chat:done", ({ convId, cost, ms, session, cwd, usage, ctx, checkp
     `${tr("用时 ")}${ms}ms · $${cost?.toFixed?.(4) ?? cost}${_crT > 0 ? " ⚡cached" : ""}${_tokStr}` +
     (conv && conv.ctx >= CTX_WARN ? trf(" · ⚠ 上下文 {0}，建议 /compact 或新开对话", fmtTokens(conv.ctx)) : ""));
   if (checkpoint && turnWrap) addRewindBtn(turnWrap, checkpoint.id); // 本轮改动了文件 => 提供回滚入口
-  if (checkpoint) refreshFileTree(); // 本轮改动了文件 => 重建文件树（保留展开层级与选中态）
+  if (checkpoint) { refreshFileTree(); showScPanel(); scAutoRefresh(); } // 本轮改动了文件 => 重建文件树 + 自动切到 Source Control 视图
   // 计划模式轮 & 没有排队消息 => 渲染「按计划执行 / 继续调整」操作条
   if (conv && conv._planTurn && turnWrap && !conv.queue.length) addPlanActions(conv, turnWrap);
   // 非计划轮、无排队消息 => 追加 follow-up 快捷按钮
