@@ -1750,8 +1750,6 @@ const CONV_MODEL_PRICE = {
   "sonnet": 3.00,
   "claude-opus-4-8": 15.00,
   "opus": 15.00,
-  "opusplan": 15.00,
-  "claude-fable-5": 3.00,
 };
 // 输出侧定价（USD / 1M tokens）
 const CONV_MODEL_OUT_PRICE = {
@@ -1762,8 +1760,6 @@ const CONV_MODEL_OUT_PRICE = {
   "sonnet": 15.00,
   "claude-opus-4-8": 75.00,
   "opus": 75.00,
-  "opusplan": 75.00,
-  "claude-fable-5": 15.00,
 };
 const CONV_MODEL_LIST = [
   { value: "", label: "全局默认", sub: "使用设置页模型" },
@@ -1788,8 +1784,9 @@ function updateConvEstCost() {
   const convModel = (activeConv && activeConv._convModel) || "";
   const globalModel = ($("modelSelect") && $("modelSelect").value) || "";
   const effectiveModel = convModel || globalModel;
-  const inPrice = CONV_MODEL_PRICE[effectiveModel] ?? 0;
-  const outPrice = CONV_MODEL_OUT_PRICE[effectiveModel] ?? 0;
+  const lookupModel = effectiveModel === "opusplan" ? "claude-opus-4-8" : effectiveModel;
+  const inPrice = CONV_MODEL_PRICE[lookupModel] ?? 0;
+  const outPrice = CONV_MODEL_OUT_PRICE[lookupModel] ?? 0;
   const inputTxt = ($("input") && $("input").value) || "";
   const inputTokens = Math.round(inputTxt.length / 4);
   const ctxTokens = (activeConv && activeConv.ctx) || 0;
