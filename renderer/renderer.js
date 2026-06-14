@@ -2786,8 +2786,11 @@ async function addAttachment(file) {
     toast(tr("附件保存失败：") + e, "error");
   }
 }
-function fmtAttTok(bytes) {
-  const t = Math.round((bytes || 0) / 4);
+function fmtAttTok(bytes, name) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  const textExts = new Set(['txt','md','js','ts','py','go','rs','java','c','cpp','json','yaml','toml','css','html']);
+  const divisor = textExts.has(ext) ? 3 : 4;
+  const t = Math.round((bytes || 0) / divisor);
   return t >= 1000 ? `≈${(t / 1000).toFixed(1)}k tok` : `≈${t} tok`;
 }
 function renderAttachList() {
@@ -2801,7 +2804,7 @@ function renderAttachList() {
     chip.innerHTML =
       (a.dataUrl ? `<img src="${a.dataUrl}">` : `<span>📎</span>`) +
       `<span class="an" title="${esc(a.name)}">${esc(a.name)}</span>` +
-      `<span class="att-tok">${fmtAttTok(a.size)}</span>` +
+      `<span class="att-tok">${fmtAttTok(a.size, a.name)}</span>` +
       `<span class="ax" title="${tr("移除")}">×</span>`;
     chip.querySelector(".ax").onclick = () => {
       pendingAttachments.splice(i, 1);
