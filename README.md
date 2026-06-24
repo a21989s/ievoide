@@ -1,6 +1,6 @@
 <h1 align="center">🧬 ievoide</h1>
-<p align="center"><b>The dev tool that rewrites its own source code.</b></p>
-<p align="center">A Claude-powered desktop IDE you point at <i>itself</i> — ask for a feature, watch it build, commit, and ship it. Git is the undo button.</p>
+<p align="center"><b>Your own self-made IDE — infinitely self-evolving, endlessly customizable.</b></p>
+<p align="center">A Claude-powered desktop IDE you point at <i>itself</i>: ask for a feature, watch it build, commit, and ship it into its own source. Git is the undo button.</p>
 
 > Built on the **[Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk)**. Your dev tool, your rules — configure the model, prompts, permissions, and tools however you like.
 

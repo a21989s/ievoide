@@ -1,6 +1,6 @@
-# 自进化 dev Tool
+# 🧬 ievoide — 自制 IDE，无限进化
 
-基于 Claude Agent SDK 的桌面 App（仿 Claude Code 插件）：多对话并行、完整 Source Control、PDF/MD/Mermaid 查看与编辑、附件、自进化等。
+**属于开发者自己的自制 IDE：无限自我进化、可随心定制。** 基于 Claude Agent SDK 的桌面 App（仿 Claude Code 插件）：把它指向它*自己*的源码，提个需求就能让它自己实现、提交、发布——git 就是后悔药。多对话并行、完整 Source Control、PDF/MD/Mermaid 查看与编辑、附件、自进化等。
 
 ## 便携使用（copy 即用）
 
