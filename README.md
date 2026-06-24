@@ -16,6 +16,10 @@ English | [简体中文](README.zh-CN.md)
 
 Its standout feature: **🧬 self-evolution** — point the agent at its *own* repo and it will implement new features, using git as a checkpoint/rollback safety net.
 
+![ievoide main UI](docs/images/screenshot-main.png)
+
+> A VS Code-style workspace: Source Control on the left, parallel chats on the right, with one-click actions — Push, Run Tests, New PR, Generate Codemap, Find dead code, and 🧬 evolve.
+
 ## Features
 
 - **🧬 Self-evolution** — the app can modify its own source; git-backed checkpoints and rollback.
