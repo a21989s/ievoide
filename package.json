@@ -1,5 +1,5 @@
 {
-  "name": "tools",
+  "name": "ievoide",
   "productName": "自进化 dev Tool",
   "version": "1.0.0",
   "main": "main.js",
@@ -11,10 +11,26 @@
     "dryrun": "node --check main.js && node --check preload.cjs && node --check renderer/renderer.js && node --check renderer/pdfeditor.js && echo 'dry-run OK'",
     "test": "node --test \"test/**/*.test.mjs\""
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
+  "keywords": [
+    "claude",
+    "claude-agent-sdk",
+    "anthropic",
+    "electron",
+    "ai-coding-agent",
+    "self-evolving",
+    "desktop-app"
+  ],
+  "author": "a21989s",
+  "license": "MIT",
+  "description": "Self-evolving desktop AI dev tool built on the Claude Agent SDK: parallel chats, full source control, PDF/Markdown/Mermaid editing, mobile remote access, and an agent that can rewrite its own source code.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/a21989s/ievoide.git"
+  },
+  "homepage": "https://github.com/a21989s/ievoide#readme",
+  "bugs": {
+    "url": "https://github.com/a21989s/ievoide/issues"
+  },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.169",
     "marked": "^18.0.5",

@@ -1,52 +1,73 @@
-# 自进化 dev Tool
+# ievoide — Self-Evolving Dev Tool
 
-基于 Claude Agent SDK 的桌面 App（仿 Claude Code 插件）：多对话并行、完整 Source Control、PDF/MD/Mermaid 查看与编辑、附件、自进化等。
+> A desktop AI coding companion built on the **[Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk)** — and the rare agent that can rewrite its own source code.
 
-## 便携使用（copy 即用）
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Built with Claude Agent SDK](https://img.shields.io/badge/built%20with-Claude%20Agent%20SDK-d97757.svg)](https://docs.claude.com/en/api/agent-sdk)
+[![Electron](https://img.shields.io/badge/Electron-42-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
 
-整个 `tools` 文件夹自带一切——源码、配置、提示词、对话历史、附件都在文件夹内。**把整个文件夹复制到另一台同系统机器即可直接用**：
+English | [简体中文](README.zh-CN.md)
 
-- macOS：双击 **`start.command`**
-- Windows：双击 **`start.bat`**
-- 或命令行：`npm start`
+---
 
-（缺 `node_modules` 会自动 `npm install`，需已装 Node.js）
+## What is this?
 
-### 跨平台说明
-- 代码跨平台（macOS / Windows / Linux 都能跑），但 `node_modules` 含**平台相关**的 Electron 二进制：换平台时**不要**复制 `node_modules`，让首次启动自动 `npm install` 重装即可。
-- 需要本机装好 **Node.js** 和 **git**（Source Control / 自进化依赖 git）。Windows 全量打包用系统自带 `tar`。
+**ievoide** is an Electron desktop app that wraps the Claude Agent SDK into a Claude-Code-style workspace. Everything lives in one portable folder — source, config, prompts, chat history, attachments — so you can copy it to another machine and keep going.
 
-> 注意：`node_modules` 含平台相关的 Electron 二进制。同系统(如都是 macOS)整盘复制可直接用；跨系统或只复制源码时，首次启动会自动安装依赖。
+Its standout feature: **🧬 self-evolution** — point the agent at its *own* repo and it will implement new features, using git as a checkpoint/rollback safety net.
 
-### 打包分发给别人
+## Features
 
-双击 **`package-dist.command`** → 在桌面生成一个 zip（含源码+配置+提示词+`.git`，不含 `node_modules` 和你的私有 `data/`）。对方解压后双击 `start.command` 即用，**且仍能自进化**（zip 里带了 git）。
+- **🧬 Self-evolution** — the app can modify its own source; git-backed checkpoints and rollback.
+- **Parallel conversations** — run multiple chats at once, each with its own session.
+- **Full Source Control** — built-in git diff/stage/commit UI.
+- **Rich viewers/editors** — PDF, Markdown, and Mermaid diagrams, plus attachments.
+- **Mobile remote access** — drive the agent from your phone (see [REMOTE-ACCESS.md](REMOTE-ACCESS.md)).
+- **Token-aware** — per-turn input/output/cache-hit stats; model & thinking-effort switchers to save subscription usage.
+- **Portable** — copy the folder, double-click to start; auto-runs `npm install` on first launch.
 
-## 数据与配置都在文件夹内
+## Requirements
 
-| 位置 | 内容 |
-|------|------|
-| `config.json` | **系统提示词追加内容、权限模式、模型**等，可直接编辑 |
-| `mcp.json` | MCP 服务器配置（见 `mcp.example.json`）|
-| `data/` | 对话历史、附件、设置、localStorage 等运行时数据（已 gitignore）|
+- [Node.js](https://nodejs.org/) (LTS)
+- `git` (required for Source Control & self-evolution)
+- A Claude account / API access for the [Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk)
 
-改 `config.json` 里的 `systemPromptAppend` 即可定制 Claude 的默认行为/语言。
+## Quick Start
 
-## 省 token（订阅用量）
+```bash
+git clone https://github.com/a21989s/ievoide.git
+cd ievoide
+npm install
+npm start
+```
 
-桌面端顶栏两个下拉即时生效（写回 `config.json`，桌面/手机端共用）：
+Or double-click:
+- **macOS** — `start.command`
+- **Windows** — `start.bat`
 
-- **模型**：日常选 `Sonnet(省)`，难题再切 `Opus(强)`；`Haiku(最省)` 适合简单问答。
-- **思考深度(effort)**：`低/中` 大幅省 token，`高`(默认)/`超高` 留给复杂任务。
+> Cross-platform note: the code runs on macOS / Windows / Linux, but `node_modules` contains platform-specific Electron binaries. When moving between platforms, **don't** copy `node_modules` — let the first launch reinstall.
 
-`config.json` 还有进阶旋钮：`fallbackModel`（过载自动降级）、`allowedTools`/`disallowedTools`（裁掉不用的工具）。
+## Configuration
 
-每轮回答下方会显示 `↑输入 ↓输出 · 缓存命中 %`：**缓存命中率越高越省**（同一对话连续追问命中率高；新开会话/切换模型会重置缓存）。其他省 token 习惯：
+| File | Purpose |
+|------|---------|
+| `config.json` | System-prompt append, permission mode, model, thinking effort — edit directly |
+| `mcp.json` | MCP server config (see `mcp.example.json`) |
+| `data/` | Runtime data: chat history, attachments, settings (gitignored) |
 
-- 同一话题在同一对话里追问（续接 session，输入大多走 0.1 倍价的缓存）。
-- 附件走文件路径让 Claude 按需读取（App 已默认如此），不要把大段文件内容直接粘进输入框。
+Edit `systemPromptAppend` in `config.json` to customize the agent's default behavior/language.
 
-## 注意
+## ⚠️ Safety
 
-- 全权限模式（含 Bash），Claude 能直接读写所选目录、跑命令。
-- 🧬 自进化会改本 App 自己的源码，依赖 git 做检查点与回滚——请保持本目录是干净的 git 仓库。
+This is an agentic tool with shell (Bash) access — Claude can read/write files and run commands in the directories you grant it.
+
+- The shipped default is `permissionMode: "acceptEdits"` (auto-accepts file edits; still prompts for commands). For maximum safety set it to `"default"`; only use `"bypassPermissions"` if you fully understand the risk.
+- **Self-evolution rewrites this app's own code** and relies on git for checkpoints/rollback — keep the working tree on a clean git repo before evolving.
+
+## Contributing
+
+Issues and PRs welcome — see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## License
+
+[MIT](LICENSE) © a21989s

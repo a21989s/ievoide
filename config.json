@@ -1,6 +1,6 @@
 {
   "systemPromptAppend": "始终用简体中文回答，除非用户明确要求使用其他语言。代码、命令、标识符等保持原样。回答务必简洁：先给结论和必要的代码/命令，不复述问题、不做未被要求的展开，长解释仅在被要求时给出。",
-  "permissionMode": "bypassPermissions",
+  "permissionMode": "acceptEdits",
   "model": "opus",
   "effort": "high",
   "maxThinkingTokens": 8192,
