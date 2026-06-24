@@ -870,8 +870,10 @@
       .pe-layer { position: absolute; inset: 0; }
       .pe-layer svg { position: absolute; inset: 0; width: 100%; height: 100%; }
       .pe-pagebadge { position: absolute; top: -22px; left: 0; color: var(--muted); font-size: 11px; }
-      .pe-tbox { position: absolute; min-width: 24px; min-height: 18px; outline: 1px dashed rgba(0,0,0,.4); padding: 0 2px; cursor: text; }
-      .pe-tbox.whiteout { background: #fff; outline: 1px dashed #c33; }
+      .pe-tbox { position: absolute; min-width: 24px; min-height: 18px; outline: none; border: 0; padding: 0 2px; cursor: text; }
+      .pe-tbox:focus { outline: 1px solid rgba(0,120,215,.6); }
+      .pe-tbox.whiteout { background: #fff; outline: none; }
+      .pe-tbox.whiteout:focus { outline: 1px solid rgba(0,120,215,.6); }
       .pe-tbox .del { position: absolute; top: -10px; right: -10px; width: 16px; height: 16px; line-height: 16px; text-align: center; background: #c33; color: #fff; border-radius: 50%; font-size: 11px; cursor: pointer; display: none; }
       .pe-tbox:hover .del { display: block; }
       #peForms { position: absolute; right: 0; top: 0; bottom: 0; width: 280px; background: var(--panel); border-left: 1px solid var(--border); padding: 10px; overflow: auto; display: none; }
@@ -1285,6 +1287,11 @@
         <button data-tool="whiteout" data-i18n-title="遮盖改字" title="遮盖改字">⬜</button>
         <input type="color" id="peColor" value="#ff3b30" data-i18n-title="颜色" title="颜色" />
         <span class="sep"></span>
+        <button id="peZoomOut" data-i18n-title="缩小 (Ctrl+-)" title="缩小 (Ctrl+-)">−</button>
+        <span id="peZoomLabel" style="font-size:12px;color:var(--muted);min-width:38px;text-align:center;cursor:pointer" data-i18n-title="重置缩放" title="重置缩放">100%</span>
+        <button id="peZoomIn" data-i18n-title="放大 (Ctrl++)" title="放大 (Ctrl++)">+</button>
+        <span class="sep"></span>
+        <button id="peUndo" data-i18n-title="撤销 (Ctrl+Z)" title="撤销 (Ctrl+Z)">↩</button>
         <button id="peRotate" data-i18n-title="旋转页" title="旋转页">⟳</button>
         <button id="peDelete" data-i18n-title="删页" title="删页">🗑</button>
         <button id="peForm" data-i18n-title="表单" title="表单">📝</button>

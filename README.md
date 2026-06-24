@@ -71,6 +71,24 @@ Or double-click:
 
 Edit `systemPromptAppend` in `config.json` to customize the agent's default behavior/language.
 
+### Self-evolution backend (the "brain")
+
+The 🧬 self-evolution feature fetches its task/prompt from a small "brain" service in [`cloud/`](cloud/) (open-core split: the client only ever receives a single task + prompt; execution happens locally). All other features work without it.
+
+To enable evolution, run the brain locally:
+
+```bash
+node cloud/brain.mjs        # listens on :8788 (override with BRAIN_PORT)
+```
+
+Then point the client at it in `config.json`:
+
+```json
+{ "brainUrl": "http://localhost:8788", "brainKey": "<your-key>" }
+```
+
+A dev key is auto-generated in `cloud/keys.json` on first run; in this repo the client picks it up automatically, so local setup is zero-config. Without a reachable brain (and no prior cache), only the evolution feature is unavailable — see [cloud/README.md](cloud/README.md) for the full protocol.
+
 ## ⚠️ Safety
 
 This is an agentic tool with shell (Bash) access — Claude can read/write files and run commands in the directories you grant it.

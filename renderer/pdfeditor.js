@@ -11,6 +11,7 @@ const pagesEl = $("pePages");
 
 let state = null; // { bytes, name, path, pages:[], tool, color }
 let peDoc = null; // 当前 pdf.js 文档，关闭/切换前 destroy() 释放 worker 缓存
+let peZoom = 1; // 显示缩放倍率（不改变标注的基准坐标）
 
 function destroyPeDoc() {
   if (peDoc) {
@@ -30,7 +31,10 @@ window.openPdfEditor = async function (path, name) {
   }
   const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
   destroyPeDoc(); // 释放上一个 PDF 的 worker 缓存，避免反复打开内存增长
-  state = { bytes, name, path, pages: [], tool: "select", color: "#ff3b30" };
+  peZoom = 1;
+  const zl = $("peZoomLabel");
+  if (zl) zl.textContent = "100%";
+  state = { bytes, name, path, pages: [], tool: "select", color: "#ff3b30", undo: [] };
   const myState = state; // 渲染期间用于检测 state 是否被关闭/切换
   editorEl.style.display = "flex";
   pagesEl.innerHTML = "";
@@ -58,6 +62,21 @@ window.openPdfEditor = async function (path, name) {
   setTool("select");
 };
 
+// ── 缩放 ───────────────────────────────────────────────────
+function applyZoomTo(p) {
+  p.wrap.style.width = p.baseW * peZoom + "px";
+  p.wrap.style.height = p.baseH * peZoom + "px";
+  p.canvas.style.width = p.baseW * peZoom + "px";
+  p.canvas.style.height = p.baseH * peZoom + "px";
+  p.layer.style.transform = `scale(${peZoom})`;
+}
+function setZoom(z) {
+  peZoom = Math.min(4, Math.max(0.25, z));
+  if (state) for (const p of state.pages) applyZoomTo(p);
+  const lbl = $("peZoomLabel");
+  if (lbl) lbl.textContent = Math.round(peZoom * 100) + "%";
+}
+
 async function renderPage(page, viewport, scale, pageNum, owner) {
   const wrap = document.createElement("div");
   wrap.className = "pe-page";
@@ -72,12 +91,21 @@ async function renderPage(page, viewport, scale, pageNum, owner) {
   const canvas = document.createElement("canvas");
   canvas.width = viewport.width;
   canvas.height = viewport.height;
+  canvas.style.width = viewport.width + "px";
+  canvas.style.height = viewport.height + "px";
   wrap.appendChild(canvas);
   await page.render({ canvasContext: canvas.getContext("2d"), viewport }).promise;
   if (!state || state !== owner) return; // 渲染期间被关闭/切换，勿再访问 state.pages
 
   const layer = document.createElement("div");
   layer.className = "pe-layer";
+  // 固定基准尺寸 + top-left 缩放，使内部 SVG/文字框随缩放等比变换
+  layer.style.inset = "auto";
+  layer.style.left = "0";
+  layer.style.top = "0";
+  layer.style.width = viewport.width + "px";
+  layer.style.height = viewport.height + "px";
+  layer.style.transformOrigin = "top left";
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   svg.setAttribute("viewBox", `0 0 ${viewport.width} ${viewport.height}`);
   layer.appendChild(svg);
@@ -94,10 +122,14 @@ async function renderPage(page, viewport, scale, pageNum, owner) {
     deleted: false,
     annots: [], // {type, ...} draw/highlight 固定几何；text/whiteout 持 element
     wrap,
+    canvas,
     layer,
     svg,
+    baseW: viewport.width,
+    baseH: viewport.height,
   };
   state.pages.push(pst);
+  applyZoomTo(pst);
   attachTools(pst);
 }
 
@@ -121,10 +153,55 @@ function setTool(tool) {
   }
 }
 
+// ── 撤销栈 ─────────────────────────────────────────────────
+function pushUndo(fn) {
+  if (!state) return;
+  state.undo.push(fn);
+}
+function doUndo() {
+  if (!state || !state.undo.length) {
+    setStatus(tr("没有可撤销的操作"));
+    return;
+  }
+  const fn = state.undo.pop();
+  try { fn(); } catch (_) {}
+  setStatus(trf("已撤销（剩余 {0} 步）", state.undo.length));
+}
+
 document.querySelectorAll(".pe-toolbar [data-tool]").forEach((b) => {
   b.onclick = () => setTool(b.dataset.tool);
 });
-$("peColor").onchange = (e) => {
+$("peUndo").onclick = doUndo;
+$("peZoomIn").onclick = () => setZoom(peZoom + 0.2);
+$("peZoomOut").onclick = () => setZoom(peZoom - 0.2);
+$("peZoomLabel").onclick = () => setZoom(1);
+document.addEventListener("keydown", (e) => {
+  if (!state || editorEl.style.display === "none") return;
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+    e.preventDefault();
+    doUndo();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === "=" || e.key === "+")) {
+    e.preventDefault();
+    setZoom(peZoom + 0.2);
+  } else if ((e.ctrlKey || e.metaKey) && e.key === "-") {
+    e.preventDefault();
+    setZoom(peZoom - 0.2);
+  } else if ((e.ctrlKey || e.metaKey) && e.key === "0") {
+    e.preventDefault();
+    setZoom(1);
+  }
+});
+// Ctrl + 滚轮缩放
+pagesEl.addEventListener(
+  "wheel",
+  (e) => {
+    if (!state || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    setZoom(peZoom + (e.deltaY < 0 ? 0.1 : -0.1));
+  },
+  { passive: false }
+);
+$("peColor").oninput = $("peColor").onchange = (e) => {
   if (!state) return;
   state.color = e.target.value;
 };
@@ -194,12 +271,26 @@ function attachTools(p) {
   layer.addEventListener("pointerup", (e) => {
     if (!drag) return;
     if (drag.kind === "draw") {
-      p.annots.push({ type: "draw", color: state.color, width: 2, points: drag.points });
+      const annot = { type: "draw", color: state.color, width: 2, points: drag.points };
+      const poly = drag.poly;
+      p.annots.push(annot);
+      pushUndo(() => {
+        poly.remove();
+        const i = p.annots.indexOf(annot);
+        if (i >= 0) p.annots.splice(i, 1);
+      });
     } else if (drag.kind === "highlight") {
       const b = rectBox(drag.rect);
-      if (b.w > 3 && b.h > 3)
-        p.annots.push({ type: "highlight", color: state.color, ...b });
-      else drag.rect.remove();
+      if (b.w > 3 && b.h > 3) {
+        const annot = { type: "highlight", color: state.color, ...b };
+        const rect = drag.rect;
+        p.annots.push(annot);
+        pushUndo(() => {
+          rect.remove();
+          const i = p.annots.indexOf(annot);
+          if (i >= 0) p.annots.splice(i, 1);
+        });
+      } else drag.rect.remove();
     } else if (drag.kind === "whiteout") {
       const b = rectBox(drag.rect);
       if (b.w > 5 && b.h > 5) addTextBox(p, b.x, b.y, true, b.w, b.h);
@@ -236,6 +327,11 @@ function addTextBox(p, x, y, whiteout, w, h) {
 
   const annot = { type: whiteout ? "whiteout" : "text", el: box, whiteout, color: whiteout ? "#000" : state.color };
   p.annots.push(annot);
+  pushUndo(() => {
+    box.remove();
+    const i = p.annots.indexOf(annot);
+    if (i >= 0) p.annots.splice(i, 1);
+  });
   // 拖动（选择模式按住边缘移动）
   enableDrag(box, p);
   setTimeout(() => box.focus(), 0);
@@ -289,17 +385,26 @@ function visiblePageAtCenter() {
 $("peRotate").onclick = () => {
   const p = visiblePageAtCenter();
   if (!p) return;
+  const prev = p.rotation;
   p.rotation = (p.rotation + 90) % 360;
   // 仅视觉提示旋转（保存时写入 PDF 旋转标记）
   p.wrap.style.transform = `rotate(${p.rotation}deg)`;
   setStatus(trf("第 {0} 页将旋转 {1}°（保存生效）", p.pageNum, p.rotation));
+  pushUndo(() => {
+    p.rotation = prev;
+    p.wrap.style.transform = prev ? `rotate(${prev}deg)` : "";
+  });
 };
 $("peDelete").onclick = () => {
   const p = visiblePageAtCenter();
-  if (!p) return;
+  if (!p || p.deleted) return;
   p.deleted = true;
   p.wrap.classList.add("deleted");
   setStatus(trf("第 {0} 页将删除（保存生效）", p.pageNum));
+  pushUndo(() => {
+    p.deleted = false;
+    p.wrap.classList.remove("deleted");
+  });
 };
 
 // ── 表单填写 ───────────────────────────────────────────────
@@ -461,7 +566,8 @@ $("peSave").onclick = async () => {
 // ── 小工具 ─────────────────────────────────────────────────
 function local(el, e) {
   const r = el.getBoundingClientRect();
-  return { x: e.clientX - r.left, y: e.clientY - r.top };
+  const z = peZoom || 1;
+  return { x: (e.clientX - r.left) / z, y: (e.clientY - r.top) / z };
 }
 function svgEl(tag, attrs) {
   const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
