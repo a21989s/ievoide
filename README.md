@@ -1,12 +1,16 @@
-# ievoide — Self-Evolving Dev Tool
+<h1 align="center">🧬 ievoide</h1>
+<p align="center"><b>The dev tool that rewrites its own source code.</b></p>
+<p align="center">A Claude-powered desktop IDE you point at <i>itself</i> — ask for a feature, watch it build, commit, and ship it. Git is the undo button.</p>
 
-> A desktop AI coding companion built on the **[Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk)** — and the rare agent that can rewrite its own source code.
+> Built on the **[Claude Agent SDK](https://docs.claude.com/en/api/agent-sdk)**. Your dev tool, your rules — configure the model, prompts, permissions, and tools however you like.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Built with Claude Agent SDK](https://img.shields.io/badge/built%20with-Claude%20Agent%20SDK-d97757.svg)](https://docs.claude.com/en/api/agent-sdk)
-[![Electron](https://img.shields.io/badge/Electron-42-47848F.svg?logo=electron&logoColor=white)](https://www.electronjs.org/)
+<p align="center">
+<a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+<a href="https://docs.claude.com/en/api/agent-sdk"><img src="https://img.shields.io/badge/built%20with-Claude%20Agent%20SDK-d97757.svg" alt="Built with Claude Agent SDK"></a>
+<a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Electron-42-47848F.svg?logo=electron&logoColor=white" alt="Electron"></a>
+</p>
 
-English | [简体中文](README.zh-CN.md)
+<p align="center">English | <a href="README.zh-CN.md">简体中文</a></p>
 
 ---
 
@@ -19,6 +23,12 @@ Its standout feature: **🧬 self-evolution** — point the agent at its *own* r
 ![ievoide main UI](docs/images/screenshot-main.png)
 
 > A VS Code-style workspace: Source Control on the left, parallel chats on the right, with one-click actions — Push, Run Tests, New PR, Generate Codemap, Find dead code, and 🧬 evolve.
+
+### 🧬 Self-evolution in action
+
+![Self-evolution panel](docs/images/screenshot-evolve.png)
+
+> Describe a feature or bug, hit run, and the agent edits its own source behind a git checkpoint — syntax-checked, with **auto-rollback on failure**. Every attempt is logged as *applied / no-change / failed* with its commit hash. Toggle **持续进化 (continuous evolve)** to let it scan its own code and keep improving itself.
 
 ## Features
 
